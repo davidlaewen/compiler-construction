@@ -1,13 +1,10 @@
-{-# LANGUAGE DeriveFunctor, InstanceSigs, FlexibleInstances, OverloadedStrings #-}
-module Parser.Parser where
+{-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
+module Parser.Parser (parseProgram) where
 
 import Control.Applicative
-import Control.Monad
-import qualified Data.List
-import Data.Char
 import Parser.Definition
 import Syntax.Common
-import Syntax.Terms ( FunDecl(..) )
+import Syntax.Terms ( FunDecl(..), VarDecl(..), Stmt(..), Program(..) )
 import Syntax.Types ( Type(..) )
 
 
@@ -25,15 +22,20 @@ parseFunDecl = do
   decls <- many parseVarDecl
   stmts <- many1 parseStmt
   _ <- char '}'
-  return (FunDecl name params retType [] [])
+  return (FunDecl name params retType decls stmts)
 
 parseType :: Parser Type
 parseType = do
   return (TyVar "a")
 
-parseVarDecl = pure Nothing
+parseVarDecl :: Parser VarDecl
+parseVarDecl = failure
 
-parseStmt = pure Nothing
+parseStmt :: Parser Stmt
+parseStmt = failure
 
 parseId :: Parser Id
 parseId = identifier
+
+parseProgram :: Parser Program
+parseProgram = failure
