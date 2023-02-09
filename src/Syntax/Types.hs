@@ -2,9 +2,9 @@ module Syntax.Types ( Type(..) ) where
 
 import Syntax.Common ( Id )
 
-data Type = Int
-          | Bool
-          | Char
+data Type = IntT
+          | BoolT
+          | CharT
           | Prod Type Type
           | List Type
           | Void
