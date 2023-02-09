@@ -29,9 +29,8 @@ library
       Parser.Definition
       Parser.Lexer
       Parser.Parser
-      Parser.Symbols
       Syntax.Common
-      Syntax.Terms
+      Syntax.Program
       Syntax.Types
   other-modules:
       Paths_spl_compiler
