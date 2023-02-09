@@ -6,7 +6,7 @@ data Type = IntT
           | BoolT
           | CharT
           | Prod Type Type
-          | List Type
+          | List [Type]
           | Void
           | Fun [Type] Type
           | TyVar Id

@@ -10,6 +10,7 @@ import Syntax.Program
 import Syntax.Types ( Type(..) )
 import Parser.Lexer
 import Text.Megaparsec
+import Text.Megaparsec.Byte.Lexer (symbol)
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
@@ -26,7 +27,7 @@ varDeclP = do
       sc
       name <- identP
       sc
-      _ <- symbolP SymColon
+      _ <- symbolP SymEq
       sc
       expr <- exprP
       sc
@@ -38,9 +39,9 @@ funDeclP :: Parser FunDecl
 funDeclP = do
   name <- identP
   sc
-  params <- parensP (identP `sepBy` scne)
+  params <- parensP (identP `sepBy` symbolP SymComma)
   sc
-  retType <- optional (symbolP SymComma >> sc >> typeP)
+  retType <- optional (symbolP SymColonColon >> sc >> funTypeP)
   sc
   (decls, stmts) <- bracesP $ do
     decls <- many varDeclP
@@ -49,12 +50,48 @@ funDeclP = do
   pure (FunDecl name params retType decls stmts)
 
 
+----------------------
+-- Types
+
+baseTypeP :: Parser Type
+baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
+  where
+    intTypeP = keywordP KwInt >> pure IntT
+    boolTypeP = keywordP KwBool >> pure BoolT
+    charTypeP = keywordP KwChar >> pure CharT
+
 typeP :: Parser Type
-typeP = do
-  return (TyVar "a")
+typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
+  where
+    tyVarP = TyVar <$> identP
+    prodTypeP = do
+      (ty1,ty2) <- parensP $ do
+        ty1 <- typeP
+        _ <- symbolP SymComma
+        ty2 <- typeP
+        pure (ty1,ty2)
+      pure (Prod ty1 ty2)
+    listTypeP = List <$> bracketsP (typeP `sepBy1` symbolP SymComma)
+
+funTypeP :: Parser Type
+funTypeP = do
+  argTys <- typeP `sepBy` scne -- Zero or more arg types
+  _ <- symbolP SymRightArrow
+  Fun argTys <$> typeP
+
+
+-------------------------
+-- Statements
+
 
 stmtP :: Parser Stmt
 stmtP = empty
+
+
+
+--------------------------
+-- Expressions
+
 
 op1P :: Parser UnaryOp
 op1P = notP <|> negP
@@ -86,14 +123,17 @@ binOpP = do
 
 
 exprP :: Parser Expr
-exprP = int <|> char <|> bool <|> unOpP <|> binOpP
+exprP = int <|> char <|> bool <|> unOpP <|> binOpP <|> parensP exprP <|> emptyList
   where
     int = Int <$> intP
     char = Char <$> charP
     bool = Bool <$> boolP
+    emptyList = keywordP KwEmpty >> pure EmptyList
 
 
 
+--------------------------
+-- Programs
 
 programP :: Parser Program
 programP = empty

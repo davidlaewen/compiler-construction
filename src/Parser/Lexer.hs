@@ -12,6 +12,7 @@ module Parser.Lexer (
   Symbol(..),
   symbolP,
   parensP,
+  bracketsP,
   bracesP
 ) where
 
@@ -62,6 +63,12 @@ symbol = L.symbol sc
 intP :: Parser Integer
 intP = signed space decimal
 
+boolP :: Parser Bool
+boolP = trueP <|> falseP
+  where
+    trueP = symbol "True" >> pure True
+    falseP = symbol "False" >> pure False
+
 sCharP :: Parser Char
 sCharP = satisfy isSChar <?> "string character"
   where
@@ -73,12 +80,6 @@ charP = do
   ch <- sCharP
   symbolP SymSingleQuote
   pure ch
-
-boolP :: Parser Bool
-boolP = trueP <|> falseP
-  where
-    trueP = symbol "True" >> pure True
-    falseP = symbol "False" >> pure False
 
 
 ----------------------
@@ -152,9 +153,10 @@ isKeyword s = s `elem` (T.pack . show <$> keywords)
 -- Symbols
 
 data Symbol where
-  SymColon       :: Symbol
+  SymEq          :: Symbol
   SymComma       :: Symbol
   SymSemicolon   :: Symbol
+  SymColonColon :: Symbol
   SymSingleQuote :: Symbol
   SymDoubleQuote :: Symbol
   SymRightArrow  :: Symbol
@@ -166,32 +168,38 @@ data Symbol where
   SymMinus :: Symbol
 
   -- Parens
-  SymParenLeft  :: Symbol
-  SymParenRight :: Symbol
-  SymBraceLeft  :: Symbol
-  SymBraceRight :: Symbol
+  SymParenLeft    :: Symbol
+  SymParenRight   :: Symbol
+  SymBracketLeft  :: Symbol
+  SymBracketRight :: Symbol
+  SymBraceLeft    :: Symbol
+  SymBraceRight   :: Symbol
+
 
   -- etc.
   deriving (Eq, Enum, Bounded)
 
 
 instance Show Symbol where
-  show SymColon     = "="
-  show SymComma     = ","
-  show SymSemicolon = ";"
+  show SymEq          = "="
+  show SymComma       = ","
+  show SymSemicolon   = ";"
+  show SymColonColon = "::"
   show SymSingleQuote = "'"
   show SymDoubleQuote = "\""
-  show SymRightArrow = "->"
+  show SymRightArrow  = "->"
 
-  show SymNot = "!"
-  show SymNeg = "-"
-  show SymPlus = "+"
+  show SymNot   = "!"
+  show SymNeg   = "-"
+  show SymPlus  = "+"
   show SymMinus = "-"
 
-  show SymParenLeft = "("
-  show SymParenRight = ")"
-  show SymBraceLeft = "{"
-  show SymBraceRight = "}"
+  show SymParenLeft    = "("
+  show SymParenRight   = ")"
+  show SymBracketLeft  = "["
+  show SymBracketRight = "]"
+  show SymBraceLeft    = "{"
+  show SymBraceRight   = "}"
 
 
 -- | Does not parse trailing whitespace
@@ -215,6 +223,20 @@ parensP parser = do
   symbolP SymParenRight
   pure res
 
+-- | Parses expression of form [e], where e is parsed by the parser provided
+--   in the argument.
+--   The provided parser must parse its own whitespace
+bracketsP :: Parser a -> Parser a
+bracketsP parser = do
+  symbolP SymBracketLeft
+  sc
+  res <- parser
+  symbolP SymBracketRight
+  pure res
+
+-- | Parses expression of form {e}, where e is parsed by the parser provided
+--   in the argument.
+--   The provided parser must parse its own whitespace
 bracesP :: Parser a -> Parser a
 bracesP parser = do
   symbolP SymBraceLeft
