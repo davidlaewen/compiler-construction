@@ -31,8 +31,9 @@ data Field = Ident Id
            | Tail Field
            | Fst Field
            | Snd Field
+  deriving Show
 
-data Expr = Field
+data Expr = Field Field
           | Int Integer
           | Char Char
           | Bool Bool

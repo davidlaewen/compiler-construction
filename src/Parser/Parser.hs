@@ -1,7 +1,10 @@
 {-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 module Parser.Parser (
   varDeclP,
-  funDeclP
+  funDeclP,
+  typeP,
+  funTypeP,
+  exprP
 ) where
 
 import Control.Applicative hiding (many,some)
@@ -10,7 +13,6 @@ import Syntax.Program
 import Syntax.Types ( Type(..) )
 import Parser.Lexer
 import Text.Megaparsec
-import Text.Megaparsec.Byte.Lexer (symbol)
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
@@ -71,7 +73,7 @@ typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
         ty2 <- typeP
         pure (ty1,ty2)
       pure (Prod ty1 ty2)
-    listTypeP = List <$> bracketsP (typeP `sepBy1` symbolP SymComma)
+    listTypeP = List <$> bracketsP typeP
 
 funTypeP :: Parser Type
 funTypeP = do
@@ -102,6 +104,7 @@ op1P = notP <|> negP
 unOpP :: Parser Expr
 unOpP = do
   op <- op1P
+  sc
   UnOp op <$> exprP
 
 
@@ -117,14 +120,18 @@ op2P = plusP <|> minusP
 -- parsing x/y/z as (x/y)/z
 binOpP :: Parser Expr
 binOpP = do
-      e1 <- exprP
+      e1 <- exprP -- TODO: Fix infinite recursion here
+      sc
       op <- op2P
+      sc
       BinOp op e1 <$> exprP
 
 
 exprP :: Parser Expr
-exprP = int <|> char <|> bool <|> unOpP <|> binOpP <|> parensP exprP <|> emptyList
+exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
+        int <|> char <|> bool <|> ident
   where
+    ident = Field . Ident <$> identP
     int = Int <$> intP
     char = Char <$> charP
     bool = Bool <$> boolP
