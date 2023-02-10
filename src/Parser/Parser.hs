@@ -1,17 +1,16 @@
 {-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 module Parser.Parser (
-  {- varDeclP,
+  varDeclP,
   funDeclP,
   typeP,
   funTypeP,
-  exprP -}
+  exprP
 ) where
 
 import Control.Applicative hiding (many,some)
 import Parser.Definition
 import Syntax.Program
 import Syntax.Types ( Type(..) )
-import Parser.Lexer
 import Text.Megaparsec
 import Parser.Tokens
 import Data.Set qualified as S
@@ -21,60 +20,48 @@ import Data.Set qualified as S
 -- whitespace so that minimal whitespace handling is necessary here.
 -- Consistent whitespace parsing should also result in better error messages.
 
-
-{-
-
-
-
-nameReserved :: Text -> Lexer ()
-nameReserved s | isKeyword s = fail . T.unpack $ "Keyword " <> s <> " cannot be used as an identifier."
-               | otherwise = return ()
+----------------------
+-- Declarations
 
 
 varDeclP :: TokenParser VarDecl
 varDeclP = do
-      var <- optional $ keywordP KwVar
-      mty <- do
-        case var of
-          Nothing -> do Just <$> typeP
-          Just () -> pure Nothing
-      sc
-      name <- identP
-      sc
-      _ <- symbolP SymEq
-      sc
-      expr <- exprP
-      sc
-      _ <- symbolP SymSemicolon
-      return (VarDecl mty name expr)
+  var <- optional $ keywordP KwVar
+  mty <- do
+    case var of
+      Nothing -> do Just <$> typeP
+      Just () -> pure Nothing
+  name <- identP
+  _ <- symbolP SymEq
+  expr <- exprP
+  _ <- symbolP SymSemicolon
+  return $ VarDecl mty name expr
 
 
-funDeclP :: Parser FunDecl
+funDeclP :: TokenParser FunDecl
 funDeclP = do
   name <- identP
-  sc
   params <- parensP (identP `sepBy` symbolP SymComma)
-  sc
-  retType <- optional (symbolP SymColonColon >> sc >> funTypeP)
-  sc
+  retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
     decls <- many varDeclP
     stmts <- some stmtP
     pure (decls, stmts)
-  pure (FunDecl name params retType decls stmts)
+  pure $ FunDecl name params retType decls stmts
 
 
 ----------------------
 -- Types
 
-baseTypeP :: Parser Type
+baseTypeP :: TokenParser Type
 baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
   where
     intTypeP = keywordP KwInt >> pure IntT
     boolTypeP = keywordP KwBool >> pure BoolT
     charTypeP = keywordP KwChar >> pure CharT
 
-typeP :: Parser Type
+
+typeP :: TokenParser Type
 typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
   where
     tyVarP = TyVar <$> identP
@@ -87,20 +74,40 @@ typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
       pure (Prod ty1 ty2)
     listTypeP = List <$> bracketsP typeP
 
-funTypeP :: Parser Type
+funTypeP :: TokenParser Type
 funTypeP = do
-  argTys <- typeP `sepBy` scne -- Zero or more arg types
+  argTys <- many typeP
   _ <- symbolP SymRightArrow
   Fun argTys <$> typeP
+
+
+
+-------------------------
+-- Expressions
+
+exprP :: TokenParser Expr
+exprP = empty
 
 
 -------------------------
 -- Statements
 
-
-stmtP :: Parser Stmt
+stmtP :: TokenParser Stmt
 stmtP = empty
 
+
+-------------------------
+-- Programs
+
+programP :: TokenParser Program
+programP = empty
+
+
+{-
+
+nameReserved :: Text -> Lexer ()
+nameReserved s | isKeyword s = fail . T.unpack $ "Keyword " <> s <> " cannot be used as an identifier."
+               | otherwise = return ()
 
 
 --------------------------
@@ -149,14 +156,6 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
     bool = Bool <$> boolP
     emptyList = keywordP KwEmpty >> pure EmptyList
 
-
-
---------------------------
--- Programs
-
-programP :: Parser Program
-programP = empty
-
 -}
 
 
@@ -165,16 +164,16 @@ programP = empty
 -- Parser helpers
 ----------------------------
 
-symbolP :: Symbol -> TokenParser Symbol
+symbolP :: Symbol -> TokenParser ()
 symbolP s = token test S.empty
   where
-    test t | t == Symbol s = Just s
+    test t | t == Symbol s = Just ()
     test _ = Nothing
 
-keywordP :: Keyword -> TokenParser Keyword
+keywordP :: Keyword -> TokenParser ()
 keywordP k = token test S.empty
   where
-    test t | t == Keyword k = Just k
+    test t | t == Keyword k = Just ()
     test _ = Nothing
 
 identP :: TokenParser Id
