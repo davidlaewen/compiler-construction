@@ -29,6 +29,7 @@ library
       Parser.Definition
       Parser.Lexer
       Parser.Parser
+      Parser.Tokens
       Syntax.Common
       Syntax.Program
       Syntax.Types
@@ -39,6 +40,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
     , megaparsec
     , prettyprinter
     , text
@@ -53,6 +55,7 @@ executable spl-compiler-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , megaparsec
     , prettyprinter
     , spl-compiler
@@ -69,6 +72,7 @@ test-suite spl-compiler-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , megaparsec
     , prettyprinter
     , spl-compiler

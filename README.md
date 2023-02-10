@@ -10,3 +10,14 @@ import Data.Void
 parseTest <parser> <input string>
 ```
 
+```
+var x = 1
+
++ foo(x) = x;
+```
+
+## Useful docs & tutorials
+[Haskell Tool Stack](https://docs.haskellstack.org/en/stable/GUIDE/)
+[SPL test files](https://docs.haskellstack.org/en/stable/GUIDE/)
+[Megaparsec tutorial blogpost](https://markkarpov.com/tutorial/megaparsec.html)
+[Duo Lang parser module](https://github.com/duo-lang/duo-lang/tree/main/src/Parser)

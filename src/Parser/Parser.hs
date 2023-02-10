@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 module Parser.Parser (
-  varDeclP,
+  {- varDeclP,
   funDeclP,
   typeP,
   funTypeP,
-  exprP
+  exprP -}
 ) where
 
 import Control.Applicative hiding (many,some)
@@ -19,7 +19,16 @@ import Text.Megaparsec
 -- whitespace so that minimal whitespace handling is necessary here.
 -- Consistent whitespace parsing should also result in better error messages.
 
-varDeclP :: Parser VarDecl
+{-
+
+
+
+nameReserved :: Text -> Lexer ()
+nameReserved s | isKeyword s = fail . T.unpack $ "Keyword " <> s <> " cannot be used as an identifier."
+               | otherwise = return ()
+
+
+varDeclP :: TokenParser VarDecl
 varDeclP = do
       var <- optional $ keywordP KwVar
       mty <- do
@@ -144,3 +153,5 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
 
 programP :: Parser Program
 programP = empty
+
+-}

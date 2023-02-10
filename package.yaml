@@ -24,6 +24,7 @@ dependencies:
 - megaparsec
 - prettyprinter
 - text
+- containers
 
 ghc-options:
 - -Wall
