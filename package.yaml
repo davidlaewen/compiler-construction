@@ -25,6 +25,7 @@ dependencies:
 - prettyprinter
 - text
 - containers
+- parser-combinators
 
 ghc-options:
 - -Wall

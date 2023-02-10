@@ -4,16 +4,21 @@ module Parser.Parser (
   funDeclP,
   typeP,
   funTypeP,
-  exprP
+  exprP,
+  programP,
+  parseExpr
 ) where
 
 import Control.Applicative hiding (many,some)
+import Control.Monad.Combinators.Expr
 import Parser.Definition
 import Syntax.Program
 import Syntax.Types ( Type(..) )
 import Text.Megaparsec
-import Parser.Tokens
+import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import Data.Set qualified as S
+import Data.Text ( Text )
+import Parser.Lexer (lexProgram)
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
@@ -23,7 +28,6 @@ import Data.Set qualified as S
 ----------------------
 -- Declarations
 
-
 varDeclP :: TokenParser VarDecl
 varDeclP = do
   var <- optional $ keywordP KwVar
@@ -31,7 +35,7 @@ varDeclP = do
     case var of
       Nothing -> do Just <$> typeP
       Just () -> pure Nothing
-  name <- identP
+  name <- idP
   _ <- symbolP SymEq
   expr <- exprP
   _ <- symbolP SymSemicolon
@@ -40,8 +44,8 @@ varDeclP = do
 
 funDeclP :: TokenParser FunDecl
 funDeclP = do
-  name <- identP
-  params <- parensP (identP `sepBy` symbolP SymComma)
+  name <- idP
+  params <- parensP (idP `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
     decls <- many varDeclP
@@ -64,7 +68,7 @@ baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
 typeP :: TokenParser Type
 typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
   where
-    tyVarP = TyVar <$> identP
+    tyVarP = TyVar <$> idP
     prodTypeP = do
       (ty1,ty2) <- parensP $ do
         ty1 <- typeP
@@ -85,8 +89,73 @@ funTypeP = do
 -------------------------
 -- Expressions
 
+fieldP :: Field -> TokenParser Field
+fieldP f = do
+  _ <- symbolP SymDot
+  field <- headP <|> tailP <|> fstP <|> sndP
+  res <- optional $ fieldP (field f)
+  pure $ case res of
+    Nothing -> field f
+    Just f' -> f'
+  where
+    headP = keywordP KwHead >> pure Head
+    tailP = keywordP KwTail >> pure Tail
+    fstP = keywordP KwFst >> pure Fst
+    sndP = keywordP KwSnd >> pure Snd
+
+identP :: TokenParser Expr
+identP = do
+  ident <- Ident <$> idP
+  field <- optional $ fieldP ident
+  pure $ case field of
+    Nothing -> Field ident
+    Just f -> Field f
+
+operatorTable :: [[Operator TokenParser Expr]]
+operatorTable =
+  [ [ prefix SymMinus (UnOp Neg),
+      prefix SymBang  (UnOp Not) ],
+
+    [ binary SymAst     (BinOp Mul),
+      binary SymSlash   (BinOp Div),
+      binary SymPercent (BinOp Mod) ],
+
+    [ binary SymPlus  (BinOp Add),
+      binary SymMinus (BinOp Sub) ],
+
+    [ binary SymEqEq          (BinOp Eq),
+      binary SymBangEq        (BinOp Neq),
+      binary SymLessThan      (BinOp Lt),
+      binary SymGreaterThan   (BinOp Gt),
+      binary SymLessThanEq    (BinOp Lteq),
+      binary SymGreaterThanEq (BinOp Gteq) ],
+
+    [ binary SymPipePipe (BinOp Or),
+      binary SymAndAnd   (BinOp And) ]
+
+    -- TODO: Add cons operator to table
+  ]
+  where
+    prefix sym f = Prefix (f <$ symbolP sym)
+    binary sym f = InfixL (f <$ symbolP sym)
+
+termP :: TokenParser Expr
+termP = parensP exprP <|> intP <|> boolP <|> charP <|> emptyListP <|> identP
+  where
+    emptyListP = keywordP KwEmpty >> pure EmptyList
+
 exprP :: TokenParser Expr
-exprP = empty
+exprP = makeExprParser termP operatorTable
+
+
+-- | Function for testing the combination of lexing and parsing for expressions
+parseExpr :: Text -> Maybe Expr
+parseExpr input =
+  case runParser (lexProgram <* eof) "" input of
+    Left _ -> Nothing
+    Right ts -> case runParser (exprP <* eof) "" ts of
+      Left _ -> Nothing
+      Right e -> pure e
 
 
 -------------------------
@@ -101,6 +170,46 @@ stmtP = empty
 
 programP :: TokenParser Program
 programP = empty
+
+
+{-
+
+Refactored expression grammar:
+
+<Expr> := (!)* <Prop> (( && | || ) <Prop>)*
+
+<Prop> := <Form> (( == | != | < | > | <= | >= ) <Form> )*
+       |  <Bool>
+
+<Form> := (-)* <Term> (( + | - ) <Term>)*
+       |  <Char>
+
+<Term> := <Val> (( * | / | % ) <Val>)*
+
+<Val> := ( <Expr> ) | ( <Expr> , <Expr> )
+      |  <FunCall> | <Id> <Field> | <Int> | []
+
+
+Original grammar:
+
+<Expr> := <Id> <Field>
+       | <Expr> <Op2> <Expr>
+       | <Op2> <Expr>
+       | <Int>
+       | <Char>
+       | <Bool>
+       | ( <Expr> )
+       | <FunCall>
+       | []
+       | ( <Expr> , <Expr> )
+
+<Op2> := + | - | * | / | % | == | < | > | <= | >= | != | && | || | :
+<Op1> := ! | -
+
+
+
+
+-}
 
 
 {-
@@ -176,8 +285,8 @@ keywordP k = token test S.empty
     test t | t == Keyword k = Just ()
     test _ = Nothing
 
-identP :: TokenParser Id
-identP = token test S.empty
+idP :: TokenParser Id
+idP = token test S.empty
   where
     test (IdToken i) = Just i
     test _ = Nothing

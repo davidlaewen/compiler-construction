@@ -10,7 +10,10 @@ import Data.Void
 parseTest <parser> <input string>
 ```
 
+## Test inputs
 ```
+scale(p, scalar) :: (Int, Int) Int -> (Int, Int) {\n	return (p.fst * scalar, p.snd * scalar);\n}
+
 var x = 1
 
 + foo(x) = x;

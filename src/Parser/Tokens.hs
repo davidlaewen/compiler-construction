@@ -1,4 +1,11 @@
-module Parser.Tokens where
+module Parser.Tokens (
+  Token(..),
+  Keyword(..),
+  keywords,
+  isKeyword,
+  Symbol(..),
+  symbols
+) where
 
 import Syntax.Common ( Id )
 import Data.Text ( Text )
@@ -41,25 +48,25 @@ data Keyword where
 
 
 instance Show Keyword where
-  show KwVar    = "var"
-  show KwIf     = "if"
-  show KwElse   = "else"
-  show KwWhile  = "while"
-  show KwReturn = "return"
+  show KwVar     = "var"
+  show KwIf      = "if"
+  show KwElse    = "else"
+  show KwWhile   = "while"
+  show KwReturn  = "return"
 
-  show KwInt  = "Int"
-  show KwBool = "Bool"
-  show KwChar = "Char"
-  show KwVoid = "Void"
+  show KwInt     = "Int"
+  show KwBool    = "Bool"
+  show KwChar    = "Char"
+  show KwVoid    = "Void"
 
   show KwEmpty   = "[]"
   show KwPrint   = "print"
   show KwIsEmpty = "isEmpty"
 
-  show KwHead = "hd"
-  show KwTail = "tl"
-  show KwFst  = "fst"
-  show KwSnd  = "snd"
+  show KwHead    = "hd"
+  show KwTail    = "tl"
+  show KwFst     = "fst"
+  show KwSnd     = "snd"
 
 -- | List of all keywords
 keywords :: [Keyword]
@@ -74,26 +81,42 @@ isKeyword s = s `elem` (T.pack . show <$> keywords)
 -----------------------
 -- Symbols
 
+-- | IMPORTANT: For two symbols with overlapping prefixes, the longer symbol
+-- must be enumerated before the shorter one
 data Symbol where
-  SymEq          :: Symbol
-  SymComma       :: Symbol
-  SymSemicolon   :: Symbol
-  SymColonColon :: Symbol
-  SymRightArrow  :: Symbol
-
   -- Operators
-  SymNot   :: Symbol
-  SymNeg   :: Symbol
-  SymPlus  :: Symbol
-  SymMinus :: Symbol
+  SymPipePipe      :: Symbol
+  SymAndAnd        :: Symbol
+
+  SymEqEq          :: Symbol
+  SymBangEq        :: Symbol
+  SymLessThanEq    :: Symbol
+  SymGreaterThanEq :: Symbol
+  SymLessThan      :: Symbol
+  SymGreaterThan   :: Symbol
+
+  SymBang          :: Symbol
+  SymPlus          :: Symbol
+  SymMinus         :: Symbol
+  SymAst           :: Symbol
+  SymSlash         :: Symbol
+  SymPercent       :: Symbol
+
+  -- Syntax
+  SymEq            :: Symbol
+  SymComma         :: Symbol
+  SymDot           :: Symbol
+  SymSemicolon     :: Symbol
+  SymColonColon    :: Symbol
+  SymRightArrow    :: Symbol
 
   -- Parens
-  SymParenLeft    :: Symbol
-  SymParenRight   :: Symbol
-  SymBracketLeft  :: Symbol
-  SymBracketRight :: Symbol
-  SymBraceLeft    :: Symbol
-  SymBraceRight   :: Symbol
+  SymParenLeft     :: Symbol
+  SymParenRight    :: Symbol
+  SymBracketLeft   :: Symbol
+  SymBracketRight  :: Symbol
+  SymBraceLeft     :: Symbol
+  SymBraceRight    :: Symbol
 
 
   -- etc.
@@ -101,23 +124,39 @@ data Symbol where
 
 
 instance Show Symbol where
-  show SymEq          = "="
-  show SymComma       = ","
-  show SymSemicolon   = ";"
-  show SymColonColon = "::"
-  show SymRightArrow  = "->"
+  -- Operators
+  show SymPipePipe      = "||"
+  show SymAndAnd        = "&&"
 
-  show SymNot   = "!"
-  show SymNeg   = "-"
-  show SymPlus  = "+"
-  show SymMinus = "-"
+  show SymEqEq          = "=="
+  show SymBangEq        = "!="
+  show SymLessThanEq    = "<="
+  show SymGreaterThanEq = ">="
+  show SymLessThan      = "<"
+  show SymGreaterThan   = ">"
 
-  show SymParenLeft    = "("
-  show SymParenRight   = ")"
-  show SymBracketLeft  = "["
-  show SymBracketRight = "]"
-  show SymBraceLeft    = "{"
-  show SymBraceRight   = "}"
+  show SymBang          = "!"
+  show SymPlus          = "+"
+  show SymMinus         = "-"
+  show SymAst           = "*"
+  show SymSlash         = "/"
+  show SymPercent       = "%"
+
+  -- Syntax
+  show SymEq            = "="
+  show SymComma         = ","
+  show SymDot           = "."
+  show SymSemicolon     = ";"
+  show SymColonColon    = "::"
+  show SymRightArrow    = "->"
+
+  -- Parens
+  show SymParenLeft     = "("
+  show SymParenRight    = ")"
+  show SymBracketLeft   = "["
+  show SymBracketRight  = "]"
+  show SymBraceLeft     = "{"
+  show SymBraceRight    = "}"
 
 -- | List of all symbols
 symbols :: [Symbol]

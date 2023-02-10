@@ -47,5 +47,5 @@ data Expr = Field Field
 data UnaryOp = Not | Neg
   deriving Show
 
-data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Le | Ge | Leq | Geq | Neq | And | Or | Cons
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lteq | Gteq | And | Or | Cons
   deriving Show

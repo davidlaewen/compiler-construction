@@ -1,19 +1,15 @@
 {-# LANGUAGE DeriveFunctor, InstanceSigs, FlexibleInstances, DerivingStrategies, TypeFamilies #-}
 module Parser.Definition where
 
-import Control.Applicative
-import Control.Monad
 import Data.Void (Void)
 import Data.Text (Text)
 import Text.Megaparsec
 import Parser.Tokens qualified as PT
-import Syntax.Program
-import Data.Set qualified as S
 
 type Lexer = Parsec Void Text
 
 
-type TokenParser = Parsec Void [PT.Token]
+type TokenParser = Parsec Void TokenStream
 
 
 newtype TokenStream = TokenStream [PT.Token]
@@ -22,3 +18,11 @@ newtype TokenStream = TokenStream [PT.Token]
 instance Stream TokenStream where
   type Token TokenStream = PT.Token
   type Tokens TokenStream = [PT.Token]
+
+  take1_ (TokenStream []) = Nothing
+  take1_ (TokenStream (t:ts)) = Just (t, TokenStream ts)
+
+
+instance VisualStream TokenStream where
+
+instance TraversableStream TokenStream where
