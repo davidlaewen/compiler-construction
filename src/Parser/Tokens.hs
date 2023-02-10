@@ -6,7 +6,7 @@ import Data.Text qualified as T
 
 
 data Token = IntLit Integer | BoolLit Bool | CharLit Char
-           | Ident Id
+           | IdToken Id
            | Symbol Symbol
            | Keyword Keyword
   deriving (Eq, Ord, Show)

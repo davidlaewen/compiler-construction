@@ -13,11 +13,14 @@ import Syntax.Program
 import Syntax.Types ( Type(..) )
 import Parser.Lexer
 import Text.Megaparsec
+import Parser.Tokens
+import Data.Set qualified as S
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
 -- whitespace so that minimal whitespace handling is necessary here.
 -- Consistent whitespace parsing should also result in better error messages.
+
 
 {-
 
@@ -155,3 +158,60 @@ programP :: Parser Program
 programP = empty
 
 -}
+
+
+
+----------------------------
+-- Parser helpers
+----------------------------
+
+symbolP :: Symbol -> TokenParser Symbol
+symbolP s = token test S.empty
+  where
+    test t | t == Symbol s = Just s
+    test _ = Nothing
+
+keywordP :: Keyword -> TokenParser Keyword
+keywordP k = token test S.empty
+  where
+    test t | t == Keyword k = Just k
+    test _ = Nothing
+
+identP :: TokenParser Id
+identP = token test S.empty
+  where
+    test (IdToken i) = Just i
+    test _ = Nothing
+
+intP :: TokenParser Expr
+intP = token test S.empty
+  where
+    test (IntLit n) = Just $ Int n
+    test _ = Nothing
+
+boolP :: TokenParser Expr
+boolP = token test S.empty
+  where
+    test (BoolLit b) = Just $ Bool b
+    test _ = Nothing
+
+charP :: TokenParser Expr
+charP = token test S.empty
+  where
+    test (CharLit c) = Just $ Char c
+    test _ = Nothing
+
+-- | Parses expression of form (e), where e is parsed by the parser provided
+--   in the argument.
+parensP :: TokenParser a -> TokenParser a
+parensP = between (symbolP SymParenLeft) (symbolP SymParenRight)
+
+-- | Parses expression of form [e], where e is parsed by the parser provided
+--   in the argument.
+bracketsP :: TokenParser a -> TokenParser a
+bracketsP = between (symbolP SymBracketLeft) (symbolP SymBracketRight)
+
+-- | Parses expression of form {e}, where e is parsed by the parser provided
+--   in the argument.
+bracesP :: TokenParser a -> TokenParser a
+bracesP = between (symbolP SymBraceLeft) (symbolP SymBraceRight)

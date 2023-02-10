@@ -87,7 +87,7 @@ charL = do
 identL :: Lexer Token
 identL = do
   name <- T.cons <$> letterChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
-  pure $ Ident name
+  pure $ IdToken name
 
 
 keywordL :: Lexer Token
@@ -120,39 +120,5 @@ lexProgram = do
 
 
 {-
--------------------
--- Parens
 
--- | Parses expression of form (e), where e is parsed by the lexer provided
---   in the argument.
---   The provided lexer must parse its own whitespace
-parensP :: Lexer a -> Lexer a
-parensP parser = do
-  symbolP SymParenLeft
-  sc
-  res <- parser
-  symbolP SymParenRight
-  pure res
-
--- | Parses expression of form [e], where e is parsed by the parser provided
---   in the argument.
---   The provided parser must parse its own whitespace
-bracketsP :: Lexer a -> Lexer a
-bracketsP parser = do
-  symbolP SymBracketLeft
-  sc
-  res <- parser
-  symbolP SymBracketRight
-  pure res
-
--- | Parses expression of form {e}, where e is parsed by the parser provided
---   in the argument.
---   The provided parser must parse its own whitespace
-bracesP :: Lexer a -> Lexer a
-bracesP parser = do
-  symbolP SymBraceLeft
-  sc
-  res <- parser
-  symbolP SymBraceRight
-  pure res
 -}
