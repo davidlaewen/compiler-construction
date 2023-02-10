@@ -222,39 +222,6 @@ nameReserved s | isKeyword s = fail . T.unpack $ "Keyword " <> s <> " cannot be 
 --------------------------
 -- Expressions
 
-
-op1P :: Parser UnaryOp
-op1P = notP <|> negP
-  where
-    notP = symbolP SymNot >> pure Not
-    negP = symbolP SymNeg >> pure Neg
-
-unOpP :: Parser Expr
-unOpP = do
-  op <- op1P
-  sc
-  UnOp op <$> exprP
-
-
-op2P :: Parser BinaryOp
-op2P = plusP <|> minusP
-  where
-    plusP = symbolP SymPlus >> pure Add
-    minusP = symbolP SymMinus >> pure Sub
-
-
--- TODO: We likely need to handle the operators individually to get the
--- desired associativity properties, e.g. parsing x*y+z as (x*y)+z or
--- parsing x/y/z as (x/y)/z
-binOpP :: Parser Expr
-binOpP = do
-      e1 <- exprP -- TODO: Fix infinite recursion here
-      sc
-      op <- op2P
-      sc
-      BinOp op e1 <$> exprP
-
-
 exprP :: Parser Expr
 exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
         int <|> char <|> bool <|> ident

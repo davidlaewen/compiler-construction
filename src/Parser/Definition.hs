@@ -1,5 +1,9 @@
-{-# LANGUAGE DeriveFunctor, InstanceSigs, FlexibleInstances, DerivingStrategies, TypeFamilies #-}
-module Parser.Definition where
+{-# LANGUAGE FlexibleInstances, DerivingStrategies, TypeFamilies #-}
+module Parser.Definition (
+  Lexer,
+  TokenParser,
+  TokenStream(..)
+) where
 
 import Data.Void (Void)
 import Data.Text (Text)

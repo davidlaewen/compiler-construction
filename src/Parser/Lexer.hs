@@ -34,8 +34,8 @@ sc :: Lexer ()
 sc = L.space space1 lineCommentP blockCommentP
 
 -- Non-empty space
-scne :: Lexer ()
-scne = space1 >> sc
+-- scne :: Lexer ()
+-- scne = space1 >> sc
 
 
 --------------------------
