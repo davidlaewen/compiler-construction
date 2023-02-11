@@ -1,6 +1,52 @@
 module Main (main) where
 
-import Lib
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import Parser.Definition (TokenStream)
+import Parser.Lexer (lexer)
+import Parser.Parser (parser)
+import Syntax.Program (Program)
+import System.Environment (getArgs)
+import System.Exit (exitFailure)
+import Text.Megaparsec (errorBundlePretty)
+
+newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
+
+(>->) :: Stage a b -> Stage b c -> Stage a c
+s1 >-> s2 = Stage $ \filePath input -> do
+  output <- runStage s1 filePath input
+  runStage s2 filePath output
+
+lexStage :: Stage T.Text TokenStream
+lexStage = Stage $ \filePath input ->
+  case lexer filePath input of
+    Left errors -> Left $ putStrLn $ errorBundlePretty errors
+    Right tokens -> Right tokens
+
+parseStage :: Stage TokenStream Program
+parseStage = Stage $ \filePath tokens ->
+  case parser filePath tokens of
+    Left errors -> Left $ putStrLn $ errorBundlePretty errors
+    Right program -> Right program
+
+printStage :: Show a => Stage a (IO ())
+printStage = Stage $ \_ input -> Right $ print input
+
+data Args = Args FilePath (Stage T.Text (IO ()))
+
+parseArgs :: [String] -> Maybe Args
+parseArgs ("lex" : filePath : _) = Just (Args filePath (lexStage >-> printStage))
+parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> printStage))
+parseArgs _ = Nothing
 
 main :: IO ()
-main = someFunc
+main = do
+  args <- getArgs
+  case parseArgs args of
+    Nothing -> putStrLn "TODO: Print help"
+    Just (Args filePath stage) -> do
+      -- TODO: IO Error handling
+      contents <- T.readFile filePath
+      case runStage stage filePath contents of
+        Left errorIO -> errorIO >> exitFailure
+        Right succesIO -> succesIO

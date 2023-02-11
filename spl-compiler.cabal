@@ -25,7 +25,6 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
       Parser.Definition
       Parser.Lexer
       Parser.Parser

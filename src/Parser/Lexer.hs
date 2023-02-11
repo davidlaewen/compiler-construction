@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings, ImportQualifiedPost, GADTs #-}
 
-module Parser.Lexer (
-  lex1,
-  lexProgram
-) where
+module Parser.Lexer (lexer) where
 
 
 import Parser.Definition
@@ -16,6 +13,7 @@ import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Char.Lexer (decimal)
 import Control.Monad (void)
+import Data.Void (Void)
 
 
 
@@ -116,3 +114,7 @@ lexProgram :: Lexer TokenStream
 lexProgram = do
   sc
   TokenStream <$> many (lexeme lex1) <* eof
+
+
+lexer :: FilePath -> T.Text -> Either (ParseErrorBundle T.Text Void) TokenStream
+lexer = runParser lexProgram

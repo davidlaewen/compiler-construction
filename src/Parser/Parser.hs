@@ -1,14 +1,5 @@
-{-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
-module Parser.Parser (
-  varDeclP,
-  funDeclP,
-  typeP,
-  funTypeP,
-  exprP,
-  programP,
-  parseExpr,
-  parseProgram
-) where
+{-# LANGUAGE FlexibleInstances #-}
+module Parser.Parser (parser) where
 
 import Control.Applicative hiding (many,some)
 import Control.Monad.Combinators.Expr
@@ -19,14 +10,8 @@ import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
 import qualified Data.Text as T
-import Parser.Lexer (lexProgram)
 import Data.Maybe (fromMaybe)
 import Data.Void
-
-
--- TODO: Most of the combinators in Parser.Lexer should handle any trailing
--- whitespace so that minimal whitespace handling is necessary here.
--- Consistent whitespace parsing should also result in better error messages.
 
 ----------------------
 -- Declarations
@@ -169,16 +154,6 @@ termP = try (parensP exprP) <|> tupleP <|>
 exprP :: TokenParser Expr
 exprP = makeExprParser termP operatorTable
 
-
--- | Function for testing the combination of lexing and parsing for expressions
-parseExpr :: T.Text -> Maybe Expr
-parseExpr input =
-  case runParser (lexProgram <* eof) "" input of
-    Left _ -> Nothing
-    Right ts -> case runParser (exprP <* eof) "" ts of
-      Left _ -> Nothing
-      Right e -> pure e
-
 {-
 
 Refactored expression grammar:
@@ -269,22 +244,13 @@ stmtP = ifP <|> whileP <|> assignP <|> returnP <|> funCallP
 
 programP :: TokenParser Program
 programP = do
-  varDecls <- many $ try varDeclP
+  varDecls <- many varDeclP
   funDecls <- many funDeclP
-  pure $ Program varDecls funDecls
-
--- | Function for testing the combination of lexing and parsing for expressions
-parseProgram :: T.Text -> Either (Maybe (ParseErrorBundle TokenStream Void)) Program
-parseProgram input =
-  case runParser (lexProgram <* eof) "" input of
-    Left _ -> Left Nothing
-    Right ts -> case runParser (programP <* eof) "" ts of
-      Left e -> Left $ Just e
-      Right e -> pure e
+  Program varDecls funDecls <$ eof
 
 
-
-
+parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream Void) Program
+parser = runParser programP
 
 
 {-
