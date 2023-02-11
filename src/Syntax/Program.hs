@@ -14,17 +14,20 @@ import Syntax.Common (Id)
 import qualified Syntax.Types as Ty
 
 data Program = Program [VarDecl] [FunDecl]
+  deriving Show
 
 data VarDecl = VarDecl (Maybe Ty.Type) Id Expr
   deriving Show
 
 data FunDecl = FunDecl Id [Id] (Maybe Ty.Type) [VarDecl] [Stmt]
+  deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
           | While Expr [Stmt]
           | Assign Field Expr
           | FunCall Id [Expr]
           | Return (Maybe Expr)
+  deriving Show
 
 data Field = Ident Id
            | Head Field

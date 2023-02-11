@@ -84,6 +84,9 @@ isKeyword s = s `elem` (T.pack . show <$> keywords)
 -- | IMPORTANT: For two symbols with overlapping prefixes, the longer symbol
 -- must be enumerated before the shorter one
 data Symbol where
+  SymColonColon    :: Symbol
+  SymRightArrow    :: Symbol
+
   -- Operators
   SymPipePipe      :: Symbol
   SymAndAnd        :: Symbol
@@ -107,8 +110,6 @@ data Symbol where
   SymComma         :: Symbol
   SymDot           :: Symbol
   SymSemicolon     :: Symbol
-  SymColonColon    :: Symbol
-  SymRightArrow    :: Symbol
 
   -- Parens
   SymParenLeft     :: Symbol
@@ -124,6 +125,9 @@ data Symbol where
 
 
 instance Show Symbol where
+  show SymColonColon    = "::"
+  show SymRightArrow    = "->"
+
   -- Operators
   show SymPipePipe      = "||"
   show SymAndAnd        = "&&"
@@ -147,8 +151,6 @@ instance Show Symbol where
   show SymComma         = ","
   show SymDot           = "."
   show SymSemicolon     = ";"
-  show SymColonColon    = "::"
-  show SymRightArrow    = "->"
 
   -- Parens
   show SymParenLeft     = "("

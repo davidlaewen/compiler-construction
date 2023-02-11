@@ -6,7 +6,8 @@ module Parser.Parser (
   funTypeP,
   exprP,
   programP,
-  parseExpr
+  parseExpr,
+  parseProgram
 ) where
 
 import Control.Applicative hiding (many,some)
@@ -19,6 +20,7 @@ import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import Data.Set qualified as S
 import Data.Text ( Text )
 import Parser.Lexer (lexProgram)
+import Data.Maybe (fromMaybe)
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
@@ -85,9 +87,8 @@ funTypeP = do
   Fun argTys <$> typeP
 
 
-
--------------------------
--- Expressions
+------------------------
+-- Fields & Identifiers
 
 fieldP :: Field -> TokenParser Field
 fieldP f = do
@@ -103,13 +104,22 @@ fieldP f = do
     fstP = keywordP KwFst >> pure Fst
     sndP = keywordP KwSnd >> pure Snd
 
-identP :: TokenParser Expr
+identP :: TokenParser Field
 identP = do
   ident <- Ident <$> idP
   field <- optional $ fieldP ident
-  pure $ case field of
-    Nothing -> Field ident
-    Just f -> Field f
+  pure $ fromMaybe ident field
+
+
+-------------------------
+-- Expressions
+
+funCallEP :: TokenParser Expr
+funCallEP = do
+  funId <- idP
+  args <- parensP $ exprP `sepBy` symbolP SymComma
+  pure $ FunCallE funId args
+
 
 operatorTable :: [[Operator TokenParser Expr]]
 operatorTable =
@@ -140,9 +150,20 @@ operatorTable =
     binary sym f = InfixL (f <$ symbolP sym)
 
 termP :: TokenParser Expr
-termP = parensP exprP <|> intP <|> boolP <|> charP <|> emptyListP <|> identP
+termP = try (parensP exprP) <|> tupleP <|>
+        intP <|> boolP <|> charP <|>
+        emptyListP <|>
+        try funCallEP <|>
+        Field <$> identP
   where
     emptyListP = keywordP KwEmpty >> pure EmptyList
+    tupleP = do
+      (e1,e2) <- parensP $ do
+        e1 <- exprP
+        _ <- symbolP SymComma
+        e2 <- exprP
+        pure (e1,e2)
+      pure $ Tuple e1 e2
 
 exprP :: TokenParser Expr
 exprP = makeExprParser termP operatorTable
@@ -156,21 +177,6 @@ parseExpr input =
     Right ts -> case runParser (exprP <* eof) "" ts of
       Left _ -> Nothing
       Right e -> pure e
-
-
--------------------------
--- Statements
-
-stmtP :: TokenParser Stmt
-stmtP = empty
-
-
--------------------------
--- Programs
-
-programP :: TokenParser Program
-programP = empty
-
 
 {-
 
@@ -195,9 +201,7 @@ Original grammar:
 <Expr> := <Id> <Field>
        | <Expr> <Op2> <Expr>
        | <Op2> <Expr>
-       | <Int>
-       | <Char>
-       | <Bool>
+       | <Int> | <Char> | <Bool>
        | ( <Expr> )
        | <FunCall>
        | []
@@ -206,10 +210,76 @@ Original grammar:
 <Op2> := + | - | * | / | % | == | < | > | <= | >= | != | && | || | :
 <Op1> := ! | -
 
-
-
-
 -}
+
+-------------------------
+-- Statements
+
+ifP :: TokenParser Stmt
+ifP = do
+  _ <- keywordP KwIf
+  cond <- parensP exprP
+  thenStmts <- bracesP (many stmtP)
+  elseStmts <- optional $ do
+    _ <- keywordP KwElse
+    bracesP $ many stmtP
+  pure $ If cond thenStmts (fromMaybe [] elseStmts)
+
+whileP :: TokenParser Stmt
+whileP = do
+  _ <- keywordP KwWhile
+  cond <- parensP exprP
+  stmts <- bracesP $ many stmtP
+  pure $ While cond stmts
+
+assignP :: TokenParser Stmt
+assignP = do
+  name <- identP
+  _ <- symbolP SymEq
+  expr <- exprP
+  _ <- symbolP SymSemicolon
+  pure $ Assign name expr
+
+funCallP :: TokenParser Stmt
+funCallP = do
+  funId <- idP
+  args <- parensP $ exprP `sepBy` symbolP SymComma
+  _ <- symbolP SymSemicolon
+  pure $ FunCall funId args
+
+returnP :: TokenParser Stmt
+returnP = do
+  _ <- keywordP KwReturn
+  mExpr <- optional exprP
+  _ <- symbolP SymSemicolon
+  pure $ Return mExpr
+
+
+stmtP :: TokenParser Stmt
+stmtP = ifP <|> whileP <|> assignP <|> returnP <|> funCallP
+
+
+-------------------------
+-- Programs
+
+programP :: TokenParser Program
+programP = do
+  varDecls <- many $ try varDeclP
+  funDecls <- many funDeclP
+  pure $ Program varDecls funDecls
+
+-- | Function for testing the combination of lexing and parsing for expressions
+parseProgram :: Text -> Maybe Program
+parseProgram input =
+  case runParser (lexProgram <* eof) "" input of
+    Left _ -> Nothing
+    Right ts -> case runParser (programP <* eof) "" ts of
+      Left _ -> Nothing
+      Right e -> pure e
+
+
+
+
 
 
 {-
