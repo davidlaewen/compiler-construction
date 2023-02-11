@@ -116,9 +116,3 @@ lexProgram :: Lexer TokenStream
 lexProgram = do
   sc
   TokenStream <$> many (lexeme lex1) <* eof
-
-
-
-{-
-
--}

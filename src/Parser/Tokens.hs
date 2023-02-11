@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module Parser.Tokens (
   Token(..),
   Keyword(..),
@@ -9,7 +11,7 @@ module Parser.Tokens (
 
 import Syntax.Common ( Id )
 import Data.Text ( Text )
-import Data.Text qualified as T
+import qualified Data.Text as T
 
 
 data Token = IntLit Integer | BoolLit Bool | CharLit Char

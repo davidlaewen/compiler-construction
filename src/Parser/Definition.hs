@@ -8,7 +8,7 @@ module Parser.Definition (
 import Data.Void (Void)
 import Data.Text (Text)
 import Text.Megaparsec
-import Parser.Tokens qualified as PT
+import qualified Parser.Tokens as PT
 
 type Lexer = Parsec Void Text
 

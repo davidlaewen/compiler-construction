@@ -17,9 +17,8 @@ import Syntax.Program
 import Syntax.Types ( Type(..) )
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
-import Data.Set qualified as S
-import Data.Text ( Text )
-import Data.Text qualified as T
+import qualified Data.Set as S
+import qualified Data.Text as T
 import Parser.Lexer (lexProgram)
 import Data.Maybe (fromMaybe)
 import Data.Void
@@ -172,7 +171,7 @@ exprP = makeExprParser termP operatorTable
 
 
 -- | Function for testing the combination of lexing and parsing for expressions
-parseExpr :: Text -> Maybe Expr
+parseExpr :: T.Text -> Maybe Expr
 parseExpr input =
   case runParser (lexProgram <* eof) "" input of
     Left _ -> Nothing
@@ -275,7 +274,7 @@ programP = do
   pure $ Program varDecls funDecls
 
 -- | Function for testing the combination of lexing and parsing for expressions
-parseProgram :: Text -> Either (Maybe (ParseErrorBundle TokenStream Void)) Program
+parseProgram :: T.Text -> Either (Maybe (ParseErrorBundle TokenStream Void)) Program
 parseProgram input =
   case runParser (lexProgram <* eof) "" input of
     Left _ -> Left Nothing
