@@ -35,7 +35,6 @@ data Keyword where
   KwChar    :: Keyword
   KwVoid    :: Keyword
 
-  KwEmpty   :: Keyword
   KwPrint   :: Keyword
   KwIsEmpty :: Keyword
 
@@ -59,7 +58,6 @@ instance Show Keyword where
   show KwChar    = "Char"
   show KwVoid    = "Void"
 
-  show KwEmpty   = "[]"
   show KwPrint   = "print"
   show KwIsEmpty = "isEmpty"
 
@@ -86,6 +84,7 @@ isKeyword s = s `elem` (T.pack . show <$> keywords)
 data Symbol where
   SymColonColon    :: Symbol
   SymRightArrow    :: Symbol
+  SymBracketLR     :: Symbol
 
   -- Operators
   SymPipePipe      :: Symbol
@@ -127,6 +126,7 @@ data Symbol where
 instance Show Symbol where
   show SymColonColon    = "::"
   show SymRightArrow    = "->"
+  show SymBracketLR     = "[]"
 
   -- Operators
   show SymPipePipe      = "||"

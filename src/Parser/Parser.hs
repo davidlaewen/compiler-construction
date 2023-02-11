@@ -19,8 +19,10 @@ import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import Data.Set qualified as S
 import Data.Text ( Text )
+import Data.Text qualified as T
 import Parser.Lexer (lexProgram)
 import Data.Maybe (fromMaybe)
+import Data.Void
 
 
 -- TODO: Most of the combinators in Parser.Lexer should handle any trailing
@@ -156,7 +158,7 @@ termP = try (parensP exprP) <|> tupleP <|>
         try funCallEP <|>
         Field <$> identP
   where
-    emptyListP = keywordP KwEmpty >> pure EmptyList
+    emptyListP = symbolP SymBracketLR >> pure EmptyList
     tupleP = do
       (e1,e2) <- parensP $ do
         e1 <- exprP
@@ -242,10 +244,14 @@ assignP = do
 
 funCallP :: TokenParser Stmt
 funCallP = do
-  funId <- idP
+  funId <- idP <|> printP <|> isEmptyP
   args <- parensP $ exprP `sepBy` symbolP SymComma
   _ <- symbolP SymSemicolon
   pure $ FunCall funId args
+  where
+    -- TODO: Find a better to representation for pre-defined function names
+    printP = keywordP KwPrint >> pure (T.pack $ show KwPrint)
+    isEmptyP = keywordP KwIsEmpty >> pure (T.pack $ show KwIsEmpty)
 
 returnP :: TokenParser Stmt
 returnP = do
@@ -269,12 +275,12 @@ programP = do
   pure $ Program varDecls funDecls
 
 -- | Function for testing the combination of lexing and parsing for expressions
-parseProgram :: Text -> Maybe Program
+parseProgram :: Text -> Either (Maybe (ParseErrorBundle TokenStream Void)) Program
 parseProgram input =
   case runParser (lexProgram <* eof) "" input of
-    Left _ -> Nothing
+    Left _ -> Left Nothing
     Right ts -> case runParser (programP <* eof) "" ts of
-      Left _ -> Nothing
+      Left e -> Left $ Just e
       Right e -> pure e
 
 
