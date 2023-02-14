@@ -108,12 +108,19 @@ lex1 = try intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRec
       _ <- lexeme anySingle
       lex1
 
-
+withPosition :: Lexer a -> Lexer (Positioned a)
+withPosition l = do
+  startOffset <- getOffset
+  beginPos <- getSourcePos
+  x <- l
+  endOffset <- getOffset
+  endPos <- getSourcePos
+  return $ Positioned beginPos endPos (endOffset - startOffset) x
 
 lexProgram :: Lexer TokenStream
 lexProgram = do
   sc
-  TokenStream <$> many (lexeme lex1) <* eof
+  TokenStream <$> many (lexeme $ withPosition lex1) <* eof
 
 
 lexer :: FilePath -> T.Text -> Either (ParseErrorBundle T.Text Void) TokenStream
