@@ -18,7 +18,15 @@ data Token = IntLit Integer | BoolLit Bool | CharLit Char
            | IdToken Id
            | Symbol Symbol
            | Keyword Keyword
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Token where
+  show (IntLit n) = show n
+  show (BoolLit b) = if b then "true" else "false"
+  show (CharLit c) = [c]
+  show (IdToken t) = T.unpack t
+  show (Symbol s) = show s
+  show (Keyword k) = show k
 
 
 ----------------------

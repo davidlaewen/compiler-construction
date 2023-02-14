@@ -281,40 +281,41 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
 -- Parser helpers
 ----------------------------
 
+-- FIXME: Refactor these to make them less cluncky
 symbolP :: Symbol -> TokenParser ()
 symbolP s = token test S.empty
   where
-    test t | t == Symbol s = Just ()
+    test t | tokenVal t == Symbol s = Just ()
     test _ = Nothing
 
 keywordP :: Keyword -> TokenParser ()
 keywordP k = token test S.empty
   where
-    test t | t == Keyword k = Just ()
+    test t | tokenVal t == Keyword k = Just ()
     test _ = Nothing
 
 idP :: TokenParser Id
 idP = token test S.empty
   where
-    test (IdToken i) = Just i
+    test (Positioned _ _ _ (IdToken i)) = Just i
     test _ = Nothing
 
 intP :: TokenParser Expr
 intP = token test S.empty
   where
-    test (IntLit n) = Just $ Int n
+    test (Positioned _ _ _ (IntLit n)) = Just $ Int n
     test _ = Nothing
 
 boolP :: TokenParser Expr
 boolP = token test S.empty
   where
-    test (BoolLit b) = Just $ Bool b
+    test (Positioned _ _ _ (BoolLit b)) = Just $ Bool b
     test _ = Nothing
 
 charP :: TokenParser Expr
 charP = token test S.empty
   where
-    test (CharLit c) = Just $ Char c
+    test (Positioned _ _ _ (CharLit c)) = Just $ Char c
     test _ = Nothing
 
 -- | Parses expression of form (e), where e is parsed by the parser provided

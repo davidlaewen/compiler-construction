@@ -14,6 +14,7 @@ import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Char.Lexer (decimal)
 import Control.Monad (void)
 import Data.Void (Void)
+import qualified Parser.Tokens as PT
 
 
 
@@ -117,11 +118,11 @@ withPosition l = do
   endPos <- getSourcePos
   return $ Positioned beginPos endPos (endOffset - startOffset) x
 
-lexProgram :: Lexer TokenStream
+lexProgram :: Lexer [Positioned PT.Token]
 lexProgram = do
   sc
-  TokenStream <$> many (lexeme $ withPosition lex1) <* eof
+  many (lexeme $ withPosition lex1) <* eof
 
 
 lexer :: FilePath -> T.Text -> Either (ParseErrorBundle T.Text Void) TokenStream
-lexer = runParser lexProgram
+lexer filePath input = runParser (TokenStream input <$> lexProgram) filePath input
