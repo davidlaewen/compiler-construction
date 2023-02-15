@@ -8,7 +8,7 @@ import Parser.Tokens
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Char (isAlphaNum, isSpace, isPunctuation)
-import Text.Megaparsec hiding ( State, Token )
+import Text.Megaparsec hiding ( Token )
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Char.Lexer (decimal)
@@ -125,4 +125,22 @@ lexProgram = do
 
 
 lexer :: FilePath -> T.Text -> Either (ParseErrorBundle T.Text Void) TokenStream
-lexer filePath input = runParser (TokenStream input <$> lexProgram) filePath input
+lexer filePath input = snd $ runParser' (TokenStream input <$> lexProgram) initialState
+  where
+    initialState  =
+      State
+        { stateInput = input,
+          stateOffset = 0,
+          statePosState =
+            PosState
+              { pstateInput = input,
+                pstateOffset = 0,
+                pstateSourcePos = initialPos filePath,
+                -- The defaultTabWidth of megaparsec is 8, we set it to 4.
+                -- Otherwise, errors will be reported with the wrong offsets,
+                -- when there are tabs in the input program.
+                pstateTabWidth = mkPos 4,
+                pstateLinePrefix = ""
+              },
+          stateParseErrors = []
+        }
