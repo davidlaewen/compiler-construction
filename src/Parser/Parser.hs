@@ -10,24 +10,31 @@ import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
 import qualified Data.Text as T
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Void
 
 ----------------------
 -- Declarations
 
-varDeclP :: TokenParser VarDecl
-varDeclP = do
+varDeclP :: TokenParser (Maybe VarDecl)
+varDeclP = withRecovery recovery $ do
   var <- optional $ keywordP KwVar
-  mty <- do
+  mty <-
     case var of
-      Nothing -> do Just <$> typeP
+      Nothing -> Just <$> typeP
       Just () -> pure Nothing
   name <- idP
   _ <- symbolP SymEq
   expr <- exprP
   _ <- symbolP SymSemicolon
-  return $ VarDecl mty name expr
+  return $ Just $ VarDecl mty name expr
+  where
+    recovery :: ParseError TokenStream Void -> TokenParser (Maybe VarDecl)
+    recovery e = do
+      registerParseError e
+      takeWhileP Nothing (\(Positioned _ _ _ _ t) -> t /= Symbol SymSemicolon)
+      anySingle
+      return Nothing
 
 
 funDeclP :: TokenParser FunDecl
@@ -36,7 +43,7 @@ funDeclP = do
   params <- parensP (idP `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
-    decls <- many varDeclP
+    decls <- catMaybes <$> many varDeclP
     stmts <- some stmtP
     pure (decls, stmts)
   pure $ FunDecl name params retType decls stmts
@@ -244,13 +251,13 @@ stmtP = ifP <|> whileP <|> assignP <|> returnP <|> funCallP
 
 programP :: TokenParser Program
 programP = do
-  varDecls <- many varDeclP
+  varDecls <- catMaybes <$> many varDeclP
   funDecls <- many funDeclP
   Program varDecls funDecls <$ eof
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream Void) Program
-parser = runParser programP
+parser filePath input = snd $ runParser' programP $ initialState filePath input
 
 
 {-
@@ -297,25 +304,25 @@ keywordP k = token test S.empty
 idP :: TokenParser Id
 idP = token test S.empty
   where
-    test (Positioned _ _ _ (IdToken i)) = Just i
+    test (Positioned _ _ _ _ (IdToken i)) = Just i
     test _ = Nothing
 
 intP :: TokenParser Expr
 intP = token test S.empty
   where
-    test (Positioned _ _ _ (IntLit n)) = Just $ Int n
+    test (Positioned _ _ _ _ (IntLit n)) = Just $ Int n
     test _ = Nothing
 
 boolP :: TokenParser Expr
 boolP = token test S.empty
   where
-    test (Positioned _ _ _ (BoolLit b)) = Just $ Bool b
+    test (Positioned _ _ _ _ (BoolLit b)) = Just $ Bool b
     test _ = Nothing
 
 charP :: TokenParser Expr
 charP = token test S.empty
   where
-    test (Positioned _ _ _ (CharLit c)) = Just $ Char c
+    test (Positioned _ _ _ _ (CharLit c)) = Just $ Char c
     test _ = Nothing
 
 -- | Parses expression of form (e), where e is parsed by the parser provided
