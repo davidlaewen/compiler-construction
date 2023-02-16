@@ -9,6 +9,7 @@ import Syntax.Program (Program)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty)
+import System.IO (hPutStrLn, stderr)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -20,13 +21,13 @@ s1 >-> s2 = Stage $ \filePath input -> do
 lexStage :: Stage T.Text TokenStream
 lexStage = Stage $ \filePath input ->
   case lexer filePath input of
-    Left errors -> Left $ putStrLn $ errorBundlePretty errors
+    Left errors -> Left $ hPutStrLn stderr $ errorBundlePretty errors
     Right tokens -> Right tokens
 
 parseStage :: Stage TokenStream Program
 parseStage = Stage $ \filePath tokens ->
   case parser filePath tokens of
-    Left errors -> Left $ putStrLn $ errorBundlePretty errors
+    Left errors -> Left $ hPutStrLn stderr $ errorBundlePretty errors
     Right program -> Right program
 
 printStage :: Show a => Stage a (IO ())
@@ -43,7 +44,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case parseArgs args of
-    Nothing -> putStrLn "TODO: Print help"
+    Nothing -> hPutStrLn stderr "TODO: Print help"
     Just (Args filePath stage) -> do
       -- TODO: IO Error handling
       contents <- T.readFile filePath
