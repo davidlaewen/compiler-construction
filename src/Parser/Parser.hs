@@ -9,7 +9,6 @@ import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
 import Data.Maybe (fromMaybe)
-import Data.Void
 
 ----------------------
 -- Declarations
@@ -30,14 +29,22 @@ varDeclP = do
 
 funDeclP :: TokenParser FunDecl
 funDeclP = do
+  funIdOffset <- getOffset
   name <- idP
   params <- parensP (idP `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
     decls <- many $ try varDeclP
-    stmts <- some stmtP
+    stmts <- many stmtP >>= handleNoStatements funIdOffset
     pure (decls, stmts)
   pure $ FunDecl name params retType decls stmts
+  where
+    handleNoStatements :: Int -> [Stmt] -> TokenParser [Stmt]
+    handleNoStatements o [] = region (setErrorOffset o) $
+      registerFancyFailure (S.singleton $
+        ErrorCustom FunctionMissingStatements) >> pure []
+    handleNoStatements _ stmts = pure stmts
+
 
 
 ----------------------
@@ -276,7 +283,7 @@ programP = do
   Program varDecls funDecls <$ eof
 
 
-parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream Void) Program
+parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream ParserError) Program
 parser filePath input = snd $ runParser' programP $ initialState filePath input
 
 

@@ -8,6 +8,7 @@ module Parser.Definition
   ( Lexer,
     Positioned (..),
     TokenParser,
+    ParserError(..),
     TokenStream (..),
     initialState
   )
@@ -24,7 +25,14 @@ import Data.Maybe (listToMaybe)
 
 type Lexer = Parsec Void Text
 
-type TokenParser = Parsec Void TokenStream
+type TokenParser = Parsec ParserError TokenStream
+
+data ParserError = FunctionMissingStatements
+  deriving (Eq, Ord)
+
+instance ShowErrorComponent ParserError where
+  showErrorComponent :: ParserError -> String
+  showErrorComponent FunctionMissingStatements = "Function body must end with a statement"
 
 data TokenStream = TokenStream
   { tokenStreamInput :: T.Text,
@@ -130,7 +138,7 @@ instance TraversableStream TokenStream where
       charsConsumed =
         case NE.nonEmpty pre of
           Nothing -> 0
-          Just nePre -> 
+          Just nePre ->
             case post of
               [] -> tokensLength pxy nePre
               (t : _) -> startOffset t - startOffset (NE.head nePre)
