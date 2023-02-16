@@ -45,9 +45,6 @@ data Keyword where
   KwChar    :: Keyword
   KwVoid    :: Keyword
 
-  KwPrint   :: Keyword
-  KwIsEmpty :: Keyword
-
   KwHead    :: Keyword
   KwTail    :: Keyword
   KwFst     :: Keyword
@@ -67,9 +64,6 @@ instance Show Keyword where
   show KwBool    = "Bool"
   show KwChar    = "Char"
   show KwVoid    = "Void"
-
-  show KwPrint   = "print"
-  show KwIsEmpty = "isEmpty"
 
   show KwHead    = "hd"
   show KwTail    = "tl"
@@ -113,6 +107,7 @@ data Symbol where
   SymAst           :: Symbol
   SymSlash         :: Symbol
   SymPercent       :: Symbol
+  SymColon         :: Symbol
 
   -- Syntax
   SymEq            :: Symbol
@@ -155,6 +150,7 @@ instance Show Symbol where
   show SymAst           = "*"
   show SymSlash         = "/"
   show SymPercent       = "%"
+  show SymColon         = ":"
 
   -- Syntax
   show SymEq            = "="

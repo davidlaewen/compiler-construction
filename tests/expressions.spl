@@ -13,4 +13,9 @@ var x = a && b;
 var x = !(!(True && False) || False);
 (Int,Bool) t = (1/y/3, x == y && x-y*z >= x);
 
+var list = 1 + 2:[];
+
+
+var fields = a.tl.snd.hd.fst;
+
 test() :: -> Void { return x; }

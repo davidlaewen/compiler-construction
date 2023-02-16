@@ -8,7 +8,6 @@ import Syntax.Types ( Type(..) )
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
-import qualified Data.Text as T
 import Data.Maybe (fromMaybe)
 import Data.Void
 
@@ -35,7 +34,7 @@ funDeclP = do
   params <- parensP (idP `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
-    decls <- many varDeclP
+    decls <- many $ try varDeclP
     stmts <- some stmtP
     pure (decls, stmts)
   pure $ FunDecl name params retType decls stmts
@@ -103,8 +102,7 @@ identP = do
 
 funCallEP :: TokenParser Expr
 funCallEP = do
-  funId <- idP
-  args <- parensP $ exprP `sepBy` symbolP SymComma
+  (funId,args) <- funCallP
   pure $ FunCallE funId args
 
 tupleP :: TokenParser Expr
@@ -151,8 +149,19 @@ formP = try (termP >>= opTermP) <|> termP
       term' <- termP
       opTermP (BinOp op term term')) <|> pure term
 
+listP :: TokenParser Expr
+listP = try (formP >>= opFormP) <|> formP
+  where
+    opP :: TokenParser BinaryOp
+    opP = symbolP SymColon >> pure Cons
+    opFormP :: Expr -> TokenParser Expr
+    opFormP form = try (do
+      op <- opP
+      form' <- formP
+      opFormP (BinOp op form form')) <|> pure form
+
 propP :: TokenParser Expr
-propP = try (formP >>= opFormP) <|> formP
+propP = try (listP >>= opListP) <|> listP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymEqEq >> pure Eq) <|>
@@ -161,19 +170,21 @@ propP = try (formP >>= opFormP) <|> formP
           (symbolP SymGreaterThan >> pure Gt) <|>
           (symbolP SymLessThanEq >> pure Lteq) <|>
           (symbolP SymGreaterThanEq >> pure Gteq)
-    opFormP :: Expr -> TokenParser Expr
-    opFormP form = try (do
+    opListP :: Expr -> TokenParser Expr
+    opListP list = try (do
       op <- opP
-      form' <- formP
-      opFormP (BinOp op form form')) <|> pure form
+      list' <- listP
+      opListP (BinOp op list list')) <|> pure list
 
 {- Refactored expression grammar:
 
 <Expr> :=  <Prop> (( && | || ) <Prop>)*
 
-<Prop> := <Form> (( == | != | < | > | <= | >= ) <Form> )*
+<Prop> := <List> (( == | != | < | > | <= | >= ) <List> )*
 
-<Form> :=  <Term> (( + | - ) <Term>)*
+<List> := <Form> ( :  <Form> )*
+
+<Form> := <Term> (( + | - ) <Term>)*
 
 <Term> := <Val> (( * | / | % ) <Val>)*
 
@@ -237,16 +248,11 @@ assignP = do
   _ <- symbolP SymSemicolon
   pure $ Assign name expr
 
-funCallP :: TokenParser Stmt
-funCallP = do
-  funId <- idP <|> printP <|> isEmptyP
-  args <- parensP $ exprP `sepBy` symbolP SymComma
+funCallSP :: TokenParser Stmt
+funCallSP = do
+  (funId,args) <- funCallP
   _ <- symbolP SymSemicolon
   pure $ FunCall funId args
-  where
-    -- TODO: Find a better to representation for pre-defined function names
-    printP = keywordP KwPrint >> pure (T.pack $ show KwPrint)
-    isEmptyP = keywordP KwIsEmpty >> pure (T.pack $ show KwIsEmpty)
 
 returnP :: TokenParser Stmt
 returnP = do
@@ -257,7 +263,7 @@ returnP = do
 
 
 stmtP :: TokenParser Stmt
-stmtP = ifP <|> whileP <|> assignP <|> returnP <|> funCallP
+stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 
 
 -------------------------
@@ -338,6 +344,12 @@ charP = token test S.empty
   where
     test (Positioned _ _ _ _ (CharLit c)) = Just $ Char c
     test _ = Nothing
+
+funCallP :: TokenParser (Id, [Expr])
+funCallP = do
+  funId <- idP
+  args <- parensP $ exprP `sepBy` symbolP SymComma
+  pure (funId, args)
 
 -- | Parses expression of form (e), where e is parsed by the parser provided
 --   in the argument.
