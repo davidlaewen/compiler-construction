@@ -116,7 +116,7 @@ withPosition l = do
   x <- l
   endOffset <- getOffset
   endPos <- getSourcePos
-  return $ Positioned beginPos endPos (endOffset - startOffset) x
+  return $ Positioned beginPos endPos startOffset (endOffset - startOffset) x
 
 lexProgram :: Lexer [Positioned PT.Token]
 lexProgram = do
@@ -125,22 +125,4 @@ lexProgram = do
 
 
 lexer :: FilePath -> T.Text -> Either (ParseErrorBundle T.Text Void) TokenStream
-lexer filePath input = snd $ runParser' (TokenStream input <$> lexProgram) initialState
-  where
-    initialState  =
-      State
-        { stateInput = input,
-          stateOffset = 0,
-          statePosState =
-            PosState
-              { pstateInput = input,
-                pstateOffset = 0,
-                pstateSourcePos = initialPos filePath,
-                -- The defaultTabWidth of megaparsec is 8, we set it to 4.
-                -- Otherwise, errors will be reported with the wrong offsets,
-                -- when there are tabs in the input program.
-                pstateTabWidth = mkPos 4,
-                pstateLinePrefix = ""
-              },
-          stateParseErrors = []
-        }
+lexer filePath input = snd $ runParser' (TokenStream input <$> lexProgram) (initialState filePath input)

@@ -250,7 +250,7 @@ programP = do
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream Void) Program
-parser = runParser programP
+parser filePath input = snd $ runParser' programP $ initialState filePath input
 
 
 {-
@@ -297,25 +297,25 @@ keywordP k = token test S.empty
 idP :: TokenParser Id
 idP = token test S.empty
   where
-    test (Positioned _ _ _ (IdToken i)) = Just i
+    test (Positioned _ _ _ _ (IdToken i)) = Just i
     test _ = Nothing
 
 intP :: TokenParser Expr
 intP = token test S.empty
   where
-    test (Positioned _ _ _ (IntLit n)) = Just $ Int n
+    test (Positioned _ _ _ _ (IntLit n)) = Just $ Int n
     test _ = Nothing
 
 boolP :: TokenParser Expr
 boolP = token test S.empty
   where
-    test (Positioned _ _ _ (BoolLit b)) = Just $ Bool b
+    test (Positioned _ _ _ _ (BoolLit b)) = Just $ Bool b
     test _ = Nothing
 
 charP :: TokenParser Expr
 charP = token test S.empty
   where
-    test (Positioned _ _ _ (CharLit c)) = Just $ Char c
+    test (Positioned _ _ _ _ (CharLit c)) = Just $ Char c
     test _ = Nothing
 
 -- | Parses expression of form (e), where e is parsed by the parser provided
