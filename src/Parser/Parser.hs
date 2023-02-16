@@ -2,7 +2,6 @@
 module Parser.Parser (parser) where
 
 import Control.Applicative hiding (many,some)
-import Control.Monad.Combinators.Expr
 import Parser.Definition
 import Syntax.Program
 import Syntax.Types ( Type(..) )
@@ -52,7 +51,6 @@ baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
     boolTypeP = keywordP KwBool >> pure BoolT
     charTypeP = keywordP KwChar >> pure CharT
 
-
 typeP :: TokenParser Type
 typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
   where
@@ -70,7 +68,10 @@ funTypeP :: TokenParser Type
 funTypeP = do
   argTys <- many typeP
   _ <- symbolP SymRightArrow
-  Fun argTys <$> typeP
+  Fun argTys <$> retTypeP
+  where
+    retTypeP :: TokenParser Type
+    retTypeP = typeP <|> (keywordP KwVoid >> pure Void)
 
 
 ------------------------
@@ -106,73 +107,94 @@ funCallEP = do
   args <- parensP $ exprP `sepBy` symbolP SymComma
   pure $ FunCallE funId args
 
+tupleP :: TokenParser Expr
+tupleP = do
+  parensP $ do
+    e1 <- exprP
+    _ <- symbolP SymComma
+    Tuple e1 <$> exprP
 
-operatorTable :: [[Operator TokenParser Expr]]
-operatorTable =
-  [ [ prefix SymMinus (UnOp Neg),
-      prefix SymBang  (UnOp Not) ],
-
-    [ binary SymAst     (BinOp Mul),
-      binary SymSlash   (BinOp Div),
-      binary SymPercent (BinOp Mod) ],
-
-    [ binary SymPlus  (BinOp Add),
-      binary SymMinus (BinOp Sub) ],
-
-    [ binary SymEqEq          (BinOp Eq),
-      binary SymBangEq        (BinOp Neq),
-      binary SymLessThan      (BinOp Lt),
-      binary SymGreaterThan   (BinOp Gt),
-      binary SymLessThanEq    (BinOp Lteq),
-      binary SymGreaterThanEq (BinOp Gteq) ],
-
-    [ binary SymPipePipe (BinOp Or),
-      binary SymAndAnd   (BinOp And) ]
-
-    -- TODO: Add cons operator to table
-  ]
+valP :: TokenParser Expr
+valP = try (parensP exprP) <|> tupleP <|>
+          bangExprP <|> negExprP <|>
+          intP <|> boolP <|> charP <|>
+          emptyListP <|>
+          try funCallEP <|>
+          Field <$> identP
   where
-    prefix sym f = Prefix (f <$ symbolP sym)
-    binary sym f = InfixL (f <$ symbolP sym)
+    bangExprP = symbolP SymBang *> (UnOp Not <$> valP)
+    negExprP = symbolP SymMinus *> (UnOp Neg <$> valP)
+    emptyListP = symbolP SymBracketLR >> pure EmptyList
 
 termP :: TokenParser Expr
-termP = try (parensP exprP) <|> tupleP <|>
-        intP <|> boolP <|> charP <|>
-        emptyListP <|>
-        try funCallEP <|>
-        Field <$> identP
+termP = try (valP >>= opValP) <|> valP
   where
-    emptyListP = symbolP SymBracketLR >> pure EmptyList
-    tupleP = do
-      (e1,e2) <- parensP $ do
-        e1 <- exprP
-        _ <- symbolP SymComma
-        e2 <- exprP
-        pure (e1,e2)
-      pure $ Tuple e1 e2
+    opP :: TokenParser BinaryOp
+    opP = (symbolP SymAst >> pure Mul) <|>
+          (symbolP SymSlash >> pure Div) <|>
+          (symbolP SymPercent >> pure Mod)
+    opValP :: Expr -> TokenParser Expr
+    opValP val = try (do
+      op <- opP
+      val' <- valP
+      opValP (BinOp op val val')) <|> pure val
 
-exprP :: TokenParser Expr
-exprP = makeExprParser termP operatorTable
+formP :: TokenParser Expr
+formP = try (termP >>= opTermP) <|> termP
+  where
+    opP :: TokenParser BinaryOp
+    opP = (symbolP SymPlus >> pure Add) <|>
+          (symbolP SymMinus >> pure Sub)
+    opTermP :: Expr -> TokenParser Expr
+    opTermP term = try (do
+      op <- opP
+      term' <- termP
+      opTermP (BinOp op term term')) <|> pure term
 
-{-
+propP :: TokenParser Expr
+propP = try (formP >>= opFormP) <|> formP
+  where
+    opP :: TokenParser BinaryOp
+    opP = (symbolP SymEqEq >> pure Eq) <|>
+          (symbolP SymBangEq >> pure Neq) <|>
+          (symbolP SymLessThan >> pure Lt) <|>
+          (symbolP SymGreaterThan >> pure Gt) <|>
+          (symbolP SymLessThanEq >> pure Lteq) <|>
+          (symbolP SymGreaterThanEq >> pure Gteq)
+    opFormP :: Expr -> TokenParser Expr
+    opFormP form = try (do
+      op <- opP
+      form' <- formP
+      opFormP (BinOp op form form')) <|> pure form
 
-Refactored expression grammar:
+{- Refactored expression grammar:
 
-<Expr> := (!)* <Prop> (( && | || ) <Prop>)*
+<Expr> :=  <Prop> (( && | || ) <Prop>)*
 
 <Prop> := <Form> (( == | != | < | > | <= | >= ) <Form> )*
-       |  <Bool>
 
-<Form> := (-)* <Term> (( + | - ) <Term>)*
-       |  <Char>
+<Form> :=  <Term> (( + | - ) <Term>)*
 
 <Term> := <Val> (( * | / | % ) <Val>)*
 
 <Val> := ( <Expr> ) | ( <Expr> , <Expr> )
       |  <FunCall> | <Id> <Field> | <Int> | []
+      | <Bool> | <Char> | !<Val> | - <Expr>
+-}
 
+exprP :: TokenParser Expr
+exprP = try (propP >>= opPropP) <|> propP
+  where
+    opP :: TokenParser BinaryOp
+    opP = (symbolP SymAndAnd >> pure And) <|>
+          (symbolP SymPipePipe >> pure Or)
+    opPropP :: Expr -> TokenParser Expr
+    opPropP prop = try (do
+      op <- opP
+      prop' <- propP
+      opPropP (BinOp op prop prop')) <|> pure prop
 
-Original grammar:
+{- Original grammar:
 
 <Expr> := <Id> <Field>
        | <Expr> <Op2> <Expr>
@@ -185,7 +207,6 @@ Original grammar:
 
 <Op2> := + | - | * | / | % | == | < | > | <= | >= | != | && | || | :
 <Op1> := ! | -
-
 -}
 
 -------------------------
@@ -244,7 +265,7 @@ stmtP = ifP <|> whileP <|> assignP <|> returnP <|> funCallP
 
 programP :: TokenParser Program
 programP = do
-  varDecls <- many varDeclP
+  varDecls <- many $ try varDeclP
   funDecls <- many funDeclP
   Program varDecls funDecls <$ eof
 

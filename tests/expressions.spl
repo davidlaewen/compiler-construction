@@ -1,0 +1,16 @@
+Int x = 1;
+var z = 1;
+
+Bool b = True;
+var x = a;
+var x = !a;
+var x = !!!a;
+var x = -a;
+var x = ---a;
+var x = [];
+var x = a && b;
+
+var x = !(!(True && False) || False);
+(Int,Bool) t = (1/y/3, x == y && x-y*z >= x);
+
+test() :: -> Void { return x; }
