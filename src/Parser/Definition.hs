@@ -130,14 +130,18 @@ instance TraversableStream TokenStream where
           [] -> pstateSourcePos
           (x : _) -> startPos x
       (pre, post) = splitAt (o - pstateOffset) (tokenStream pstateInput)
-      (whitespacePrefix, input) = if pstateOffset == 0
-                then T.splitAt (maybe 0 startOffset (listToMaybe pre)) $ tokenStreamInput pstateInput
-                else (T.empty, tokenStreamInput pstateInput)
-      (preStr, postStr) = T.splitAt charsConsumed input
-      preLine = T.unpack . T.reverse . T.takeWhile (/= '\n') . T.reverse $ T.append whitespacePrefix preStr
+      (preStr, postStr) = T.splitAt (startingWhitespacesConsumed + charsConsumed) (tokenStreamInput pstateInput)
+      preLine = T.unpack . T.reverse . T.takeWhile (/= '\n') . T.reverse $ preStr
+      startingWhitespacesConsumed =
+        if pstateOffset == 0
+          then maybe 0 startOffset (listToMaybe pre)
+          else 0
       charsConsumed =
         case NE.nonEmpty pre of
-          Nothing -> 0
+          Nothing ->
+            case post of
+              [] -> 0
+              (t : _) -> startOffset t
           Just nePre ->
             case post of
               [] -> tokensLength pxy nePre
@@ -146,7 +150,7 @@ instance TraversableStream TokenStream where
 
 -- Expands tabs to the tabWidth
 -- This function takes the line offset into account, i.e. if the tabwidth is 4,
--- the string "aa\tb" is be expanded to "aa  b", because the tab goes to the next multipkle of tabWidth.
+-- the string "aa\tb" is be expanded to "aa  b", because the tab goes to the next multiple of tabWidth.
 -- This functions only works properly for input without newlines
 expandTab :: Int -> String -> String
 expandTab tabWidth = go 0 0
