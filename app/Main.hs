@@ -5,6 +5,7 @@ import qualified Data.Text.IO as T
 import Parser.Definition (TokenStream)
 import Parser.Lexer (lexer)
 import Parser.Parser (parser)
+import PrettyPrinter (prettyPrinter)
 import Syntax.Program (Program)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
@@ -30,6 +31,9 @@ parseStage = Stage $ \filePath tokens ->
     Left errors -> Left $ hPutStrLn stderr $ errorBundlePretty errors
     Right program -> Right program
 
+prettyPrintStage :: Stage Program (IO ())
+prettyPrintStage = Stage $ const $ \program -> Right $ prettyPrinter program
+
 printStage :: Show a => Stage a (IO ())
 printStage = Stage $ \_ input -> Right $ print input
 
@@ -38,10 +42,12 @@ data Args = Args FilePath (Stage T.Text (IO ()))
 parseArgs :: [String] -> Maybe Args
 parseArgs ("lex" : filePath : _) = Just (Args filePath (lexStage >-> printStage))
 parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> printStage))
+parseArgs ("prettyprint" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
 parseArgs _ = Nothing
 
 main :: IO ()
 main = do
+  putStr "hoiu"
   args <- getArgs
   case parseArgs args of
     Nothing -> hPutStrLn stderr "TODO: Print help"

@@ -29,6 +29,7 @@ library
       Parser.Lexer
       Parser.Parser
       Parser.Tokens
+      PrettyPrinter
       Syntax.Common
       Syntax.Program
       Syntax.Types
