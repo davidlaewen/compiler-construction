@@ -23,7 +23,8 @@ prettyPrintProgram :: Indenation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
-  sepBy "\n" prettyPrintFunDecl funDecls
+  sepBy "\n\n" prettyPrintFunDecl funDecls
+  putStrLn ""
 
 prettyPrintVarDecl :: Indenation -> VarDecl -> IO ()
 prettyPrintVarDecl i (VarDecl typeM ident e) = do
@@ -72,10 +73,11 @@ prettyPrintFunDecl (FunDecl funName argNames retTypeM varDecls stmts) = do
     Just retType -> do
       putStr " :: "
       prettyPrintType retType
-  putStr " {"
+  putStrLn " {"
   sepBy "\n" (prettyPrintVarDecl 4) varDecls
   unless (null varDecls || null stmts) $ putStrLn ""
   sepBy "\n" (prettyPrintStmt 4) stmts
+  putStrLn ""
   putChar '}'
 
 prettyPrintStmt :: Indenation -> Stmt -> IO ()
@@ -83,20 +85,20 @@ prettyPrintStmt i (If e stmts1 stmts2) = do
   printIndentation i
   putStr "if ("
   prettyPrintExpr e
-  putStr ") {"
+  putStrLn ") {"
   sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts1
   putStrLn ""
   printIndentation i
   putStr "}"
   unless (null stmts2) $ do
-    putStr " else {"
+    putStrLn " else {"
     sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts2
     putStrLn ""
     printIndentation i
     putStr "}"
 prettyPrintStmt i (While e stmts) = do
   printIndentation i
-  putStr "while ("
+  putStrLn "while ("
   prettyPrintExpr e
   putStr ") {"
   sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts

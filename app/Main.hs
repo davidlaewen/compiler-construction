@@ -47,7 +47,6 @@ parseArgs _ = Nothing
 
 main :: IO ()
 main = do
-  putStr "hoiu"
   args <- getArgs
   case parseArgs args of
     Nothing -> hPutStrLn stderr "TODO: Print help"
