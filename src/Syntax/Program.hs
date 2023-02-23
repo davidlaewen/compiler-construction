@@ -27,6 +27,7 @@ data Stmt = If Expr [Stmt] [Stmt]
           | Assign Field Expr
           | FunCall Id [Expr]
           | Return (Maybe Expr)
+          | GarbageS
   deriving Show
 
 data Type = IntT
