@@ -32,7 +32,6 @@ library
       PrettyPrinter
       Syntax.Common
       Syntax.Program
-      Syntax.Types
   other-modules:
       Paths_spl_compiler
   hs-source-dirs:

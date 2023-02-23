@@ -27,12 +27,13 @@ type Lexer = Parsec Void Text
 
 type TokenParser = Parsec ParserError TokenStream
 
-data ParserError = FunctionMissingStatements
+data ParserError = FunctionMissingStatements | NoRetType
   deriving (Eq, Ord)
 
 instance ShowErrorComponent ParserError where
   showErrorComponent :: ParserError -> String
   showErrorComponent FunctionMissingStatements = "Function body must end with a statement"
+  showErrorComponent NoRetType = "Missing return type after `->`"
 
 data TokenStream = TokenStream
   { tokenStreamInput :: T.Text,

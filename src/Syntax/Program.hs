@@ -4,6 +4,7 @@ module Syntax.Program (
   FunDecl(..),
   Id,
   Stmt(..),
+  Type(..),
   Field(..),
   Expr(..),
   UnaryOp(..),
@@ -11,15 +12,14 @@ module Syntax.Program (
 ) where
 
 import Syntax.Common (Id)
-import qualified Syntax.Types as Ty
 
 data Program = Program [VarDecl] [FunDecl]
   deriving Show
 
-data VarDecl = VarDecl (Maybe Ty.Type) Id Expr
+data VarDecl = VarDecl (Maybe Type) Id Expr
   deriving Show
 
-data FunDecl = FunDecl Id [Id] (Maybe Ty.Type) [VarDecl] [Stmt]
+data FunDecl = FunDecl Id [Id] (Maybe Type) [VarDecl] [Stmt]
   deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
@@ -28,6 +28,17 @@ data Stmt = If Expr [Stmt] [Stmt]
           | FunCall Id [Expr]
           | Return (Maybe Expr)
   deriving Show
+
+data Type = IntT
+          | BoolT
+          | CharT
+          | Prod Type Type
+          | List Type
+          | Void
+          | Fun [Type] Type
+          | TyVar Id
+          | GarbageT
+  deriving (Show, Eq)
 
 data Field = Ident Id
            | Head Field

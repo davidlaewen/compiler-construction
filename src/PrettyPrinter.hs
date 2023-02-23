@@ -3,8 +3,7 @@ module PrettyPrinter (prettyPrinter) where
 import Control.Monad (unless)
 import Data.List (intersperse)
 import qualified Data.Text.IO as T
-import Syntax.Program (Expr, Field (..), FunDecl (FunDecl), Program (Program), Stmt (..), VarDecl (..))
-import qualified Syntax.Types as Ty
+import Syntax.Program (Expr, Field (..), FunDecl (FunDecl), Program (Program), Stmt (..), Type(..), VarDecl (..))
 
 -- Represents the amount of spaces to indent after a newline
 type Indenation = Int
@@ -38,23 +37,23 @@ prettyPrintVarDecl i (VarDecl typeM ident e) = do
   prettyPrintExpr e
   putChar ';'
 
-prettyPrintType :: Ty.Type -> IO ()
-prettyPrintType Ty.IntT = putStr "Int"
-prettyPrintType Ty.BoolT = putStr "Bool"
-prettyPrintType Ty.CharT = putStr "Char"
-prettyPrintType Ty.Void = putStr "Void"
-prettyPrintType (Ty.TyVar ident) = T.putStr ident
-prettyPrintType (Ty.Prod t1 t2) = do
+prettyPrintType :: Type -> IO ()
+prettyPrintType IntT = putStr "Int"
+prettyPrintType BoolT = putStr "Bool"
+prettyPrintType CharT = putStr "Char"
+prettyPrintType Void = putStr "Void"
+prettyPrintType (TyVar ident) = T.putStr ident
+prettyPrintType (Prod t1 t2) = do
   putChar '('
   prettyPrintType t1
   putStr ", "
   prettyPrintType t2
   putChar ')'
-prettyPrintType (Ty.List t) = do
+prettyPrintType (List t) = do
   putChar '['
   prettyPrintType t
   putChar ']'
-prettyPrintType (Ty.Fun argTypes retType) = do
+prettyPrintType (Fun argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   putStr " -> "
   prettyPrintType retType

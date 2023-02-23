@@ -4,7 +4,6 @@ module Parser.Parser (parser) where
 import Control.Applicative hiding (many,some)
 import Parser.Definition
 import Syntax.Program
-import Syntax.Types ( Type(..) )
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
@@ -42,7 +41,7 @@ funDeclP = do
     handleNoStatements :: Int -> [Stmt] -> TokenParser [Stmt]
     handleNoStatements o [] = region (setErrorOffset o) $
       registerFancyFailure (S.singleton $
-        ErrorCustom FunctionMissingStatements) >> pure []
+        ErrorCustom FunctionMissingStatements) >> pure [GarbageS]
     handleNoStatements _ stmts = pure stmts
 
 
@@ -74,10 +73,16 @@ funTypeP :: TokenParser Type
 funTypeP = do
   argTys <- many typeP
   _ <- symbolP SymRightArrow
-  Fun argTys <$> retTypeP
+  offset <- getOffset
+  Fun argTys <$> (retTypeP <|> retTypeFail offset)
   where
     retTypeP :: TokenParser Type
     retTypeP = typeP <|> (keywordP KwVoid >> pure Void)
+
+    retTypeFail :: Int -> TokenParser Type
+    retTypeFail o = region (setErrorOffset o) $
+      registerFancyFailure (S.singleton $ ErrorCustom NoRetType)
+        >> pure GarbageT
 
 
 ------------------------
