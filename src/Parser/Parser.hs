@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 module Parser.Parser (parser) where
 
 import Control.Applicative hiding (many,some)
@@ -8,6 +9,9 @@ import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
 import Data.Maybe (fromMaybe)
+import Data.Either (partitionEithers)
+import Control.Monad
+import qualified Data.Text as T
 
 ----------------------
 -- Declarations
@@ -15,15 +19,15 @@ import Data.Maybe (fromMaybe)
 varDeclP :: TokenParser VarDecl
 varDeclP = do
   var <- optional $ keywordP KwVar
-  mty <- do
+  mty <-
     case var of
-      Nothing -> do Just <$> typeP
+      Nothing -> Just <$> typeP
       Just () -> pure Nothing
   name <- idP
   _ <- symbolP SymEq
   expr <- exprP
   _ <- symbolP SymSemicolon
-  return $ VarDecl mty name expr
+  pure $ VarDecl mty name expr
 
 
 funDeclP :: TokenParser FunDecl
@@ -33,7 +37,7 @@ funDeclP = do
   params <- parensP (idP `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   (decls, stmts) <- bracesP $ do
-    decls <- many $ try varDeclP
+    decls <- many (try varDeclP)
     stmts <- many stmtP >>= handleNoStatements funIdOffset
     pure (decls, stmts)
   pure $ FunDecl name params retType decls stmts
@@ -283,9 +287,19 @@ stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 
 programP :: TokenParser Program
 programP = do
-  varDecls <- many $ try varDeclP
-  funDecls <- many funDeclP
+  (funDecls, varDecls) <- partitionEithers <$> many ((Left <$> (lookAhead isFunDeclLookAhead >> funDeclP)) <|> (Right <$> varDeclP))
   Program varDecls funDecls <$ eof
+  where
+    isFunDeclLookAhead :: TokenParser ()
+    isFunDeclLookAhead = void $ satisfy isIdent >> satisfy isOpenParen
+
+    isIdent :: Positioned Parser.Tokens.Token -> Bool
+    isIdent (Positioned _ _ _ _ (IdToken _)) = True
+    isIdent _ = False
+
+    isOpenParen :: Positioned Parser.Tokens.Token -> Bool
+    isOpenParen (Positioned _ _ _ _ (Symbol SymParenLeft)) = True
+    isOpenParen _ = False
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream ParserError) Program
@@ -333,7 +347,7 @@ keywordP k = token test S.empty
     test t | tokenVal t == Keyword k = Just ()
     test _ = Nothing
 
-idP :: TokenParser Id
+idP :: TokenParser T.Text
 idP = token test S.empty
   where
     test (Positioned _ _ _ _ (IdToken i)) = Just i
@@ -357,7 +371,7 @@ charP = token test S.empty
     test (Positioned _ _ _ _ (CharLit c)) = Just $ Char c
     test _ = Nothing
 
-funCallP :: TokenParser (Id, [Expr])
+funCallP :: TokenParser (T.Text, [Expr])
 funCallP = do
   funId <- idP
   args <- parensP $ exprP `sepBy` symbolP SymComma

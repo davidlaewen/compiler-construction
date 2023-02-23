@@ -9,13 +9,12 @@ module Parser.Tokens (
   symbols
 ) where
 
-import Syntax.Common ( Id )
 import Data.Text ( Text )
 import qualified Data.Text as T
 
 
 data Token = IntLit Integer | BoolLit Bool | CharLit Char
-           | IdToken Id
+           | IdToken T.Text
            | Symbol Symbol
            | Keyword Keyword
   deriving (Eq, Ord)

@@ -30,7 +30,6 @@ library
       Parser.Parser
       Parser.Tokens
       PrettyPrinter
-      Syntax.Common
       Syntax.Program
   other-modules:
       Paths_spl_compiler

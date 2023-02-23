@@ -2,7 +2,6 @@ module Syntax.Program (
   Program(..),
   VarDecl(..),
   FunDecl(..),
-  Id,
   Stmt(..),
   Type(..),
   Field(..),
@@ -10,22 +9,21 @@ module Syntax.Program (
   UnaryOp(..),
   BinaryOp(..)
 ) where
-
-import Syntax.Common (Id)
+import qualified Data.Text as T
 
 data Program = Program [VarDecl] [FunDecl]
   deriving Show
 
-data VarDecl = VarDecl (Maybe Type) Id Expr
+data VarDecl = VarDecl (Maybe Type) T.Text Expr
   deriving Show
 
-data FunDecl = FunDecl Id [Id] (Maybe Type) [VarDecl] [Stmt]
+data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
   deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
           | While Expr [Stmt]
           | Assign Field Expr
-          | FunCall Id [Expr]
+          | FunCall T.Text [Expr]
           | Return (Maybe Expr)
           | GarbageS
   deriving Show
@@ -37,11 +35,11 @@ data Type = IntT
           | List Type
           | Void
           | Fun [Type] Type
-          | TyVar Id
+          | TyVar T.Text
           | GarbageT
   deriving (Show, Eq)
 
-data Field = Ident Id
+data Field = Ident T.Text
            | Head Field
            | Tail Field
            | Fst Field
@@ -54,7 +52,7 @@ data Expr = Field Field
           | Bool Bool
           | UnOp UnaryOp Expr
           | BinOp BinaryOp Expr Expr
-          | FunCallE Id [Expr]
+          | FunCallE T.Text [Expr]
           | EmptyList
           | Tuple Expr Expr
   deriving Show
