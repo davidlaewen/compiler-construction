@@ -3,7 +3,7 @@ module PrettyPrinter (prettyPrinter) where
 import Control.Monad (unless)
 import Data.List (intersperse)
 import qualified Data.Text.IO as T
-import Syntax.Program (Expr, Field (..), FunDecl (FunDecl), Program (Program), Stmt (..), Type(..), VarDecl (..))
+import Syntax.Program (Expr (..), Field (..), FunDecl (FunDecl), Program (Program), Stmt (..), Type(..), VarDecl (..), BinaryOp (..), UnaryOp (..))
 
 -- Represents the amount of spaces to indent after a newline
 type Indenation = Int
@@ -57,9 +57,77 @@ prettyPrintType (Fun argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   putStr " -> "
   prettyPrintType retType
+prettyPrintType GarbageT = putStr "Garbage"
 
 prettyPrintExpr :: Expr -> IO ()
-prettyPrintExpr e = putStr "TODO: Expression printing with right parens"
+prettyPrintExpr = go 0
+  where
+    go :: Int -> Expr -> IO ()
+    go _ (Field f) = prettyPrintField f
+    go _ (Int n) = putStr $ show n
+    go _ (Char c) = putChar '\'' >> putChar c >> putChar '\''
+    go _ (Bool True) = putStr "true"
+    go _ (Bool False) = putStr "false"
+    go _ EmptyList = putStr "[]"
+    go _ (FunCallE name args) = do
+      T.putStr name
+      putChar '('
+      sepBy ", " (go 0) args
+      putChar ')'
+    go _ (Tuple e1 e2) = do
+      putChar '('
+      go 0 e1
+      putStr ", "
+      go 0 e2
+      putChar ')'
+    go _ (UnOp op e) = do
+      case op of
+        Not -> putChar '!'
+        Neg -> putChar '-'
+      go unOpPrecedence e
+    go currentPrecedence (BinOp op e1 e2) =
+      if currentPrecedence > precedence op
+        then putChar '(' >> go (precedence op) e1 >> prettyPrintBinOp op >> go (precedence op) e2 >> putChar ')'
+        else go currentPrecedence e1 >> prettyPrintBinOp op >> go currentPrecedence e2
+
+    prettyPrintBinOp :: BinaryOp -> IO ()
+    prettyPrintBinOp And  = putStr " && "
+    prettyPrintBinOp Or   = putStr " || "
+    prettyPrintBinOp Eq   = putStr " == "
+    prettyPrintBinOp Neq  = putStr " != "
+    prettyPrintBinOp Lt   = putStr " < "
+    prettyPrintBinOp Gt   = putStr " > "
+    prettyPrintBinOp Lteq = putStr " <= "
+    prettyPrintBinOp Gteq = putStr " >= "
+    prettyPrintBinOp Cons = putStr " : "
+    prettyPrintBinOp Add  = putStr " + "
+    prettyPrintBinOp Sub  = putStr " - "
+    prettyPrintBinOp Mul  = putStr " * "
+    prettyPrintBinOp Div  = putStr " / "
+    prettyPrintBinOp Mod  = putStr " % "
+
+    precedence :: BinaryOp -> Int
+    precedence Or   = 0
+    precedence And  = 1
+
+    precedence Eq   = 2
+    precedence Neq  = 2
+    precedence Lt   = 2
+    precedence Gt   = 2
+    precedence Lteq = 2
+    precedence Gteq = 2
+
+    precedence Cons = 3
+
+    precedence Add  = 4
+    precedence Sub  = 4
+
+    precedence Mul  = 5
+    precedence Div  = 5
+    precedence Mod  = 5
+
+    unOpPrecedence :: Int
+    unOpPrecedence = 6
 
 prettyPrintFunDecl :: FunDecl -> IO ()
 prettyPrintFunDecl (FunDecl funName argNames retTypeM varDecls stmts) = do
@@ -123,6 +191,9 @@ prettyPrintStmt i (Return eM) = do
     Nothing -> pure ()
     Just e -> putChar ' ' >> prettyPrintExpr e
   putChar ';'
+prettyPrintStmt i GarbageS = do
+  printIndentation i
+  putStr "Garbage;"
 
 prettyPrintField :: Field -> IO ()
 prettyPrintField (Ident ident) = T.putStr ident
