@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
 import qualified Data.Text as T
@@ -11,6 +13,7 @@ import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
+import Control.Exception
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -49,10 +52,12 @@ main :: IO ()
 main = do
   args <- getArgs
   case parseArgs args of
-    Nothing -> hPutStrLn stderr "TODO: Print help"
+    Nothing -> hPutStrLn stderr "Usage:\n\tspl-compiler lex <filename>\n\tspl-compiler parse <filename>\n\tspl-compiler prettyprint <filename>"
     Just (Args filePath stage) -> do
-      -- TODO: IO Error handling
-      contents <- T.readFile filePath
-      case runStage stage filePath contents of
-        Left errorIO -> errorIO >> exitFailure
-        Right succesIO -> succesIO
+      try (T.readFile filePath) >>=
+        \case
+          Left (_ :: IOException) -> hPutStrLn stderr $ "ERROR: Could not read " ++ filePath
+          Right contents ->
+            case runStage stage filePath contents of
+              Left errorIO -> errorIO >> exitFailure
+              Right succesIO -> succesIO
