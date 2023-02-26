@@ -1,0 +1,275 @@
+\documentclass{report}
+
+\usepackage[a4paper]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[outputdir=build]{minted}
+\lstdefinelanguage{SPL}{%
+	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|}
+	morekeywords={while,else,if,print,return,isEmpty,fst,snd,hd,tl,Int,Char,Bool,Void,True,False,var},%
+	sensitive=true,%
+	morecomment=[l]{//},%
+	morecomment=[n]{/*}{*/},%
+	literate=%
+		{->}{{$\rightarrow$}}2
+		{>=}{{$\geq\:$}}1
+		{<=}{{$\leq\:$}}1
+		{==}{{$\equiv$}}1
+}
+\lstset{%
+	upquote=true,
+	breakatwhitespace=false,
+	breaklines=true,
+	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+	keepspaces=true,
+	basicstyle=\tt\footnotesize,
+	commentstyle=\sl,
+	keywordstyle=\bf,
+	stringstyle=\tt,
+	showspaces=false,
+	showstringspaces=false,
+	showtabs=false,
+	tabsize=4,
+	basewidth=0.43em,
+	columns=[c]fixed,
+	texcl=true,
+	captionpos=b
+}
+
+\author{%
+	David~L\"awen\\
+	\small\texttt{s1105105}\and
+	Simcha~van~Collem\\
+	\small\texttt{s1040283}
+}
+\date{\today}
+\title{SPL compiler}
+
+\begin{document}
+
+\maketitle%
+
+\tableofcontents%
+
+\chapter{Introduction}
+\begin{quote}
+	\it
+	This document is a mandatory skeleton for your report.
+	It gives by no means an exhaustive list of suggestions for content.
+	The report should be readable self-contained and readable without access to the source code.
+\end{quote}
+\begin{itemize}
+	\item Motivate your language choice
+	\item Introduce spl
+	\item Give some nice examples.
+	\item \ldots
+\end{itemize}
+
+\chapter{Lexing \& Parsing}
+In this chapter we discuss the lexing and parsing phases of our compiler.
+For both these phases we make use of the megaparsec library\footnote{\url{https://hackage.haskell.org/package/megaparsec}}.
+
+\paragraph{Lexing.}
+Our compiler has separate lexing and parsing phases.
+This is mainly to make the work of the parser easier.
+Firstly, the lexer takes care of skipping whitespace tokens.
+This also includes skipping single and multiline comments.
+Second, it also annotates all tokens with their position in the file.
+The lexer returns a list of \mintinline{haskell}{Positioned Token},
+where \mintinline{haskell}{Positioned a} is defined as follows:
+\begin{minted}{haskell}
+data Positioned a = Positioned
+  { startPos :: SourcePos,
+    endPos :: SourcePos,
+    startOffset :: Int,
+    tokenLength :: Int,
+    tokenVal :: a
+  }
+
+data SourcePos = SourcePos
+  { sourceName :: FilePath,
+    sourceLine :: !Pos,
+    sourceColumn :: !Pos
+  }
+\end{minted}
+This will later make it possible to provide good error message to the user,
+as they will be able to locate the error using the source positions.
+
+The lexer has error recovery, as it is quite easy to implement.
+There are basically two types of errors in our lexer.
+Either the lexer encounters an invalid integer (e.g. \verb|123ab|),
+or it encounters an unknown symbol.
+In both cases we recover from this error, by skipping all characters until we encounter a new token.
+
+\paragraph{Parsing.}
+\textbf{TODO:}
+
+\paragraph{Abstract syntax tree.}
+\textbf{TODO: Update AST if we update code}
+\begin{figure}
+\begin{minted}[breaklines]{haskell}
+data Program = Program [VarDecl] [FunDecl]
+data VarDecl = VarDecl (Maybe Type) T.Text Expr
+data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+
+data Stmt = If Expr [Stmt] [Stmt]
+          | While Expr [Stmt]
+          | Assign Field Expr
+          | FunCall T.Text [Expr]
+          | Return (Maybe Expr)
+          | GarbageS
+
+data Type = IntT
+          | BoolT
+          | CharT
+          | Prod Type Type
+          | List Type
+          | Void
+          | Fun [Type] Type
+          | TyVar T.Text
+          | GarbageT
+
+data Field = Ident T.Text
+           | Head Field
+           | Tail Field
+           | Fst Field
+           | Snd Field
+
+data Expr = Field Field
+          | Int Integer
+          | Char Char
+          | Bool Bool
+          | UnOp UnaryOp Expr
+          | BinOp BinaryOp Expr Expr
+          | FunCallE T.Text [Expr]
+          | EmptyList
+          | Tuple Expr Expr
+
+data UnaryOp = Not | Neg
+
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lteq | Gteq | And | Or | Cons
+\end{minted}
+	\caption{Abstract syntax tree}\label{fig:ast}
+\end{figure}
+Our syntax tree can found in Figure~\ref{fig:ast}.
+Our top level node is \mintinline{haskell}{Program}.
+A \mintinline{haskell}{Program} consists of a list of variable declarations,
+and a list of function declarations.
+One thing to note is that we have some garbage AST nodes, such as \mintinline{haskell}{GarbageS} and \mintinline{haskell}{GarbageT}.
+These are used to support some sort of error recovery.
+Using these garbage nodes we can still produce a valid AST,
+such that the parser can recover and continue parsing.
+It is essential that programs with these nodes will not be type checked.
+After the parsing phase, the compiler should print the errors and stop compilation.
+We can thus threat it as a compiler bug, if we come to a later phase and encounter these garbage tokens.
+
+To model field lookups we use the \mintinline{haskell}{Field} datatype,
+where a field \mintinline{haskell}{Snd (Fst "x")} should be interpreted as \lstinline[language=SPL]|x.fst.snd|.
+
+We did not create a special data type for built-in functions like \lstinline[language=SPL]|print|, \lstinline[language=SPL]|isEmpty|, etc.
+The main reason for this, is that we suspect that it will be easier to treat these as regular functions,
+where there is already an implementation for them.
+However, it may be the case that in the future we find that it is easier to create a special datatype for built-in functions,
+which means we have to change it later.
+
+We also did not add source position information to the AST yet.
+We will do this whenever we find we need this information in the AST.
+
+\begin{itemize}
+	\item How did you design the Abstract Syntax Tree
+	\item How does the parser work?
+	\item How did you handle difficult things like fixity, associativity etc.
+	\item Is there error handling? Recovery?
+	\item Do you have a lexer and parser?
+	\item How do they communicate?
+	\item Problems?
+	\item\ldots
+\end{itemize}
+
+\chapter{Analyses \& Typing}
+\begin{itemize}
+	\item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
+	\item Error messages?
+	\item Polymorphism? Inference? Overloading?
+	\item Problems?
+	\item\ldots
+\end{itemize}
+
+\chapter{Code Generation}
+\begin{itemize}
+	\item Compilation scheme?
+	\item How is data represented? Lists tuples
+	\item Semantics style, call-by-reference, call-by-value?
+	\item How did you solve overloaded functions?
+	\item Polymorphism?
+	\item Printing?
+	\item Problems?
+	\item\ldots
+\end{itemize}
+
+\chapter{Extension}
+Describe your extension in detail
+
+\chapter{Conclusion}
+What does work, what does not etc.
+
+\section{Reflection}
+\begin{itemize}
+	\item What do you think of the project?
+	\item How did it work out?
+	\item How did you divide the work?
+	\item Pitfalls?
+	\item \ldots
+\end{itemize}
+
+\appendix
+\chapter{Grammar}
+Change the grammar to the one you actually used
+
+\begin{verbatim}
+SPL       = Decl+
+Decl      = VarDecl
+          | FunDecl
+VarDecl   = ('var' | Type) id  '=' Exp ';'
+FunDecl   = id '(' [ FArgs ] ')' [ '::' FunType ] '{' VarDecl* Stmt+ '}'
+RetType   = Type
+          | 'Void'
+FunType   = [ FTypes ] '->' RetType
+FTypes    = Type [ FTypes ]
+Type      = BasicType
+          | '(' Type ',' Type ')'
+          | '[' Type ']'
+          | id
+BasicType = 'Int'
+          | 'Bool'
+          | 'Char'
+FArgs     = [ FArgs ',' ] id
+Stmt      = 'if' '(' Exp ')' '{' Stmt* '}' [ 'else' '{' Stmt* '}' ]
+          | 'while' '(' Exp ')' '{' Stmt* '}'
+          | id Field '=' Exp ';'
+          | FunCall ';'
+          | 'return' [ Exp ] ';'
+Exp       = id Field
+          | Exp Op2 Exp
+          | Op1 Exp
+          | int
+          | char
+          | 'False' | 'True'
+          | '(' Exp ')'
+          | FunCall
+          | '[]'
+          | '(' Exp ',' Exp ')'
+Field     = [ Field ( '.' 'hd' | '.' 'tl' | '.' 'fst' | '.' 'snd' ) ]
+FunCall   = id '(' [ ActArgs ] ')'
+ActArgs   = Exp [ ',' ActArgs ]
+Op2       = '+'  | '-' | '*' | '/'  | '%'
+          | '==' | '<' | '>' | '<=' | '>=' | '!='
+          | '&&' | '||'
+          | ':'
+Op1       = '!'  | '-'
+int       = [ '-' ] digit+
+id        = alpha ( '_' | alphaNum)*
+\end{verbatim}
+
+\end{document}

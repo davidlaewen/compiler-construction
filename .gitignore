@@ -1,2 +1,4 @@
 .stack-work/
 *~
+report/build/
+report/_minted-report/
