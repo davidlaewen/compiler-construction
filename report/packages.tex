@@ -1,0 +1,41 @@
+\usepackage[a4paper]{geometry}
+\usepackage[tt=false]{libertine}
+\usepackage[varqu]{zi4}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{stmaryrd}
+\usepackage{mathtools}
+\usepackage{listings}
+\usepackage[outputdir=build]{minted}
+\lstdefinelanguage{SPL}{%
+	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|}
+	morekeywords={while,else,if,print,return,isEmpty,fst,snd,hd,tl,Int,Char,Bool,Void,True,False,var},%
+	sensitive=true,%
+	morecomment=[l]{//},%
+	morecomment=[n]{/*}{*/},%
+	literate=%
+		{->}{{$\rightarrow$}}2
+		{>=}{{$\geq\:$}}1
+		{<=}{{$\leq\:$}}1
+		{==}{{$\equiv$}}1
+}
+\lstset{%
+	upquote=true,
+	breakatwhitespace=false,
+	breaklines=true,
+	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+	keepspaces=true,
+	basicstyle=\tt\footnotesize,
+	commentstyle=\sl,
+	keywordstyle=\bf,
+	stringstyle=\tt,
+	showspaces=false,
+	showstringspaces=false,
+	showtabs=false,
+	tabsize=4,
+	basewidth=0.43em,
+	columns=[c]fixed,
+	texcl=true,
+	captionpos=b
+}
