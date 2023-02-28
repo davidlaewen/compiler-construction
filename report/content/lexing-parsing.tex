@@ -98,9 +98,12 @@ parentheses, hence the precedence of \code{\&\&} must be lower than that of
 		%
 		\NT{Term} & \Coloneqq & \NT{Val}\ (( \code{*} \mid \code{/} \mid \code{\%} )\ \NT{Val} )^* \br
 		%
-		\NT{Val} & \Coloneqq & \code{(}\ \NT{Expr}\ \code{)} \mid \code{(}\ \NT{Expr}\ \code{,}\ \NT{Expr}\ \code{)} \\
-		& \mid & \NT{FunCall} \mid \NT{Id} \NT{Field} \mid \NT{Int} \mid \NT{Bool} \mid \NT{Char} \\
-		& \mid & \code{[]} \mid \code{!}\ \NT{Val} \mid \code{-}\ \NT{Val}
+		\NT{Val} & \Coloneqq & \code{(}\ \NT{Expr}\ \code{)} \ruleSep
+      \code{(}\ \NT{Expr}\ \code{,}\ \NT{Expr}\ \code{)} \\
+		& \mid & \NT{FunCall} \ruleSep
+      \NT{Id} \NT{Field} \\
+    & \mid & \NT{Int} \ruleSep \NT{Bool} \ruleSep \NT{Char} \\
+		& \mid & \code{!}\ \NT{Val} \ruleSep \code{-}\ \NT{Val} \ruleSep \code{[]}
 		%
   \end{array}
   \]
@@ -114,7 +117,6 @@ and subtraction, then by multiplication, division and modulo and finally by
 Boolean negation and unary minus.
 Following this precedence hierarchy, we end up with the multiple rules or
 \emph{levels} of the grammar in \cref{fig:new-expr-grammar}.
-
 
 Another important consideration for the expression grammar is the
 \emph{associativity} of the various operators. For instance, since addition
@@ -133,6 +135,12 @@ $e_1$, then replace by $a = op\ e_1\ e_2$, then to $a = op\ a\ e_3$, and so
 forth. By successively combining the (nested) expression parsed thus far with
 the following subexpression, we achieve the desired left-deep nesting of the
 AST.
+
+Certain terminals and non-terminals, such as $\NT{Char}$ or \code{[]}, could be
+placed higher up in the grammar, since characters and the empty list cannot be used in
+arithmetic operations. Despite this, we chose to place these in the $\NT{Val}$
+rule, since it is more intuitive to provide a type error rather than a parse
+error for non-numbers occuring in an arithmetic expression.
 
 
 \section{Abstract Syntax Tree}
