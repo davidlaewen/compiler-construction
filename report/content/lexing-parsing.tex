@@ -84,15 +84,7 @@ Our parser should yield the desired AST without requiring the programmer to add
 parentheses, hence the precedence of \code{\&\&} must be lower than that of
 \code{==} and \code{!=}.
 
-Similarly, all comparison operators should have a lower precedence than the
-\emph{cons} operator ``\code{:}'', which in turn should be followed by addition
-and subtraction, then by multiplication, division and modulo and finally by
-Boolean negation and unary minus.
-Following this precedence hierarchy, we end up with the multiple rules or
-\emph{levels} of the grammar in \cref{fig:new-expr-grammar}.
-
-
-\begin{figure}[ht]
+\begin{figure}[h]
   \[
   \begin{array}{lcl}
 		%
@@ -116,10 +108,31 @@ Following this precedence hierarchy, we end up with the multiple rules or
   \label{fig:new-expr-grammar}
 \end{figure}
 
+Similarly, all comparison operators should have a lower precedence than the
+\emph{cons} operator ``\code{:}'', which in turn should be followed by addition
+and subtraction, then by multiplication, division and modulo and finally by
+Boolean negation and unary minus.
+Following this precedence hierarchy, we end up with the multiple rules or
+\emph{levels} of the grammar in \cref{fig:new-expr-grammar}.
+
 
 Another important consideration for the expression grammar is the
-\emph{associativity} of the various operators.
+\emph{associativity} of the various operators. For instance, since addition
+associates to the left, we want the expression \code{1+2+3} to result in an AST
+of the form \code{Add (Add 1 2) 3} rather than \code{Add 1 (Add 2 3)} (see
+\cref{fig:ast} for the actual AST data type of our implementation).
+In fact, all binary operators included in SPL are typically left-associative, in
+contrast to e.g. exponentiation, which is usually taken to be right-associative.
 
+We obtain the correct AST through the grammar rule pattern
+$\NT{e}\ (\NT{op}\ \NT{e})^*$ discussed previously.
+Here, we first parse an instance of $\NT{e}$, which we then (possibly) combine
+repeatedly with another instance of $\NT{e}$. This way, we can use an
+accumulator $a$, which we initialise with the leftmost subexpression
+$e_1$, then replace by $a = op\ e_1\ e_2$, then to $a = op\ a\ e_3$, and so
+forth. By successively combining the (nested) expression parsed thus far with
+the following subexpression, we achieve the desired left-deep nesting of the
+AST.
 
 
 \section{Abstract Syntax Tree}
