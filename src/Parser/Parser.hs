@@ -67,8 +67,9 @@ typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
     prodTypeP = do
       (ty1,ty2) <- parensP $ do
         ty1 <- typeP
-        _ <- symbolP SymComma
-        ty2 <- typeP
+        offset <- getOffset
+        _ <- symbolP SymComma <|> customFailure ProdTypeMissingComma
+        ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
         pure (ty1,ty2)
       pure (Prod ty1 ty2)
     listTypeP = List <$> bracketsP typeP
@@ -78,15 +79,10 @@ funTypeP = do
   argTys <- many typeP
   _ <- symbolP SymRightArrow
   offset <- getOffset
-  Fun argTys <$> (retTypeP <|> retTypeFail offset)
+  Fun argTys <$> (retTypeP <|> registerError offset GarbageT NoRetType)
   where
     retTypeP :: TokenParser Type
     retTypeP = typeP <|> (keywordP KwVoid >> pure Void)
-
-    retTypeFail :: Int -> TokenParser Type
-    retTypeFail o = region (setErrorOffset o) $
-      registerFancyFailure (S.singleton $ ErrorCustom NoRetType)
-        >> pure GarbageT
 
 
 ------------------------
@@ -206,7 +202,7 @@ propP = try (listP >>= opListP) <|> listP
 
 <Val> := ( <Expr> ) | ( <Expr> , <Expr> )
       |  <FunCall> | <Id> <Field> | <Int> | []
-      | <Bool> | <Char> | !<Val> | - <Expr>
+      | <Bool> | <Char> | !<Val> | - <Val>
 -}
 
 exprP :: TokenParser Expr
@@ -333,6 +329,11 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
 ----------------------------
 -- Parser helpers
 ----------------------------
+
+registerError :: Int -> a -> ParserError -> TokenParser a
+registerError o x e = region (setErrorOffset o) $
+  registerFancyFailure (S.singleton $ ErrorCustom e)
+    >> pure x
 
 -- FIXME: Refactor these to make them less cluncky
 symbolP :: Symbol -> TokenParser ()

@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs #-}
 
 module Parser.Definition
   ( Lexer,
@@ -27,13 +28,19 @@ type Lexer = Parsec Void Text
 
 type TokenParser = Parsec ParserError TokenStream
 
-data ParserError = FunctionMissingStatements | NoRetType
-  deriving (Eq, Ord)
+data ParserError where
+  FunctionMissingStatements :: ParserError
+  NoRetType                 :: ParserError
+  ProdTypeMissingComma      :: ParserError
+  ProdTypeNoSecondEntry     :: ParserError
+    deriving (Eq, Ord)
 
 instance ShowErrorComponent ParserError where
   showErrorComponent :: ParserError -> String
   showErrorComponent FunctionMissingStatements = "Function body must end with a statement"
   showErrorComponent NoRetType = "Missing return type after `->`"
+  showErrorComponent ProdTypeMissingComma = "Product type missing comma"
+  showErrorComponent ProdTypeNoSecondEntry = "Product type has invalid second type"
 
 data TokenStream = TokenStream
   { tokenStreamInput :: T.Text,
