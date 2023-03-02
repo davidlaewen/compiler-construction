@@ -137,10 +137,10 @@ the following subexpression, we achieve the desired left-deep nesting of the
 AST.
 
 Certain terminals and non-terminals, such as $\NT{Char}$ or \code{[]}, could be
-placed higher up in the grammar, since characters and the empty list cannot be used in
-arithmetic operations. Despite this, we chose to place these in the $\NT{Val}$
-rule, since it is more intuitive to provide a type error rather than a parse
-error for non-numbers occuring in an arithmetic expression.
+placed higher up in the grammar, since characters and the empty list cannot be
+used in arithmetic operations. Despite this, we chose to place these in the
+$\NT{Val}$ rule, since it is more intuitive to provide a type error rather than
+a parse error for non-numbers occuring in an arithmetic expression.
 
 
 \section{Abstract Syntax Tree}

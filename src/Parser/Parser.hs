@@ -117,20 +117,30 @@ funCallEP = do
   (funId,args) <- funCallP
   pure $ FunCallE funId args
 
-tupleP :: TokenParser Expr
-tupleP = do
-  parensP $ do
-    e1 <- exprP
-    _ <- symbolP SymComma
-    Tuple e1 <$> exprP
+parenOrTupleP :: TokenParser Expr
+parenOrTupleP = do
+  _ <- symbolP SymParenLeft
+  e <- exprP
+  closeExpr e <|> closeTuple e
+  where
+    closeExpr :: Expr -> TokenParser Expr
+    closeExpr e = do
+      _  <- symbolP SymParenRight
+      pure e
+    closeTuple :: Expr -> TokenParser Expr
+    closeTuple e1 = do
+      _ <- symbolP SymComma
+      e2 <- exprP
+      _ <- symbolP SymParenRight
+      pure $ Tuple e1 e2
 
 valP :: TokenParser Expr
-valP = try (parensP exprP) <|> tupleP <|>
-          bangExprP <|> negExprP <|>
-          intP <|> boolP <|> charP <|>
-          emptyListP <|>
-          try funCallEP <|>
-          Field <$> identP
+valP = parenOrTupleP <|>
+        bangExprP <|> negExprP <|>
+        intP <|> boolP <|> charP <|>
+        emptyListP <|>
+        try funCallEP <|>
+        Field <$> identP
   where
     bangExprP = symbolP SymBang *> (UnOp Not <$> valP)
     negExprP = symbolP SymMinus *> (UnOp Neg <$> valP)
