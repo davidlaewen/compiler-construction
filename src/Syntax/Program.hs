@@ -4,6 +4,8 @@ module Syntax.Program (
   FunDecl(..),
   Stmt(..),
   Type(..),
+  VarLookup(..),
+  ExprLookup(..),
   Field(..),
   Expr(..),
   UnaryOp(..),
@@ -22,7 +24,7 @@ data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
 
 data Stmt = If Expr [Stmt] [Stmt]
           | While Expr [Stmt]
-          | Assign Field Expr
+          | Assign VarLookup Expr
           | FunCall T.Text [Expr]
           | Return (Maybe Expr)
           | GarbageS
@@ -39,14 +41,17 @@ data Type = IntT
           | GarbageT
   deriving (Show, Eq)
 
-data Field = Ident T.Text
-           | Head Field
-           | Tail Field
-           | Fst Field
-           | Snd Field
+data VarLookup = VarId T.Text | VarField VarLookup Field
   deriving Show
 
-data Expr = Field Field
+data ExprLookup = ExprField Expr Field
+  deriving Show
+
+data Field = Head | Tail | Fst | Snd
+  deriving Show
+
+data Expr = Ident T.Text
+          | ExprLookup ExprLookup
           | Int Integer
           | Char Char
           | Bool Bool

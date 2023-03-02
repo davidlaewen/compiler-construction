@@ -88,26 +88,13 @@ funTypeP = do
 ------------------------
 -- Fields & Identifiers
 
-fieldP :: Field -> TokenParser Field
-fieldP f = do
-  _ <- symbolP SymDot
-  field <- headP <|> tailP <|> fstP <|> sndP
-  res <- optional $ fieldP (field f)
-  pure $ case res of
-    Nothing -> field f
-    Just f' -> f'
+fieldP :: TokenParser Field
+fieldP = headP <|> tailP <|> fstP <|> sndP
   where
     headP = keywordP KwHead >> pure Head
     tailP = keywordP KwTail >> pure Tail
     fstP = keywordP KwFst >> pure Fst
     sndP = keywordP KwSnd >> pure Snd
-
-identP :: TokenParser Field
-identP = do
-  ident <- Ident <$> idP
-  field <- optional $ fieldP ident
-  pure $ fromMaybe ident field
-
 
 -------------------------
 -- Expressions
@@ -134,20 +121,54 @@ parenOrTupleP = do
       _ <- symbolP SymParenRight
       pure $ Tuple e1 e2
 
-valP :: TokenParser Expr
-valP = parenOrTupleP <|>
-        bangExprP <|> negExprP <|>
+-- atomP :: TokenParser Expr
+-- <Val> (. <Field)*
+
+{- Refactored expression grammar:
+
+<Expr> :=  <Prop> (( && | || ) <Prop>)*
+
+<Prop> := <List> (( == | != | < | > | <= | >= ) <List> )*
+
+<List> := <Form> ( :  <Form> )*
+
+<Form> := <Term> (( + | - ) <Term>)*
+
+<Term> := <Val> (( * | / | % ) <Val>)*
+
+<UnOp> := !<Sel> | - <Sel> | <Sel>
+
+<Sel> := <Atom> (. <Field>)*
+
+<Atom> := ( <Expr> ) | ( <Expr> , <Expr> ) | <Bool> | <Char> | <Int> | []
+       | <Id> | <FunCall>
+-}
+
+atomP :: TokenParser Expr
+atomP = parenOrTupleP <|>
         intP <|> boolP <|> charP <|>
         emptyListP <|>
-        try funCallEP <|>
-        Field <$> identP
+        try funCallEP <|> (Ident <$> idP)
   where
-    bangExprP = symbolP SymBang *> (UnOp Not <$> valP)
-    negExprP = symbolP SymMinus *> (UnOp Neg <$> valP)
     emptyListP = symbolP SymBracketLR >> pure EmptyList
 
+fieldLookupP :: TokenParser Expr
+fieldLookupP = atomP >>= opFieldLookupP
+  where
+    opFieldLookupP :: Expr -> TokenParser Expr
+    opFieldLookupP e = try (do
+      _ <- symbolP SymDot
+      field <- fieldP
+      opFieldLookupP (ExprLookup (ExprField e field))) <|> pure e
+
+unOpP :: TokenParser Expr
+unOpP = bangExprP <|> negExprP <|> fieldLookupP
+  where
+    bangExprP = symbolP SymBang *> (UnOp Not <$> unOpP)
+    negExprP = symbolP SymMinus *> (UnOp Neg <$> unOpP)
+
 termP :: TokenParser Expr
-termP = try (valP >>= opValP) <|> valP
+termP = try (unOpP >>= opValP) <|> unOpP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymAst >> pure Mul) <|>
@@ -156,7 +177,7 @@ termP = try (valP >>= opValP) <|> valP
     opValP :: Expr -> TokenParser Expr
     opValP val = try (do
       op <- opP
-      val' <- valP
+      val' <- unOpP
       opValP (BinOp op val val')) <|> pure val
 
 formP :: TokenParser Expr
@@ -210,9 +231,12 @@ propP = try (listP >>= opListP) <|> listP
 
 <Term> := <Val> (( * | / | % ) <Val>)*
 
-<Val> := ( <Expr> ) | ( <Expr> , <Expr> )
-      |  <FunCall> | <Id> <Field> | <Int> | []
-      | <Bool> | <Char> | !<Val> | - <Val>
+<UnOp> := ! <UnOp> | - <UnOp> | <Sel>
+
+<Sel> := <Atom> (. <Field>)*
+
+<Atom> := ( <Expr> ) | ( <Expr> , <Expr> ) | <Bool> | <Char> | <Int> | []
+       | <Id> | <FunCall>
 -}
 
 exprP :: TokenParser Expr
@@ -264,11 +288,19 @@ whileP = do
 
 assignP :: TokenParser Stmt
 assignP = do
-  name <- identP
+  name <- idP
+  var <- varFieldsP (VarId name)
   _ <- symbolP SymEq
   expr <- exprP
   _ <- symbolP SymSemicolon
-  pure $ Assign name expr
+  pure $ Assign var expr
+  where
+    varFieldsP :: VarLookup -> TokenParser VarLookup
+    varFieldsP e = try (do
+      _ <- symbolP SymDot
+      field <- fieldP
+      varFieldsP (VarField e field)) <|> pure e
+
 
 funCallSP :: TokenParser Stmt
 funCallSP = do
