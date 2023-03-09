@@ -59,7 +59,12 @@ main :: IO ()
 main = do
   args <- getArgs
   case parseArgs args of
-    Nothing -> hPutStrLn stderr "Usage:\n\tspl-compiler lex <filename>\n\tspl-compiler parse <filename>\n\tspl-compiler prettyprint <filename>"
+    Nothing -> hPutStrLn stderr
+      "Usage:\n\t\
+      \spl-compiler lex <filename>\n\t\
+      \spl-compiler parse <filename>\n\t\
+      \spl-compiler prettyprint <filename>\n\t\
+      \spl-compiler desugar <filename>"
     Just (Args filePath stage) -> do
       try (T.readFile filePath) >>= loadFile filePath stage
 
