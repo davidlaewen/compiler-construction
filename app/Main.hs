@@ -8,12 +8,12 @@ import Parser.Definition (TokenStream)
 import Parser.Lexer (lexer)
 import Parser.Parser (parser)
 import PrettyPrinter (prettyPrinter)
-import Syntax.Program (Program)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
 import Control.Exception
+import Syntax.ParseAST
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 

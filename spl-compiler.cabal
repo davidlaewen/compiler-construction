@@ -30,7 +30,9 @@ library
       Parser.Parser
       Parser.Tokens
       PrettyPrinter
-      Syntax.Program
+      Syntax.ParseAST
+      Syntax.TypeAST
+      Typechecker.ConstraintGen
   other-modules:
       Paths_spl_compiler
   hs-source-dirs:
@@ -40,6 +42,7 @@ library
       base >=4.7 && <5
     , containers
     , megaparsec
+    , mtl
     , parser-combinators
     , prettyprinter
     , text
@@ -56,6 +59,7 @@ executable spl-compiler-exe
       base >=4.7 && <5
     , containers
     , megaparsec
+    , mtl
     , parser-combinators
     , prettyprinter
     , spl-compiler
@@ -74,6 +78,7 @@ test-suite spl-compiler-test
       base >=4.7 && <5
     , containers
     , megaparsec
+    , mtl
     , parser-combinators
     , prettyprinter
     , spl-compiler

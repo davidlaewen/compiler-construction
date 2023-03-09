@@ -1,4 +1,4 @@
-module Syntax.Program (
+module Syntax.ParseAST (
   Program(..),
   VarDecl(..),
   FunDecl(..),
@@ -11,6 +11,7 @@ module Syntax.Program (
   UnaryOp(..),
   BinaryOp(..)
 ) where
+
 import qualified Data.Text as T
 
 data Program = Program [VarDecl] [FunDecl]
@@ -23,11 +24,11 @@ data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
   deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
-          | While Expr [Stmt]
-          | Assign VarLookup Expr
-          | FunCall T.Text [Expr]
-          | Return (Maybe Expr)
-          | GarbageS
+            | While Expr [Stmt]
+            | Assign VarLookup Expr
+            | FunCall T.Text [Expr]
+            | Return (Maybe Expr)
+            | GarbageS
   deriving Show
 
 data Type = IntT

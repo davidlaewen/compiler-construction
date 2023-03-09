@@ -4,7 +4,7 @@ module Parser.Parser (parser) where
 
 import Control.Applicative hiding (many,some)
 import Parser.Definition
-import Syntax.Program
+import Syntax.ParseAST
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
