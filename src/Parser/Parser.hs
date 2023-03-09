@@ -211,8 +211,8 @@ propP = try (listP >>= opListP) <|> listP
           (symbolP SymBangEq >> pure Neq) <|>
           (symbolP SymLessThan >> pure Lt) <|>
           (symbolP SymGreaterThan >> pure Gt) <|>
-          (symbolP SymLessThanEq >> pure Lteq) <|>
-          (symbolP SymGreaterThanEq >> pure Gteq)
+          (symbolP SymLessThanEq >> pure Lte) <|>
+          (symbolP SymGreaterThanEq >> pure Gte)
     opListP :: Expr -> TokenParser Expr
     opListP list = try (do
       op <- opP

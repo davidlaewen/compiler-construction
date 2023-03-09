@@ -30,6 +30,7 @@ library
       Parser.Parser
       Parser.Tokens
       PrettyPrinter
+      Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST
       Typechecker.ConstraintGen

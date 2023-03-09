@@ -6,8 +6,10 @@ module Syntax.TypeAST (
   Type(..),
   VarLookup(..),
   Field(..),
+  FunName(..),
   Expr(..)
 ) where
+
 import qualified Data.Text as T
 
 data Program a = Program [VarDecl a] [FunDecl a]
@@ -45,7 +47,7 @@ data Field = Head | Tail | Fst | Snd
 data FunName = FunName T.Text
              | Not | Neg
              | Add | Sub | Mul | Div | Mod
-             | Eq | Neq | Lt | Gt | Lteq | Gteq
+             | Eq | Neq | Lt | Gt | Lte | Gte
              | And | Or
              | Cons | IsEmpty | Print
              | HeadFun | TailFun | FstFun | SndFun

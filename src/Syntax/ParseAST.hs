@@ -24,11 +24,11 @@ data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
   deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
-            | While Expr [Stmt]
-            | Assign VarLookup Expr
-            | FunCall T.Text [Expr]
-            | Return (Maybe Expr)
-            | GarbageS
+          | While Expr [Stmt]
+          | Assign VarLookup Expr
+          | FunCall T.Text [Expr]
+          | Return (Maybe Expr)
+          | GarbageS
   deriving Show
 
 data Type = IntT
@@ -66,5 +66,5 @@ data Expr = Ident T.Text
 data UnaryOp = Not | Neg
   deriving Show
 
-data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lteq | Gteq | And | Or | Cons
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte | And | Or | Cons
   deriving Show
