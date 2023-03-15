@@ -67,7 +67,6 @@ typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
     prodTypeP = do
       (ty1,ty2) <- parensP $ do
         ty1 <- typeP
-        offset <- getOffset
         _ <- symbolP SymComma <|> customFailure ProdTypeMissingComma
         ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
         pure (ty1,ty2)

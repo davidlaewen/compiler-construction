@@ -1,9 +1,9 @@
 module PrettyPrinter (prettyPrinter) where
 
-import Control.Monad (unless)
 import Data.List (intersperse)
 import qualified Data.Text.IO as T
-import Syntax.Program (Expr (..), Field (..), FunDecl (FunDecl), Program (Program), Stmt (..), Type(..), VarDecl (..), BinaryOp (..), UnaryOp (..))
+import Syntax.ParseAST
+import Control.Monad (unless)
 
 -- Represents the amount of spaces to indent after a newline
 type Indenation = Int
@@ -63,7 +63,8 @@ prettyPrintExpr :: Expr -> IO ()
 prettyPrintExpr = go 0
   where
     go :: Int -> Expr -> IO ()
-    go _ (Field f) = prettyPrintField f
+    go _ (Ident t) = T.putStr t
+    go _ (ExprLookup exprLookup) = prettyPrintExprLookup exprLookup
     go _ (Int n) = putStr $ show n
     go _ (Char c) = putChar '\'' >> putChar c >> putChar '\''
     go _ (Bool True) = putStr "true"
@@ -97,8 +98,8 @@ prettyPrintExpr = go 0
     prettyPrintBinOp Neq  = putStr " != "
     prettyPrintBinOp Lt   = putStr " < "
     prettyPrintBinOp Gt   = putStr " > "
-    prettyPrintBinOp Lteq = putStr " <= "
-    prettyPrintBinOp Gteq = putStr " >= "
+    prettyPrintBinOp Lte  = putStr " <= "
+    prettyPrintBinOp Gte  = putStr " >= "
     prettyPrintBinOp Cons = putStr " : "
     prettyPrintBinOp Add  = putStr " + "
     prettyPrintBinOp Sub  = putStr " - "
@@ -114,8 +115,8 @@ prettyPrintExpr = go 0
     precedence Neq  = 2
     precedence Lt   = 2
     precedence Gt   = 2
-    precedence Lteq = 2
-    precedence Gteq = 2
+    precedence Lte  = 2
+    precedence Gte  = 2
 
     precedence Cons = 3
 
@@ -172,9 +173,9 @@ prettyPrintStmt i (While e stmts) = do
   putStrLn ""
   printIndentation i
   putStr "}"
-prettyPrintStmt i (Assign field e) = do
+prettyPrintStmt i (Assign varLookup e) = do
   printIndentation i
-  prettyPrintField field
+  prettyPrintVarLookup varLookup
   putStr " := "
   prettyPrintExpr e
   putStr ";"
@@ -195,12 +196,22 @@ prettyPrintStmt i GarbageS = do
   printIndentation i
   putStr "Garbage;"
 
+prettyPrintVarLookup :: VarLookup -> IO ()
+prettyPrintVarLookup (VarId t) = T.putStr t
+prettyPrintVarLookup (VarField varLookup field) =
+  prettyPrintVarLookup varLookup >> prettyPrintField field
+
+prettyPrintExprLookup :: ExprLookup -> IO ()
+prettyPrintExprLookup (ExprField expr field) =
+  prettyPrintExpr expr >> prettyPrintField field
+
 prettyPrintField :: Field -> IO ()
-prettyPrintField (Ident ident) = T.putStr ident
-prettyPrintField (Head field) = prettyPrintField field >> putStr ".hd"
-prettyPrintField (Tail field) = prettyPrintField field >> putStr ".tl"
-prettyPrintField (Fst field) = prettyPrintField field >> putStr ".fst"
-prettyPrintField (Snd field) = prettyPrintField field >> putStr ".snd"
+prettyPrintField Head = putStr ".hd"
+prettyPrintField Tail = putStr ".tl"
+prettyPrintField Fst  = putStr ".fst"
+prettyPrintField Snd  = putStr ".snd"
+
+
 
 prettyPrinter :: Program -> IO ()
 prettyPrinter = prettyPrintProgram 0
