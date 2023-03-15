@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Typechecker.ConstraintGen (
+module TypeInference.Unify (
   Subst,
   unify,
   UType(..),

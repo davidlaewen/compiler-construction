@@ -33,7 +33,7 @@ library
       Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST
-      Typechecker.ConstraintGen
+      TypeInference.Unify
   other-modules:
       Paths_spl_compiler
   hs-source-dirs:
