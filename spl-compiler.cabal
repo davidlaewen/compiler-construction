@@ -33,6 +33,8 @@ library
       Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST
+      TypeInference.ConstraintGen
+      TypeInference.Definition
       TypeInference.Unify
   other-modules:
       Paths_spl_compiler
