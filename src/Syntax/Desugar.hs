@@ -6,6 +6,7 @@ module Syntax.Desugar (
 
 import qualified Syntax.ParseAST as P
 import qualified Syntax.TypeAST as T
+import qualified TypeInference.Definition as U
 
 class Desugar a b where
   desugar :: a -> b
@@ -18,13 +19,13 @@ instance Desugar P.Program (T.Program ()) where
 
 instance Desugar P.VarDecl (T.VarDecl ()) where
   desugar :: P.VarDecl -> T.VarDecl ()
-  desugar (P.VarDecl mt name e) = T.VarDecl (desugar <$> mt) name (desugar e)
+  desugar (P.VarDecl mt name e) = T.VarDecl (desugar <$> mt) name (desugar e) ()
 
 
 instance Desugar P.FunDecl (T.FunDecl ()) where
   desugar :: P.FunDecl -> T.FunDecl ()
   desugar (P.FunDecl name args rt varDecls stmts) =
-    T.FunDecl name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts)
+    T.FunDecl name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
 
 
 instance Desugar P.Stmt (T.Stmt ()) where
@@ -33,7 +34,7 @@ instance Desugar P.Stmt (T.Stmt ()) where
     T.If (desugar expr) (desugar <$> thenStmts) (desugar <$> elseStmts)
   desugar (P.While e stmts) = T.While (desugar e) (desugar <$> stmts)
   desugar (P.Assign varLookup e) = T.Assign (desugar varLookup) (desugar e)
-  desugar (P.FunCall name args) = T.FunCall (T.FunName name) (desugar <$> args)
+  desugar (P.FunCall name args) = T.FunCall (T.Name name) (desugar <$> args)
   desugar (P.Return me) = T.Return (desugar <$> me)
   desugar P.GarbageS = error "Attempted to desugar GarbageS node from ParseAST!"
 
@@ -61,7 +62,7 @@ instance Desugar P.Expr (T.Expr ()) where
   desugar (P.Char c) = T.Char c ()
   desugar (P.Bool b) = T.Bool b ()
 
-  desugar (P.FunCallE name args) = T.FunCallE (T.FunName name) (desugar <$> args) ()
+  desugar (P.FunCallE name args) = T.FunCallE (T.Name name) (desugar <$> args) ()
   desugar P.EmptyList = T.EmptyList ()
   desugar (P.Tuple e1 e2) = T.Tuple (desugar e1) (desugar e2) ()
 
@@ -96,14 +97,14 @@ instance Desugar P.ExprLookup (T.Expr ()) where
   desugar (P.ExprField expr P.Snd)  = T.FunCallE T.SndFun  [desugar expr] ()
 
 
-instance Desugar P.Type T.Type where
-  desugar :: P.Type -> T.Type
-  desugar P.IntT = T.IntT
-  desugar P.BoolT = T.BoolT
-  desugar P.CharT = T.CharT
-  desugar (P.Prod t1 t2) = T.Prod (desugar t1) (desugar t2)
-  desugar (P.List t) = T.List (desugar t)
-  desugar P.Void = T.Void
-  desugar (P.Fun ts t) = T.Fun (desugar <$> ts) (desugar t)
-  desugar (P.TyVar name) = T.TyVar name
+instance Desugar P.Type U.UType where
+  desugar :: P.Type -> U.UType
+  desugar P.IntT = U.Int
+  desugar P.BoolT = U.Bool
+  desugar P.CharT = U.Char
+  desugar (P.Prod t1 t2) = U.Prod (desugar t1) (desugar t2)
+  desugar (P.List t) = U.List (desugar t)
+  desugar P.Void = U.Void
+  desugar (P.Fun ts t) = U.Fun (desugar <$> ts) (desugar t)
+  desugar (P.TyVar name) = U.Var name
   desugar P.GarbageT = error "Attempted to desugar GarbageT node from ParseAST!"

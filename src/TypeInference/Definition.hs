@@ -29,6 +29,7 @@ data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType
            | Fun [UType] UType
            | UVar UVar
+           | Var T.Text
   deriving Show
 
 data UScheme = UScheme [UVar] UType
