@@ -1,14 +1,18 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, OverloadedRecordDot #-}
 
 module TypeInference.Definition (
   UVar,
   UType(..),
   UScheme(..),
+  Id(..),
   Environment,
+  emptyEnv,
   Subst,
   CGen,
+  modifyEnv,
   runCgen,
   freshVar,
+  envInsert,
   emptySubst,
   subst,
   compose
@@ -16,7 +20,6 @@ module TypeInference.Definition (
 
 import qualified Data.Map as M
 import qualified Data.Text as T
-import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 
@@ -30,22 +33,37 @@ data UType = Int | Bool | Char | Void
 
 data UScheme = UScheme [UVar] UType
 
+data Id = GlobalVar T.Text | LocalVar T.Text | FunName T.Text
+  deriving (Eq, Ord)
 
-type Environment = (M.Map T.Text UType)
+type Environment = M.Map Id UType
+
+emptyEnv :: Environment
+emptyEnv = M.empty
+
 type VarState = UVar
 
 type Subst = (M.Map UVar UType)
 
-type CGen a = ReaderT Environment (StateT VarState (Except T.Text)) a
+data CGenState = CGenState{ env :: Environment, varState :: VarState }
+
+type CGen a = (StateT CGenState (Except T.Text)) a
+
+modifyEnv :: (Environment -> Environment) -> CGen ()
+modifyEnv f = modify (\s -> s{ env = f s.env })
 
 runCgen :: CGen a -> Either T.Text a
-runCgen x = fst <$> runExcept (runStateT (runReaderT x M.empty) 0)
+runCgen x = fst <$> runExcept (runStateT
+  x CGenState{ env = emptyEnv, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do
-  i <- get
-  put $ i+1
+  i <- gets varState
+  modify (\s -> s{varState = i+1 })
   pure i
+
+envInsert :: Id -> UType -> Environment -> Environment
+envInsert = M.insert
 
 emptySubst :: Subst
 emptySubst = M.empty

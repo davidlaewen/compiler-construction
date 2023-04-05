@@ -3,7 +3,6 @@ module Syntax.TypeAST (
   VarDecl(..),
   FunDecl(..),
   Stmt(..),
-  Type(..),
   VarLookup(..),
   Field(..),
   FunName(..),
@@ -11,14 +10,15 @@ module Syntax.TypeAST (
 ) where
 
 import qualified Data.Text as T
+import TypeInference.Definition
 
 data Program a = Program [VarDecl a] [FunDecl a]
   deriving Show
 
-data VarDecl a = VarDecl (Maybe Type) T.Text (Expr a)
+data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
   deriving Show
 
-data FunDecl a = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl a] [Stmt a]
+data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
   deriving Show
 
 data Stmt a = If (Expr a) [Stmt a] [Stmt a]
@@ -28,23 +28,13 @@ data Stmt a = If (Expr a) [Stmt a] [Stmt a]
             | Return (Maybe (Expr a))
   deriving Show
 
-data Type = IntT
-          | BoolT
-          | CharT
-          | Prod Type Type
-          | List Type
-          | Void
-          | Fun [Type] Type
-          | TyVar T.Text
-  deriving (Show, Eq)
-
 data VarLookup = VarId T.Text | VarField VarLookup Field
   deriving Show
 
 data Field = Head | Tail | Fst | Snd
   deriving Show
 
-data FunName = FunName T.Text
+data FunName = Name T.Text
              | Not | Neg
              | Add | Sub | Mul | Div | Mod
              | Eq | Neq | Lt | Gt | Lte | Gte

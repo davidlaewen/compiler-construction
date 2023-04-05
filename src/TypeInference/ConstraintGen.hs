@@ -3,31 +3,57 @@
 module TypeInference.ConstraintGen where
 
 import TypeInference.Definition
+import TypeInference.Unify
 import Syntax.TypeAST
+import Control.Monad.State
 
+checkProgram :: Program () -> CGen (Program UType, Subst)
+checkProgram (Program varDecls funDecls) = do
+  (vds,s1) <- checkVarDecls varDecls True
+  (fds,s2) <- checkFunDecls funDecls
+  pure (Program vds fds, s1 `compose` s2)
 
-class GenConstraints a where
-  genConstraints :: a -> Subst
+checkVarDecls :: [VarDecl ()] -> Bool -> CGen ([VarDecl UType], Subst)
+checkVarDecls [] _ = pure ([], emptySubst)
+checkVarDecls (varDecl:varDecls) isTopLevel = do
+  (varDecl',s) <- checkVarDecl varDecl isTopLevel
+  (varDecls',s') <- checkVarDecls varDecls isTopLevel
+  pure (varDecl':varDecls', s' `compose` s)
 
-instance GenConstraints (Program ()) where
-  genConstraints :: Program () -> Subst
-  genConstraints (Program varDecls funDecls) = do
-    genConstraints varDecls `compose` genConstraints funDecls
+checkVarDecl :: VarDecl () -> Bool -> CGen (VarDecl UType, Subst)
+checkVarDecl (VarDecl mTy name expr _) isTopLevel = do
+  uVar <- UVar <$> freshVar
+  (expr',exprSubst) <- checkExpr expr
+  modifyEnv $ envInsert (if isTopLevel then GlobalVar name else LocalVar name) uVar
+  case mTy of
+    Just ty -> do
+      sAnnot <- unify ty uVar
+      pure (VarDecl mTy name expr' uVar, sAnnot `compose` exprSubst)
+    Nothing -> pure (VarDecl mTy name expr' uVar, exprSubst)
 
-instance (GenConstraints f) => GenConstraints [f] where
-  genConstraints :: [f] -> Subst
-  genConstraints = foldr (\x y -> genConstraints x `compose` y) emptySubst
+checkFunDecls :: [FunDecl ()] -> CGen ([FunDecl UType], Subst)
+checkFunDecls = _
 
-instance GenConstraints (VarDecl ()) where
-  genConstraints (VarDecl mTy name expr) =
-    case mTy of
-      Just ty -> genConstraints expr
-      Nothing -> genConstraints expr
+checkFunDecl :: FunDecl () -> CGen (FunDecl UType, Subst)
+checkFunDecl (FunDecl name args mTy varDecls stmts _) = do
+  uVarsArgs <- forM args (const $ UVar <$> freshVar)
+  uVarRet <- UVar <$> freshVar
+  globalState <- get
+  modifyEnv (\env -> foldr (uncurry envInsert) env (zip (LocalVar <$> args) uVarsArgs))
 
-instance GenConstraints (FunDecl ()) where
+  (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
 
-instance GenConstraints (Expr ()) where
+  (stmts',stmtsSubst) <- checkStmts stmts
 
-instance GenConstraints (Stmt ()) where
+  put globalState
 
-instance GenConstraints VarLookup where
+  pure (FunDecl name args mTy varDecls' stmts' (Fun uVarsArgs uVarRet), _)
+
+checkStmts :: [Stmt ()] -> CGen ([Stmt UType], Subst)
+checkStmts = _
+
+checkStmt :: Stmt () -> CGen (Stmt UType, Subst)
+checkStmt = _
+
+checkExpr :: Expr () -> CGen (Expr UType, Subst)
+checkExpr = _
