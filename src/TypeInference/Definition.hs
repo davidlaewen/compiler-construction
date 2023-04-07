@@ -10,6 +10,7 @@ module TypeInference.Definition (
   Subst,
   CGen,
   modifyEnv,
+  lookupEnv,
   runCgen,
   freshVar,
   envInsert,
@@ -20,21 +21,35 @@ module TypeInference.Definition (
 
 import qualified Data.Map as M
 import qualified Data.Text as T
+import qualified Data.Set as S
 import Control.Monad.State
 import Control.Monad.Except
 
 type UVar = Int
+type TVar = T.Text
 
 data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType
            | Fun [UType] UType
            | UVar UVar
-           | Var T.Text
+           | TVar TVar
   deriving Show
+
+freeTyVars :: UType -> S.Set TVar
+freeTyVars Int = S.empty
+freeTyVars Bool = S.empty
+freeTyVars Char = S.empty
+freeTyVars Void = S.empty
+freeTyVars (Prod t1 t2) = freeTyVars t1 `S.union` freeTyVars t2
+freeTyVars (List t) = freeTyVars t
+freeTyVars (Fun ts t) = foldMap freeTyVars ts `S.union` freeTyVars t
+freeTyVars (UVar _) = error "Called `freeTyVars` on a type containing uvars!"
+freeTyVars (TVar s) = S.singleton s
+
 
 data UScheme = UScheme [UVar] UType
 
-data Id = GlobalVar T.Text | LocalVar T.Text | FunName T.Text
+data Id = GlobalVar T.Text | LocalVar T.Text | FunName T.Text | TyVar TVar
   deriving (Eq, Ord)
 
 type Environment = M.Map Id UType
@@ -53,6 +68,11 @@ type CGen a = (StateT CGenState (Except T.Text)) a
 modifyEnv :: (Environment -> Environment) -> CGen ()
 modifyEnv f = modify (\s -> s{ env = f s.env })
 
+lookupEnv :: Id -> CGen (Maybe UType)
+lookupEnv name = do
+  env <- gets env
+  pure $ envLookup name env
+
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
   x CGenState{ env = emptyEnv, varState = 0 })
@@ -62,6 +82,9 @@ freshVar = do
   i <- gets varState
   modify (\s -> s{varState = i+1 })
   pure i
+
+envLookup :: Id -> Environment -> Maybe UType
+envLookup = M.lookup
 
 envInsert :: Id -> UType -> Environment -> Environment
 envInsert = M.insert
@@ -81,6 +104,7 @@ subst _ Void = Void
 subst s (Prod t1 t2) = Prod (subst s t1) (subst s t2)
 subst s (List t) = List (subst s t)
 subst s (Fun ts t) = Fun (subst s <$> ts) (subst s t)
+subst _ (TVar _) = error "Called `subst` on a user-defined type!"
 
 
 -- | Composes substition s1 after s2

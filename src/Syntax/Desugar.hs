@@ -106,5 +106,7 @@ instance Desugar P.Type U.UType where
   desugar (P.List t) = U.List (desugar t)
   desugar P.Void = U.Void
   desugar (P.Fun ts t) = U.Fun (desugar <$> ts) (desugar t)
-  desugar (P.TyVar name) = U.Var name
+  -- TODO: We probably want to replace named type variables with
+  -- de Bruijn indices here
+  desugar (P.TyVar name) = U.TVar name
   desugar P.GarbageT = error "Attempted to desugar GarbageT node from ParseAST!"
