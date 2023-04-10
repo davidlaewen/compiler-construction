@@ -85,6 +85,63 @@
 \end{frame}
 
 
+\begin{frame}[fragile]{Type Checking AST}
+
+  \begin{minted}{haskell}
+  data Program a = Program [VarDecl a] [FunDecl a]
+
+  data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
+
+  data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
+
+  data Stmt a = If (Expr a) [Stmt a] [Stmt a]
+              | While (Expr a) [Stmt a]
+              | Assign VarLookup (Expr a)
+              | FunCall FunName [Expr a]
+              | Return (Maybe (Expr a))
+
+  data VarLookup = VarId T.Text | VarField VarLookup Field
+
+  \end{minted}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Type Checking AST}
+
+  \begin{minted}{haskell}
+  data Expr a = Ident T.Text a
+          | Int Integer a
+          | Char Char a
+          | Bool Bool a
+          | FunCallE FunName [Expr a] a
+          | EmptyList a
+          | Tuple (Expr a) (Expr a) a
+  \end{minted}
+
+  \begin{itemize}
+    \item Where did the unary and binary operations go?
+    \item Desugared to (pre-defined) functions
+    \item Allows uniform treatment as ordinary function calls
+  \end{itemize}
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Unification Types}
+
+  \begin{minted}{haskell}
+  data UType = Int | Bool | Char | Void
+          | Prod UType UType | List UType
+          | Fun [UType] UType
+          | UVar UVar
+          | TVar TVar
+  \end{minted}
+
+\end{frame}
+
+
 \begin{frame}{Hindley-Milner Type Inference}
 
   \begin{itemize}
@@ -99,18 +156,26 @@
 
 \begin{frame}{Hindley-Milner vs. ``French-style'' Type Inference}
 
-  Classic Hindley-Milner: Traverse AST, simultaneously solve constraints
-  and determine substitution
+  Classic Hindley-Milner:
   \begin{itemize}
     \item Traverse AST
-    \item Simultaneously solve constraints and determine substitution
+    \item Solve constraints immediately upon encountering them
+    \item Accumulate substitution
   \end{itemize}
+
+  Disadvantage: Constraints must be solved in the order they are encountered in
+
+\end{frame}
+
+
+\begin{frame}{``French-style'' Type Inference (Pottier \& Rémy)}
+
   Type inference in GHC (attributed to François Pottier and Didier Rémy):
   \begin{itemize}
     \item Traverse AST, generate constraint set and \emph{elaborated} AST with
           metavariable annotations
     \item Solve the constraint set
-    \item Resulting substitution is applied to the elaborated AST
+    \item Resulting substitution is applied to the elaborated AST (``\emph{zonking}'')
   \end{itemize}
 
 \end{frame}
