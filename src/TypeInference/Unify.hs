@@ -34,6 +34,7 @@ unify (Prod s1 s2) (Prod t1 t2) = do
   subst2 <- unify s2' t2'
   pure $ subst2 `compose` subst1
 unify (Fun ts1 t1) (Fun ts2 t2) = unifyFunTypes (ts1,t1) (ts2,t2) M.empty
+-- TODO: Handle TVar cases
 unify _ _ = throwError "Cannot unify types!"
 
 unifyFunTypes :: ([UType], UType) -> ([UType], UType) -> Subst -> CGen Subst

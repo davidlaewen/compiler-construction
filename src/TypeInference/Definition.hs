@@ -14,6 +14,7 @@ module TypeInference.Definition (
   runCgen,
   freshVar,
   envInsert,
+  envMap,
   emptySubst,
   subst,
   compose
@@ -33,7 +34,7 @@ data UType = Int | Bool | Char | Void
            | Fun [UType] UType
            | UVar UVar
            | TVar TVar
-  deriving Show
+  deriving (Show, Eq)
 
 freeTyVars :: UType -> S.Set TVar
 freeTyVars Int = S.empty
@@ -47,8 +48,10 @@ freeTyVars (UVar _) = error "Called `freeTyVars` on a type containing uvars!"
 freeTyVars (TVar s) = S.singleton s
 
 
-data UScheme = UScheme [UVar] UType
+data UScheme = UScheme [TVar] UType
 
+-- TODO: A single var sort might be sufficient, since scoping is determined
+-- through modification of the CGen state
 data Id = GlobalVar T.Text | LocalVar T.Text | FunName T.Text | TyVar TVar
   deriving (Eq, Ord)
 
@@ -88,6 +91,9 @@ envLookup = M.lookup
 
 envInsert :: Id -> UType -> Environment -> Environment
 envInsert = M.insert
+
+envMap :: (UType -> UType) -> Environment -> Environment
+envMap = M.map
 
 emptySubst :: Subst
 emptySubst = M.empty
