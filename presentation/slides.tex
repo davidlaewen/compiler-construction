@@ -38,8 +38,8 @@
 }
 
 
-\title[Compiler Construction -- Phase 2]% (optional, nur bei langen Titeln nötig)
-{Compiler Construction -- Semantic Analyses}
+\title[Phase 2 -- Semantic Analyses]% (optional, nur bei langen Titeln nötig)
+{Phase 2 -- Semantic Analyses}
 
 \subtitle
 {}
@@ -48,13 +48,13 @@
 {Simcha van Collem \& David Läwen}
 
 \institute[]% (optional, aber oft nötig)
-{MFoCS Seminar}
+{Compiler Construction}
 
 \date[April 11th, 2023] % (optional, sollte der abgekürzte Konferenzname sein)
 {April 11th, 2023}
 
 \subject{Later Credits}
-% Dies wird lediglich in den PDF Informationskatalog einfügt. Kann gut
+% Dies wird lediglich in den PDF Informationskatalog eingefügt. Kann gut
 % weggelassen werden.
 
 
@@ -73,13 +73,14 @@
 \end{frame}
 
 % INTRODUCTION
-\begin{frame}{Introduction}
+\begin{frame}{General Information}
 
   \begin{minipage}{.6\textwidth}
 
     \begin{itemize}
       \item Implementation language: Haskell
-      \item AST represented by \emph{rose tree} consisting of algebraic data
+      \item Other general info?
+      \item AST represented as \emph{rose tree} consisting of algebraic data
             types and lists
       \item Type checking proceeds by traversing the AST structure
     \end{itemize}
@@ -94,6 +95,9 @@
 
 \begin{frame}[fragile]{Type Checking AST}
 
+  \emph{AST structure -- how do we traverse the nodes?
+  Purpose of type parameter `a'?}
+  %
   \begin{minted}{haskell}
 data Program a = Program [VarDecl a] [FunDecl a]
 
@@ -118,16 +122,17 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
 
   \begin{minted}{haskell}
   data Expr a = Ident T.Text a
-          | Int Integer a
-          | Char Char a
-          | Bool Bool a
-          | FunCallE FunName [Expr a] a
-          | EmptyList a
-          | Tuple (Expr a) (Expr a) a
+              | Int Integer a
+              | Char Char a
+              | Bool Bool a
+              | FunCallE FunName [Expr a] a
+              | EmptyList a
+              | Tuple (Expr a) (Expr a) a
   \end{minted}
 
+  Wait, where did the unary and binary operations go?\vspace*{-2mm}
+  %
   \begin{itemize}
-    \item Where did the unary and binary operations go?
     \item Desugared to (pre-defined) functions
     \item Allows uniform treatment as ordinary function calls
   \end{itemize}
@@ -140,10 +145,10 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
 
   \begin{minted}{haskell}
   data UType = Int | Bool | Char | Void
-          | Prod UType UType | List UType
-          | Fun [UType] UType
-          | UVar UVar
-          | TVar TVar
+             | Prod UType UType | List UType
+             | Fun [UType] UType
+             | UVar UVar
+             | TVar TVar
   \end{minted}
 
 \end{frame}
@@ -170,7 +175,7 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
     \item Accumulate substitution
   \end{itemize}
 
-  Disadvantage: Constraints must be solved in the order they are encountered in
+  Limitation: Constraints must be solved in the order they are encountered in
 
 \end{frame}
 
@@ -198,11 +203,42 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
 \end{frame}
 
 
+\begin{frame}[fragile]{Type Checker Monad}
+
+  \begin{minted}{haskell}
+  type Environment = M.Map Id UType
+
+  data CGenState = CGenState{ env :: Environment, varState :: VarState }
+
+  type CGen a = (StateT CGenState (Except T.Text)) a
+  \end{minted}
+
+\end{frame}
+
+
 \begin{frame}{Typing Expressions}
 
   \begin{itemize}
     \item Selection of typing rules for expressions
   \end{itemize}
+
+  \begin{mathpar}
+    \inferrule[T-Bool]%
+    { b \in \{ \True, \False \} }%
+    { \Gamma \turnstile b : \Bool }
+    \and
+    \inferrule[T-Int]%
+    { n \in \mathbb{Z} }%
+    { \Gamma \turnstile n : \Int }
+    \\
+    \inferrule[T-And]%
+    { \Gamma \turnstile e_1 : \Bool \quad \Gamma \turnstile e_2 : \Bool }%
+    { \Gamma \turnstile e_1\ \texttt{\&\&}\ e_2 : \Bool }
+    \and
+    \inferrule[T-Plus]%
+    { \Gamma \turnstile e_1 : \Int \quad\quad \Gamma \turnstile e_2 : \Int }%
+    { \Gamma \turnstile e_1\ \texttt{+}\ e_2 : \Int }
+  \end{mathpar}
 
 \end{frame}
 
