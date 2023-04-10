@@ -1,0 +1,73 @@
+% MATH
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsthm}
+% \usepackage{mathrsfs} % \mathscr
+\usepackage{latexsym}
+% \usepackage{stmaryrd}
+% \usepackage{lmodern}
+% \usepackage{bm} % bold math
+\usepackage{dsfont}
+\usepackage{bussproofs} % proof trees
+\usepackage{mathpartir} % Also proof trees
+% \usepackage{leftindex}
+\usepackage[normalem]{ulem}
+\usepackage[most]{tcolorbox}
+\usepackage{colortbl}
+\usepackage[outputdir=build]{minted}
+\usepackage[backend=biber,style=numeric-comp,sorting=none]{biblatex}
+\addbibresource{references.bib}
+
+\usepackage{etoolbox}
+
+% Itemize item separation
+\makeatletter
+\patchcmd{\@listI}{\itemsep3\p@}{\itemsep1em}{}{}
+\makeatother
+
+% TOC item separation
+\makeatletter
+\patchcmd{\beamer@sectionintoc}{\vskip1.5em}{\vskip5.5em}{}{}
+\makeatother
+
+% LISTINGS
+\usepackage{listings}
+\lstdefinelanguage{SPL}{%
+	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|}
+	morekeywords={while,else,if,print,return,isEmpty,fst,snd,hd,tl,Int,Char,Bool,Void,True,False,var},%
+	sensitive=true,%
+	morecomment=[l]{//},%
+	morecomment=[n]{/*}{*/},%
+	literate=%
+		{->}{{$\rightarrow$}}2
+		{>=}{{$\geq\:$}}1
+		{<=}{{$\leq\:$}}1
+		{==}{{$\equiv$}}1
+}
+\lstset{%
+	upquote=true,
+	breakatwhitespace=false,
+	breaklines=true,
+	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+	keepspaces=true,
+	basicstyle=\tt\footnotesize,
+	commentstyle=\sl,
+	keywordstyle=\bf,
+	stringstyle=\tt,
+	showspaces=false,
+	showstringspaces=false,
+	showtabs=false,
+	tabsize=4,
+	basewidth=0.43em,
+	columns=[c]fixed,
+	texcl=true,
+	captionpos=b
+}
+
+% Colour definitions
+\usepackage{xcolor}
+\definecolor{darkblue}{rgb}{0.2, 0.2, 0.6}
+\definecolor{lightblue}{rgb}{0.3, 0.6, 0.7}
+\definecolor{otherblue}{rgb}{0.0, 0.3, 0.4}
+\definecolor{purple}{rgb}{0.5, 0.0, 0.5}

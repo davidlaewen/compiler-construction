@@ -1,5 +1,6 @@
 .stack-work/
 *~
+presentation/build/
 report/build/
 report/_minted-report/
 **/.vscode/**

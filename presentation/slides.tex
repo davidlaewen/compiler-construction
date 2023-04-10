@@ -1,0 +1,111 @@
+\documentclass[dvipsnames,aspectratio=169]{beamer}
+
+\usefonttheme{professionalfonts}%% do not define math settings by beamer itself
+\usepackage[T1]{fontenc}
+\usepackage[libertine]{newtxmath}
+\usepackage[tt=false]{libertine}
+\usepackage[varqu]{zi4}
+\usepackage{sfmath}
+
+\usepackage[utf8]{inputenc} % oder was auch immer
+\usepackage[british]{babel} % oder was auch immer
+% Oder was auch immer. Zu beachten ist, das Font und Encoding passen
+% müssen. Falls T1 nicht funktioniert, kann man versuchen, die Zeile
+% mit fontenc zu löschen.
+
+% Load packages
+\input{packages.tex}
+\input{commands.tex}
+
+\setlength{\parskip}{\baselineskip}
+
+\mode<presentation>
+{
+    \usetheme{Madrid}
+    \useinnertheme{rectangles}
+    \useoutertheme{infolines}
+    \usecolortheme{whale}
+
+    \setbeamertemplate{navigation symbols}{}
+
+    \setbeamercovered{invisible} % Visibility of covered items
+
+    % Margins
+    \setbeamersize{
+        text margin left=6mm,
+        text margin right=6mm
+    }
+}
+
+
+\title[Compiler Construction -- Phase 2]% (optional, nur bei langen Titeln nötig)
+{Compiler Construction -- Semantic Analyses}
+
+\subtitle
+{}
+
+\author% (optional, nur bei vielen Autoren)
+{Simcha van Collem \& David Läwen}
+
+\institute[]% (optional, aber oft nötig)
+{MFoCS Seminar}
+
+\date[April 11th, 2023] % (optional, sollte der abgekürzte Konferenzname sein)
+{April 11th, 2023}
+
+\subject{Later Credits}
+% Dies wird lediglich in den PDF Informationskatalog einfügt. Kann gut
+% weggelassen werden.
+
+
+% Falls eine Logodatei namens "university-logo-filename.xxx" vorhanden
+% ist, wobei xxx ein von latex bzw. pdflatex lesbares Graphikformat
+% ist, so kann man wie folgt ein Logo einfügen:
+% \pgfdeclareimage[height=0.5cm]{university-logo}{university-logo-filename}
+% \logo{\pgfuseimage{university-logo}}
+
+
+\begin{document}
+
+% TITLE PAGE
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% INTRODUCTION
+\begin{frame}{Introduction}
+
+  Foo bar
+
+\end{frame}
+
+
+
+% XYZ
+\section{XYZ}
+
+% TABLE OF CONTENTS I
+\begin{frame}{Contents}
+  \hspace*{0.3cm}
+  \begin{minipage}[c][4cm]{\textwidth}
+      \only<1>{\tableofcontents}
+      \only<2>{\tableofcontents[currentsection]}
+  \end{minipage}
+\end{frame}
+
+
+
+
+
+
+
+
+\section<presentation*>{References}
+
+\begin{frame}{References}
+  \nocite{*}
+  \AtNextBibliography{\small}
+  \printbibliography
+\end{frame}
+
+\end{document}

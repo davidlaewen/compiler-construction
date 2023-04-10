@@ -1,0 +1,172 @@
+% Command definitions
+
+% Paragraph breaks
+\newcommand{\br}{\\[2mm]}
+\newcommand{\brbr}{\\[4mm]}
+
+% Definitions - Math environment
+\newcommand{\RA}{\Rightarrow} % shorthands for implication and equivalence arrows
+\newcommand{\LA}{\Leftarrow}
+\newcommand{\LongRA}{\Longrightarrow}
+\newcommand{\LongLA}{\Longleftarrow}
+\newcommand{\LRA}{\Leftrightarrow}
+\newcommand{\LongLRA}{\Longleftrightarrow}
+
+\newcommand{\ceq}{\coloneqq}
+
+\newcommand{\Nat}{\mathbb{N}}
+
+% Iris and sep. logic
+\newcommand{\updLE}{\textstyle\upd_{\textsf{le}}}
+\newcommand{\leqCtx}{\leq_{\textsf{ctx}}}
+\newcommand{\Ctx}{\mathcal{C}}
+\newcommand{\toRe}{\to_\textsf{re}}
+\newcommand{\reord}{\textsf{re}}
+\newcommand{\logic}{\textsf{log}}
+% \newcommand{\later}{\mathop{\triangleright}}
+% \newcommand{\upd}{\mathop{\dispdot[-0.2ex]{\mid\kern-0.4ex\Rrightarrow\kern-0.25ex}}}
+\newcommand{\AU}{\textbf{\sffamily AU}}
+\newcommand{\Value}{\textsf{value}}
+\newcommand{\interp}[1]{\llbracket #1 \rrbracket}
+\newcommand{\WP}{\textsf{wp}}
+\newcommand{\pure}{{\textsf{pure}}}
+\newcommand{\cred}{\text{\pounds}}
+\newcommand{\credSupp}{\mathop{\text{\pounds}_{\!\bullet}}}
+
+
+
+
+
+% Gray highlighting
+\newcommand{\gbox}[2][gray!20]{\mathpalette{\highlightwithstyle[#1]}{#2}}
+\newcommand{\highlightwithstyle}[3][gray!20]{
+    \begingroup                         %% <- limit scope of \box0 and \fboxsep assignment
+    \sbox0{$\mathsurround 0pt #2#3$}%   %% <- typeset content in box 0
+    \setlength{\fboxsep}{0.8pt}          %% <- set (smaller) framebox margins
+    \sbox2{\hspace{-0.8pt}%              %% <- create box 2, undo margin
+        \colorbox{#1}{\usebox0}%        %% <- print the contents of box 0 in a \colorbox
+    }%
+    \dp2=\dp0 \ht2=\ht0 \wd2=\wd0       %% <- set dimensions of box 2 to match box 0
+    \box2                               %% <- print box 2
+    \endgroup                           %% <- revert old definitions of the boxes and \fboxsep
+}
+
+% Font styles
+\newcommand{\textsfit}[1]{\text{\sffamily\itshape#1}}
+\newcommand{\fatcal}[1]{\bm{\mathcal{#1}}}
+
+\newcommand{\keyword}[1]{\textbf{#1}}
+\newcommand{\keywordlst}[1]{\text{\sffamily\bfseries #1}}
+\newcommand{\id}[1]{\textsf{#1}} % identifiers
+
+\newcommand{\mini}[1]{{\scriptscriptstyle #1}} % Smaller exponents
+
+\definecolor{codeBlue}{rgb}{0.2,0.2,0.7}
+\newcommand{\codeColour}{Blue}
+\newcommand{\code}[1]{\textcolor{codeBlue}{#1}}
+\newcommand{\Math}[1]{\textcolor{codeBlue}{$#1$}}
+\newcommand{\MathCol}[1]{\textcolor{codeBlue}{#1}}
+
+\newcommand{\rulename}[1]{\textsc{#1}}
+
+
+% Meets and joins
+\newcommand{\meet}{\sqcap}
+\newcommand{\join}{\sqcup}
+\newcommand{\bigJoin}{\bigsqcup}
+\makeatletter % Replace with flipped \bigsqcup
+\newcommand{\bigMeet}{%
+    \mathop{%
+        \mathpalette\@updown\bigsqcup
+    }%
+}
+\newcommand*{\@updown}[2]{%
+    \rotatebox[origin=c]{180}{$\m@th#1#2$}%
+}
+\makeatother
+
+\newcommand{\hole}{\kern+0.7pt \fboxsep0pt\fboxrule=0.06em  \fbox{\phantom{$A^*A_.$}} \kern-0.1em}
+
+% Constraints
+\newcommand{\turnstile}{\vdash}
+
+% \newcommand{\set}[1]{\overline{#1}} % Overlined list/set notation
+\newcommand{\cgen}{\ |\ } % Constraint gen arrow
+\newcommand{\constr}[1]{\left\{#1\right\}} % Constraint set
+
+\newcommand{\longsquig}{%
+    \tikz \draw [->,
+    line join=round,
+    decorate, decoration={
+        zigzag,
+        segment length=4,
+        amplitude=.9,post=lineto,
+        post length=3pt
+    }]  (0,0) -- (0.51,0);
+}
+
+% Environment definitions
+\newenvironment{prooftreecustom}
+{\begin{prooftree}\def\extraVskip{3pt}\def\labelSpacing{6pt}}
+    {\end{prooftree}}
+
+\newenvironment{infobox} % info boxes
+  {\begin{tcolorbox}[colback=codeBlue!12!white,colframe=codeBlue!60!white,coltext=codeBlue!90!white,boxrule=.4mm]}
+  {\end{tcolorbox}}
+
+\newenvironment{simplebox} % Outline box
+  {\begin{tcolorbox}[colback=white,colframe=black,sharp corners,boxrule=0.2mm]}
+  {\end{tcolorbox}}
+
+
+% \Alt for beamer
+\makeatletter
+\newcommand*\Alt{\alt{\Alt@branch0}{\Alt@branch1}}
+
+\newcommand\Alt@branch[3]{%
+  \begingroup
+  \ifbool{mmode}{%
+    \mathchoice{%
+      \Alt@math#1{\displaystyle}{#2}{#3}%
+    }{%
+      \Alt@math#1{\textstyle}{#2}{#3}%
+    }{%
+      \Alt@math#1{\scriptstyle}{#2}{#3}%
+    }{%
+      \Alt@math#1{\scriptscriptstyle}{#2}{#3}%
+    }%
+  }{%
+    \sbox0{#2}%
+    \sbox1{#3}%
+    \Alt@typeset#1%
+  }%
+  \endgroup
+}
+
+\newcommand\Alt@math[4]{%
+  \sbox0{$#2{#3}\m@th$}%
+  \sbox1{$#2{#4}\m@th$}%
+  \Alt@typeset#1%
+}
+
+\newcommand\Alt@typeset[1]{%
+  \ifnumcomp{\wd0}{>}{\wd1}{%
+    \def\setwider   ##1##2{##2##1##2 0}%
+    \def\setnarrower##1##2{##2##1##2 1}%
+  }{%
+    \def\setwider   ##1##2{##2##1##2 1}%
+    \def\setnarrower##1##2{##2##1##2 0}%
+  }%
+  \sbox2{}%
+  \sbox3{}%
+  \setwider2{\wd}%
+  \setwider2{\ht}%
+  \setwider2{\dp}%
+  \setnarrower3{\ht}%
+  \setnarrower3{\dp}%
+  \leavevmode
+  \rlap{\usebox#1}%
+  \usebox2%
+  \usebox3%
+}
+\makeatother
