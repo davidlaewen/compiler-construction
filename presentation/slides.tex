@@ -213,6 +213,9 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
   type CGen a = (StateT CGenState (Except T.Text)) a
   \end{minted}
 
+  \emph{Mention ``storing'' and restoring of the environment state in `checkFunDecl'
+  here}
+
 \end{frame}
 
 
@@ -239,6 +242,33 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
     { \Gamma \turnstile e_1 : \Int \quad\quad \Gamma \turnstile e_2 : \Int }%
     { \Gamma \turnstile e_1\ \texttt{+}\ e_2 : \Int }
   \end{mathpar}
+
+\end{frame}
+
+
+\begin{frame}{Typing Expressions}
+
+  \begin{itemize}
+    \item Typing field accesses and function types
+  \end{itemize}
+
+  \begin{mathpar}
+    \inferrule[T-Fst]%
+    { \Gamma \turnstile p : (\tau,\sigma) }%
+    { \Gamma \turnstile p.\fst : \tau }
+    \and
+    \inferrule[T-Head]%
+    { \Gamma \turnstile l : [\tau] }%
+    { \Gamma \turnstile l.\head : \tau }
+    \\
+    \inferrule[T-FunCall]%
+    { \Gamma \turnstile e_1 : \tau_1 \quad \dots \quad \Gamma \turnstile e_n : \tau_n
+      \quad\quad f : \tau_1 \dots \tau_n \to \sigma }%
+    { \Gamma \turnstile f(e_1, \dots, e_n) : \sigma }
+  \end{mathpar}
+
+  \[ \textsf{cons} : \forall \alpha.\ \alpha\ [\alpha] \to [\alpha] \]
+  \[ \textsf{isEmpty} : \forall \alpha.\ [\alpha] \to \Bool \]
 
 \end{frame}
 
