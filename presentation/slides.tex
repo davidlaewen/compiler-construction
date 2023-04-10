@@ -75,14 +75,80 @@
 % INTRODUCTION
 \begin{frame}{Introduction}
 
-  Foo bar
+  \begin{itemize}
+    \item Implementation language: Haskell -- Add logo
+    \item AST represented by \emph{rose tree} consisting of ADTs and lists
+    \item Syntax tree ADT declarations
+    \item Diagramme?
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Hindley-Milner Type Inference}
+
+  \begin{itemize}
+    \item Discuss one vs. two step approach
+    \item Reference Pottier \& Rémy
+    \item Pros and cons of both approaches?
+    \item Motivate choice?
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Hindley-Milner vs. ``French-style'' Type Inference}
+
+  Classic Hindley-Milner: Traverse AST, simultaneously solve constraints
+  and determine substitution
+  \begin{itemize}
+    \item Traverse AST
+    \item Simultaneously solve constraints and determine substitution
+  \end{itemize}
+  Type inference in GHC (attributed to François Pottier and Didier Rémy):
+  \begin{itemize}
+    \item Traverse AST, generate constraint set and \emph{elaborated} AST with
+          metavariable annotations
+    \item Solve the constraint set
+    \item Resulting substitution is applied to the elaborated AST
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Type Checker Design}
+
+  \begin{itemize}
+    \item Design decisions
+    \item Outline general setup
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Typing Expressions}
+
+  \begin{itemize}
+    \item Selection of typing rules for expressions
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Typing Statements}
+
+  \begin{itemize}
+    \item Variable assignments (environment modification)
+    \item If-Else, While, etc. -- Typing rules
+  \end{itemize}
 
 \end{frame}
 
 
 
+
 % XYZ
-\section{XYZ}
+\section{Type Checking}
 
 % TABLE OF CONTENTS I
 \begin{frame}{Contents}
