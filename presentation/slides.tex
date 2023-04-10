@@ -75,12 +75,19 @@
 % INTRODUCTION
 \begin{frame}{Introduction}
 
-  \begin{itemize}
-    \item Implementation language: Haskell -- Add logo
-    \item AST represented by \emph{rose tree} consisting of ADTs and lists
-    \item Syntax tree ADT declarations
-    \item Diagramme?
-  \end{itemize}
+  \begin{minipage}{.6\textwidth}
+
+    \begin{itemize}
+      \item Implementation language: Haskell
+      \item AST represented by \emph{rose tree} consisting of algebraic data
+            types and lists
+      \item Type checking proceeds by traversing the AST structure
+    \end{itemize}
+
+  \end{minipage}\hfill
+  \begin{minipage}{.3\textwidth}
+    \includegraphics[scale=.17]{assets/haskell-icon.pdf}
+  \end{minipage}
 
 \end{frame}
 
@@ -88,21 +95,21 @@
 \begin{frame}[fragile]{Type Checking AST}
 
   \begin{minted}{haskell}
-  data Program a = Program [VarDecl a] [FunDecl a]
+data Program a = Program [VarDecl a] [FunDecl a]
 
-  data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
+data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
 
-  data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
+data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
 
-  data Stmt a = If (Expr a) [Stmt a] [Stmt a]
-              | While (Expr a) [Stmt a]
-              | Assign VarLookup (Expr a)
-              | FunCall FunName [Expr a]
-              | Return (Maybe (Expr a))
+data Stmt a = If (Expr a) [Stmt a] [Stmt a]
+            | While (Expr a) [Stmt a]
+            | Assign VarLookup (Expr a)
+            | FunCall FunName [Expr a]
+            | Return (Maybe (Expr a))
 
-  data VarLookup = VarId T.Text | VarField VarLookup Field
+data VarLookup = VarId T.Text | VarField VarLookup Field
 
-  \end{minted}
+\end{minted}
 
 \end{frame}
 
