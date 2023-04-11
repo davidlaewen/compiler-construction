@@ -93,11 +93,23 @@
 \end{frame}
 
 
+\begin{frame}[fragile]{Desugaring}
+
+\begin{minted}{haskell}
+desugar :: P.Program -> T.Program ()
+\end{minted}
+
+\begin{itemize}
+  \item First step: Desugar parse AST to type checking AST
+  \item Desugar operations and selectors to function calls
+  \item Allows uniform treatment as ordinary function calls
+\end{itemize}
+
+\end{frame}
+
+
 \begin{frame}[fragile]{Type Checking AST}
 
-  \emph{AST structure -- how do we traverse the nodes?
-  Purpose of type parameter `a'?}
-  %
   \begin{minted}{haskell}
 data Program a = Program [VarDecl a] [FunDecl a]
 
@@ -105,68 +117,20 @@ data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
 
 data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
 
-data Stmt a = If (Expr a) [Stmt a] [Stmt a]
-            | While (Expr a) [Stmt a]
-            | Assign VarLookup (Expr a)
+data Stmt a = Assign VarLookup (Expr a)
             | FunCall FunName [Expr a]
-            | Return (Maybe (Expr a))
+            | ...
 
 data VarLookup = VarId T.Text | VarField VarLookup Field
 
+data Expr a = FunCallE FunName [Expr a] a
+            | ...
 \end{minted}
 
 \end{frame}
 
 
-\begin{frame}[fragile]{Type Checking AST}
-
-  \begin{minted}{haskell}
-  data Expr a = Ident T.Text a
-              | Int Integer a
-              | Char Char a
-              | Bool Bool a
-              | FunCallE FunName [Expr a] a
-              | EmptyList a
-              | Tuple (Expr a) (Expr a) a
-  \end{minted}
-
-  Wait, where did the unary and binary operations go?\vspace*{-2mm}
-  %
-  \begin{itemize}
-    \item Desugared to (pre-defined) functions
-    \item Allows uniform treatment as ordinary function calls
-  \end{itemize}
-
-
-\end{frame}
-
-
-\begin{frame}[fragile]{Unification Types}
-
-  \begin{minted}{haskell}
-  data UType = Int | Bool | Char | Void
-             | Prod UType UType | List UType
-             | Fun [UType] UType
-             | UVar UVar
-             | TVar TVar
-  \end{minted}
-
-\end{frame}
-
-
-\begin{frame}{Hindley-Milner Type Inference}
-
-  \begin{itemize}
-    \item Discuss one vs. two step approach
-    \item Reference Pottier \& Rémy
-    \item Pros and cons of both approaches?
-    \item Motivate choice?
-  \end{itemize}
-
-\end{frame}
-
-
-\begin{frame}{Hindley-Milner vs. ``French-style'' Type Inference}
+\begin{frame}{Limitations of Hindley-Milner}
 
   Classic Hindley-Milner:
   \begin{itemize}
@@ -182,22 +146,13 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
 
 \begin{frame}{``French-style'' Type Inference (Pottier \& Rémy)}
 
-  Type inference in GHC (attributed to François Pottier and Didier Rémy):
+  Type inference in GHC:
   \begin{itemize}
     \item Traverse AST, generate constraint set and \emph{elaborated} AST with
           metavariable annotations
     \item Solve the constraint set
     \item Resulting substitution is applied to the elaborated AST (``\emph{zonking}'')
-  \end{itemize}
-
-\end{frame}
-
-
-\begin{frame}{Type Checker Design}
-
-  \begin{itemize}
-    \item Design decisions
-    \item Outline general setup
+    \item Due to François Pottier and Didier Rémy~\footfullcite{PottierRemy2005}
   \end{itemize}
 
 \end{frame}
@@ -208,97 +163,38 @@ data VarLookup = VarId T.Text | VarField VarLookup Field
   \begin{minted}{haskell}
   type Environment = M.Map Id UType
 
-  data CGenState = CGenState{ env :: Environment, varState :: VarState }
+  data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
+
+  type CGen a = (StateT CGenState (Except T.Text)) a
+
+  data UType = Int | ... | List UType | Fun [UType] UType
+             | UVar Int
+  \end{minted}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Type Checker Monad}
+
+  \begin{minted}{haskell}
+  type Environment = M.Map Id UType
+
+  data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
 
   type CGen a = (StateT CGenState (Except T.Text)) a
   \end{minted}
 
-  \emph{Mention ``storing'' and restoring of the environment state in `checkFunDecl'
-  here}
-
-\end{frame}
-
-
-\begin{frame}{Typing Expressions}
-
   \begin{itemize}
-    \item Selection of typing rules for expressions
-  \end{itemize}
-
-  \begin{mathpar}
-    \inferrule[T-Bool]%
-    { b \in \{ \True, \False \} }%
-    { \Gamma \turnstile b : \Bool }
-    \and
-    \inferrule[T-Int]%
-    { n \in \mathbb{Z} }%
-    { \Gamma \turnstile n : \Int }
-    \\
-    \inferrule[T-And]%
-    { \Gamma \turnstile e_1 : \Bool \quad \Gamma \turnstile e_2 : \Bool }%
-    { \Gamma \turnstile e_1\ \texttt{\&\&}\ e_2 : \Bool }
-    \and
-    \inferrule[T-Plus]%
-    { \Gamma \turnstile e_1 : \Int \quad\quad \Gamma \turnstile e_2 : \Int }%
-    { \Gamma \turnstile e_1\ \texttt{+}\ e_2 : \Int }
-  \end{mathpar}
-
-\end{frame}
-
-
-\begin{frame}{Typing Expressions}
-
-  \begin{itemize}
-    \item Typing field accesses and function types
-  \end{itemize}
-
-  \begin{mathpar}
-    \inferrule[T-Fst]%
-    { \Gamma \turnstile p : (\tau,\sigma) }%
-    { \Gamma \turnstile p.\fst : \tau }
-    \and
-    \inferrule[T-Head]%
-    { \Gamma \turnstile l : [\tau] }%
-    { \Gamma \turnstile l.\head : \tau }
-    \\
-    \inferrule[T-FunCall]%
-    { \Gamma \turnstile e_1 : \tau_1 \quad \dots \quad \Gamma \turnstile e_n : \tau_n
-      \quad\quad f : \tau_1 \dots \tau_n \to \sigma }%
-    { \Gamma \turnstile f(e_1, \dots, e_n) : \sigma }
-  \end{mathpar}
-
-  \[ \textsf{cons} : \forall \alpha.\ \alpha\ [\alpha] \to [\alpha] \]
-  \[ \textsf{isEmpty} : \forall \alpha.\ [\alpha] \to \Bool \]
-
-\end{frame}
-
-
-\begin{frame}{Typing Statements}
-
-  \begin{itemize}
-    \item Variable assignments (environment modification)
-    \item If-Else, While, etc. -- Typing rules
+    \item Why \mintinline{haskell}|StateT|?
+    \item Consider the \mintinline{haskell}|Program| node:
+    \begin{minted}{haskell}
+  data Program a = Program [VarDecl a] [FunDecl a]
+  \end{minted}
+    \item Bindings from first list are used in second list
+    \item Allows restoring environment after checking function body
   \end{itemize}
 
 \end{frame}
-
-
-
-
-% XYZ
-\section{Type Checking}
-
-% TABLE OF CONTENTS I
-\begin{frame}{Contents}
-  \hspace*{0.3cm}
-  \begin{minipage}[c][4cm]{\textwidth}
-      \only<1>{\tableofcontents}
-      \only<2>{\tableofcontents[currentsection]}
-  \end{minipage}
-\end{frame}
-
-
-
 
 
 
