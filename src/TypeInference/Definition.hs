@@ -27,7 +27,6 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Set as S
 import Control.Monad.State
-import Control.Monad.Reader
 import Control.Monad.Except
 
 type UVar = Int
@@ -56,7 +55,7 @@ data UScheme = UScheme [TVar] UType
 
 -- TODO: A single var sort might be sufficient, since scoping is determined
 -- through modification of the CGen state
-data Id = TermVar T.Text | FunName T.Text | TyVar TVar
+data Id = TermVar T.Text | FunName T.Text | TyVar TVar | RetType
   deriving (Eq, Ord)
 
 type Environment = M.Map Id UType
@@ -70,7 +69,7 @@ type Subst = (M.Map UVar UType)
 
 data CGenState = CGenState{ globalEnv :: Environment, localEnv :: Environment, varState :: VarState }
 
-type CGen a = (ReaderT (Maybe UVar) (StateT CGenState (Except T.Text))) a
+type CGen = StateT CGenState (Except T.Text)
 
 applySubst :: Subst -> CGen ()
 applySubst s = do
@@ -97,7 +96,7 @@ lookupEnv name = do
 
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
-  (runReaderT x Nothing) CGenState{ globalEnv = emptyEnv, localEnv = emptyEnv, varState = 0 })
+  x CGenState{ globalEnv = emptyEnv, localEnv = emptyEnv, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do

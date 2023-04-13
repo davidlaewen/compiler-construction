@@ -8,8 +8,6 @@ import qualified Syntax.TypeAST as T
 import Control.Monad.State
 import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
-import Control.Monad.RWS (MonadReader(local, ask))
-import Data.Maybe (fromJust)
 
 checkProgram :: T.Program () -> CGen (T.Program UType, Subst)
 checkProgram (T.Program varDecls funDecls) = do
@@ -53,17 +51,17 @@ checkFunDecl :: T.FunDecl () -> CGen (T.FunDecl UType, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   uVarsParams <- forM params (const $ UVar <$> freshVar)
   uVarRet <- freshVar
-  local (const $ Just uVarRet) $ do
-    modifyLocalEnv (\env -> foldr (uncurry envInsert) env (zip (TermVar <$> params) uVarsParams))
-    -- Insert mapping for function name in order to typecheck recursive calls
-    modifyLocalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
-    (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
-    (stmts',stmtsSubst) <- checkStmts stmts
-    modifyLocalEnv $ const emptyEnv
-    -- TODO: Check user-specified type against inferred type
-    let s = stmtsSubst `compose` varDeclsSubst
-    modifyGlobalEnv $ envInsert (FunName name) (subst s $ Fun uVarsParams (UVar uVarRet))
-    pure (T.FunDecl name params mTy varDecls' stmts' (Fun uVarsParams (UVar uVarRet)), s)
+  modifyLocalEnv (\env -> foldr (uncurry envInsert) env (zip (TermVar <$> params) uVarsParams))
+  modifyLocalEnv $ envInsert RetType (UVar uVarRet)
+  -- Insert mapping for function name in order to typecheck recursive calls
+  modifyLocalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
+  (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
+  (stmts',stmtsSubst) <- checkStmts stmts
+  modifyLocalEnv $ const emptyEnv
+  -- TODO: Check user-specified type against inferred type
+  let s = stmtsSubst `compose` varDeclsSubst
+  modifyGlobalEnv $ envInsert (FunName name) (subst s $ Fun uVarsParams (UVar uVarRet))
+  pure (T.FunDecl name params mTy varDecls' stmts' (Fun uVarsParams (UVar uVarRet)), s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
 checkStmts [] = pure ([], emptySubst)
@@ -80,14 +78,14 @@ checkStmt (T.If condExpr thenStmts elseStmts) = do
   (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
   (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
   pure (T.If condExpr' thenStmts' elseStmts',
-    elseStmtsSubst `compose` thenStmtsSubst `compose` condExprSubst)
+    elseStmtsSubst `compose` thenStmtsSubst `compose` s `compose` condExprSubst)
 
 checkStmt (T.While condExpr loopStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
   s <- unify condExprType Bool
   applySubst s
   (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
-  pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` condExprSubst)
+  pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` s `compose` condExprSubst)
 
 checkStmt (T.Assign varLookup expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
@@ -119,17 +117,20 @@ checkStmt (T.FunCall funName args) = do
   pure (T.FunCall funName args', s)
 
 checkStmt (T.Return mExpr) = do
-  uVarRet <- UVar . fromJust <$> ask
-  case mExpr of
-    Nothing -> do
-      s <- unify uVarRet Void
-      applySubst s
-      pure (T.Return Nothing, s)
-    Just expr -> do
-      (expr', exprType, exprSubst) <- checkExpr expr
-      s <- unify uVarRet exprType
-      applySubst s
-      pure (T.Return (Just expr'), s `compose` exprSubst)
+  mRetType <- lookupEnv RetType
+  case mRetType of
+    Nothing -> error "RetType not found in environment!"
+    Just retType -> do
+      case mExpr of
+        Nothing -> do
+          s <- unify retType Void
+          applySubst s
+          pure (T.Return Nothing, s)
+        Just expr -> do
+          (expr', exprType, exprSubst) <- checkExpr expr
+          s <- unify retType exprType
+          applySubst s
+          pure (T.Return (Just expr'), s `compose` exprSubst)
 
 
 checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
