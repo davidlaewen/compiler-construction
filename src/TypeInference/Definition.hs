@@ -83,7 +83,7 @@ runCgen x = fst <$> runExcept (runStateT
 freshVar :: CGen UVar
 freshVar = do
   i <- gets varState
-  modify (\s -> s{varState = i+1 })
+  modify (\s -> s{ varState = i+1 })
   pure i
 
 envLookup :: Id -> Environment -> Maybe UType

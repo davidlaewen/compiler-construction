@@ -79,7 +79,6 @@
 
     \begin{itemize}
       \item Implementation language: Haskell
-      \item Other general info?
       \item AST represented as \emph{rose tree} consisting of algebraic data
             types and lists
       \item Type checking proceeds by traversing the AST structure
@@ -184,8 +183,8 @@ data Expr a = FunCallE FunName [Expr a] a
   type CGen a = (StateT CGenState (Except T.Text)) a
   \end{minted}
 
+  Why \mintinline{haskell}|StateT|? \vspace*{-4mm}
   \begin{itemize}
-    \item Why \mintinline{haskell}|StateT|?
     \item Consider the \mintinline{haskell}|Program| node:
     \begin{minted}{haskell}
   data Program a = Program [VarDecl a] [FunDecl a]

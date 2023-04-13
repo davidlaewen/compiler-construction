@@ -5,3 +5,5 @@ report/build/
 report/_minted-report/
 **/.vscode/**
 **.pdf
+**.bbl
+**.blg
