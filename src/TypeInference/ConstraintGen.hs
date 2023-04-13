@@ -32,6 +32,7 @@ checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
     then modifyGlobalEnv $ envInsert (TermVar name) uVar
     else modifyLocalEnv $ envInsert (TermVar name) uVar
   s <- unify exprType uVar
+  applySubst s
   {- TODO: Check inferred type against user-specified type
   case mTy of
     Just ty -> do
@@ -39,9 +40,6 @@ checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
       ...
     Nothing -> pure (T.VarDecl mTy name expr' uVar, exprSubst)
   -}
-  when isTopLevel $
-    modifyGlobalEnv $ envMap (subst s)
-  modifyLocalEnv $ envMap (subst s)
   pure (T.VarDecl mTy name expr' uVar, s `compose` exprSubst)
 
 checkFunDecls :: [T.FunDecl ()] -> CGen ([T.FunDecl UType], Subst)
@@ -62,10 +60,9 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
     (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
     (stmts',stmtsSubst) <- checkStmts stmts
     modifyLocalEnv $ const emptyEnv
-    -- TODO: Check user-specified type against inferred type, insert in env
-    modifyGlobalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
+    -- TODO: Check user-specified type against inferred type
     let s = stmtsSubst `compose` varDeclsSubst
-    modifyGlobalEnv $ envMap (subst s)
+    modifyGlobalEnv $ envInsert (FunName name) (subst s $ Fun uVarsParams (UVar uVarRet))
     pure (T.FunDecl name params mTy varDecls' stmts' (Fun uVarsParams (UVar uVarRet)), s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
@@ -78,21 +75,19 @@ checkStmts (stmt:stmts) = do
 checkStmt :: T.Stmt () -> CGen (T.Stmt UType, Subst)
 checkStmt (T.If condExpr thenStmts elseStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
-  case condExprType of
-    Bool -> throwError "`if` condition must have type Bool"
-    _ -> do
-      (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
-      (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
-      pure (T.If condExpr' thenStmts' elseStmts',
-        elseStmtsSubst `compose` thenStmtsSubst `compose` condExprSubst)
+  s <- unify condExprType Bool
+  applySubst s
+  (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
+  (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
+  pure (T.If condExpr' thenStmts' elseStmts',
+    elseStmtsSubst `compose` thenStmtsSubst `compose` condExprSubst)
 
 checkStmt (T.While condExpr loopStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
-  case condExprType of
-    Bool -> throwError "`while` condition must have type Bool"
-    _ -> do
-      (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
-      pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` condExprSubst)
+  s <- unify condExprType Bool
+  applySubst s
+  (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
+  pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` condExprSubst)
 
 checkStmt (T.Assign varLookup expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
@@ -104,7 +99,10 @@ checkStmt (T.Assign varLookup expr) = do
       mVarType <- lookupEnv (TermVar name)
       case mVarType of
         Nothing -> throwError $ "No variable declaration matching " <> name
-        Just varType -> unify exprType varType
+        Just varType -> do
+          s <- unify exprType varType
+          applySubst s
+          pure s
     foo (T.VarField varLkp field) exprType = do
       case field of
         T.Head -> foo varLkp (List exprType)
@@ -125,10 +123,12 @@ checkStmt (T.Return mExpr) = do
   case mExpr of
     Nothing -> do
       s <- unify uVarRet Void
+      applySubst s
       pure (T.Return Nothing, s)
     Just expr -> do
       (expr', exprType, exprSubst) <- checkExpr expr
       s <- unify uVarRet exprType
+      applySubst s
       pure (T.Return (Just expr'), s `compose` exprSubst)
 
 
@@ -170,6 +170,7 @@ checkFunCall funName args = do
     UScheme tVars (Fun paramTypes retType) -> do
       (args', argsTypes, argsSubst) <- checkExprs args
       s <- unifyLists paramTypes argsTypes
+      applySubst s
       pure (args', retType, s `compose` argsSubst)
     _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
   where

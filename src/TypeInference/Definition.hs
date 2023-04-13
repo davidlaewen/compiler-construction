@@ -9,6 +9,7 @@ module TypeInference.Definition (
   emptyEnv,
   Subst,
   CGen,
+  applySubst,
   modifyGlobalEnv,
   modifyLocalEnv,
   lookupGlobalEnv,
@@ -70,6 +71,11 @@ type Subst = (M.Map UVar UType)
 data CGenState = CGenState{ globalEnv :: Environment, localEnv :: Environment, varState :: VarState }
 
 type CGen a = (ReaderT (Maybe UVar) (StateT CGenState (Except T.Text))) a
+
+applySubst :: Subst -> CGen ()
+applySubst s = do
+  modifyLocalEnv $ envMap (subst s)
+  modifyGlobalEnv $ envMap (subst s)
 
 modifyGlobalEnv :: (Environment -> Environment) -> CGen ()
 modifyGlobalEnv f = modify (\s -> s{ globalEnv = f s.globalEnv })
