@@ -33,6 +33,7 @@ library
       Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST
+      TypeInference.Annotate
       TypeInference.ConstraintGen
       TypeInference.Definition
       TypeInference.Unify
