@@ -8,6 +8,8 @@ import qualified Syntax.TypeAST as T
 import Control.Monad.State
 import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
+import Control.Monad.RWS (MonadReader(local, ask))
+import Data.Maybe (fromJust)
 
 checkProgram :: T.Program () -> CGen (T.Program UType, Subst)
 checkProgram (T.Program varDecls funDecls) = do
@@ -48,20 +50,21 @@ checkFunDecls (funDecl:funDecls) = do
 checkFunDecl :: T.FunDecl () -> CGen (T.FunDecl UType, Subst)
 checkFunDecl (T.FunDecl name args mTy varDecls stmts _) = do
   uVarsArgs <- forM args (const $ UVar <$> freshVar)
-  uVarRet <- UVar <$> freshVar
+  uVarRet <- freshVar
+  local (const $ Just uVarRet) $ do
   -- Store global state to reset later
   -- TODO: We want to reset only the environment, not the fresh variable counter!!!
-  globalState <- get
-  modifyEnv (\env -> foldr (uncurry envInsert) env (zip (LocalVar <$> args) uVarsArgs))
-  -- TODO: Bind return type in environment -- unique identifier?
-  (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
-  (stmts',stmtsSubst) <- checkStmts stmts
-  put globalState
-  -- TODO: Check user-specified type against inferred type, insert in env
-  modifyEnv $ envInsert (FunName name) (Fun uVarsArgs uVarRet)
-  let s = stmtsSubst `compose` varDeclsSubst
-  modifyEnv $ envMap (subst s)
-  pure (T.FunDecl name args mTy varDecls' stmts' (Fun uVarsArgs uVarRet), s)
+    globalState <- get
+    modifyEnv (\env -> foldr (uncurry envInsert) env (zip (LocalVar <$> args) uVarsArgs))
+    -- TODO: Bind return type in environment -- unique identifier?
+    (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
+    (stmts',stmtsSubst) <- checkStmts stmts
+    put globalState
+    -- TODO: Check user-specified type against inferred type, insert in env
+    modifyEnv $ envInsert (FunName name) (Fun uVarsArgs (UVar uVarRet))
+    let s = stmtsSubst `compose` varDeclsSubst
+    modifyEnv $ envMap (subst s)
+    pure (T.FunDecl name args mTy varDecls' stmts' (Fun uVarsArgs (UVar uVarRet)), s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
 checkStmts [] = pure ([], emptySubst)
@@ -90,27 +93,57 @@ checkStmt (T.While condExpr loopStmts) = do
       pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` condExprSubst)
 
 checkStmt (T.Assign varLookup expr) = do
-  case varLookup of
-    T.VarId name -> do
+  (expr', exprType, exprSubst) <- checkExpr expr
+  s <- foo varLookup exprType
+  pure (T.Assign varLookup expr', s `compose` exprSubst)
+  where
+    foo :: T.VarLookup -> UType -> CGen Subst
+    foo (T.VarId name) exprType = do
       mVarType <- lookupEnv (LocalVar name)
       case mVarType of
         Nothing -> throwError $ "No variable declaration matching " <> name
-        Just varType -> do
-          (expr', exprType, exprSubst) <- checkExpr expr
-          s <- unify exprType varType
-          pure (T.Assign varLookup expr', s)
-    T.VarField varLookup' field -> _
-        -- TODO: don't know rn, guess we need to match up and strip away the
-        -- outermost layer of the type and lookup structure or something
+        Just varType -> unify exprType varType
+    foo (T.VarField varLkp field) exprType = do
+      case field of
+        T.Head -> foo varLkp (List exprType)
+        T.Tail -> foo varLkp exprType
+        T.Fst -> do
+          uVarSnd <- UVar <$> freshVar
+          foo varLkp (Prod exprType uVarSnd)
+        T.Snd -> do
+          uVarFst <- UVar <$> freshVar
+          foo varLkp (Prod uVarFst exprType)
+
+
 
 checkStmt (T.FunCall funName args) = do
   funType <- getFunType funName
   case funType of
-    UScheme tVars (Fun paramTypes retType) -> do
+    UScheme tVars (Fun paramTypes _) -> do
       (args', argsTypes, argsSubst) <- checkExprs args
       -- TODO: Unify paramTypes with argsTypes
-      pure _
+      s <- unifyLists paramTypes argsTypes
+      pure (T.FunCall funName args', s `compose` argsSubst)
     _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
+  where
+    unifyLists [] [] = pure emptySubst
+    unifyLists (ty1:tys1) (ty2:tys2) = do
+      s <- unify ty1 ty2
+      ss <- unifyLists tys1 tys2
+      pure $ ss `compose` s
+    unifyLists _ _ =
+      throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
+
+checkStmt (T.Return mExpr) = do
+  uVarRet <- UVar . fromJust <$> ask
+  case mExpr of
+    Nothing -> do
+      s <- unify uVarRet Void
+      pure (T.Return Nothing, s)
+    Just expr -> do
+      (expr', exprType, exprSubst) <- checkExpr expr
+      s <- unify uVarRet exprType
+      pure (T.Return (Just expr'), s `compose` exprSubst)
 
 
 getFunType :: T.FunName -> CGen UScheme

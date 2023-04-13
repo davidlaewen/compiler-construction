@@ -24,6 +24,7 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Set as S
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Monad.Except
 
 type UVar = Int
@@ -66,7 +67,7 @@ type Subst = (M.Map UVar UType)
 
 data CGenState = CGenState{ env :: Environment, varState :: VarState }
 
-type CGen a = (StateT CGenState (Except T.Text)) a
+type CGen a = (ReaderT (Maybe UVar) (StateT CGenState (Except T.Text))) a
 
 modifyEnv :: (Environment -> Environment) -> CGen ()
 modifyEnv f = modify (\s -> s{ env = f s.env })
@@ -78,7 +79,7 @@ lookupEnv name = do
 
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
-  x CGenState{ env = emptyEnv, varState = 0 })
+  (runReaderT x Nothing) CGenState{ env = emptyEnv, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do
