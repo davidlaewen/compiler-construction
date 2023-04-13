@@ -9,7 +9,9 @@ module TypeInference.Definition (
   emptyEnv,
   Subst,
   CGen,
-  modifyEnv,
+  modifyGlobalEnv,
+  modifyLocalEnv,
+  lookupGlobalEnv,
   lookupEnv,
   runCgen,
   freshVar,
@@ -53,7 +55,7 @@ data UScheme = UScheme [TVar] UType
 
 -- TODO: A single var sort might be sufficient, since scoping is determined
 -- through modification of the CGen state
-data Id = GlobalVar T.Text | LocalVar T.Text | FunName T.Text | TyVar TVar
+data Id = TermVar T.Text | FunName T.Text | TyVar TVar
   deriving (Eq, Ord)
 
 type Environment = M.Map Id UType
@@ -65,21 +67,31 @@ type VarState = UVar
 
 type Subst = (M.Map UVar UType)
 
-data CGenState = CGenState{ env :: Environment, varState :: VarState }
+data CGenState = CGenState{ globalEnv :: Environment, localEnv :: Environment, varState :: VarState }
 
 type CGen a = (ReaderT (Maybe UVar) (StateT CGenState (Except T.Text))) a
 
-modifyEnv :: (Environment -> Environment) -> CGen ()
-modifyEnv f = modify (\s -> s{ env = f s.env })
+modifyGlobalEnv :: (Environment -> Environment) -> CGen ()
+modifyGlobalEnv f = modify (\s -> s{ globalEnv = f s.globalEnv })
+
+modifyLocalEnv :: (Environment -> Environment) -> CGen ()
+modifyLocalEnv f = modify (\s -> s{ localEnv = f s.localEnv })
+
+lookupGlobalEnv :: Id -> CGen (Maybe UType)
+lookupGlobalEnv name = do
+  globalEnv <- gets globalEnv
+  pure $ envLookup name globalEnv
 
 lookupEnv :: Id -> CGen (Maybe UType)
 lookupEnv name = do
-  env <- gets env
-  pure $ envLookup name env
+  localEnv <- gets localEnv
+  case envLookup name localEnv of
+    Just ty -> pure $ Just ty
+    Nothing -> lookupGlobalEnv name
 
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
-  (runReaderT x Nothing) CGenState{ env = emptyEnv, varState = 0 })
+  (runReaderT x Nothing) CGenState{ globalEnv = emptyEnv, localEnv = emptyEnv, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do

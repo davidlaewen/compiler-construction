@@ -28,7 +28,9 @@ checkVarDecl :: T.VarDecl () -> Bool -> CGen (T.VarDecl UType, Subst)
 checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
   uVar <- UVar <$> freshVar
   (expr', exprType, exprSubst) <- checkExpr expr
-  modifyEnv $ envInsert (if isTopLevel then GlobalVar name else LocalVar name) uVar
+  if isTopLevel
+    then modifyGlobalEnv $ envInsert (TermVar name) uVar
+    else modifyLocalEnv $ envInsert (TermVar name) uVar
   s <- unify exprType uVar
   {- TODO: Check inferred type against user-specified type
   case mTy of
@@ -37,7 +39,9 @@ checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
       ...
     Nothing -> pure (T.VarDecl mTy name expr' uVar, exprSubst)
   -}
-  modifyEnv $ envMap (subst s)
+  when isTopLevel $
+    modifyGlobalEnv $ envMap (subst s)
+  modifyLocalEnv $ envMap (subst s)
   pure (T.VarDecl mTy name expr' uVar, s `compose` exprSubst)
 
 checkFunDecls :: [T.FunDecl ()] -> CGen ([T.FunDecl UType], Subst)
@@ -48,23 +52,21 @@ checkFunDecls (funDecl:funDecls) = do
   pure (funDecl':funDecls', ss `compose` s)
 
 checkFunDecl :: T.FunDecl () -> CGen (T.FunDecl UType, Subst)
-checkFunDecl (T.FunDecl name args mTy varDecls stmts _) = do
-  uVarsArgs <- forM args (const $ UVar <$> freshVar)
+checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
+  uVarsParams <- forM params (const $ UVar <$> freshVar)
   uVarRet <- freshVar
   local (const $ Just uVarRet) $ do
-  -- Store global state to reset later
-  -- TODO: We want to reset only the environment, not the fresh variable counter!!!
-    globalState <- get
-    modifyEnv (\env -> foldr (uncurry envInsert) env (zip (LocalVar <$> args) uVarsArgs))
-    -- TODO: Bind return type in environment -- unique identifier?
+    modifyLocalEnv (\env -> foldr (uncurry envInsert) env (zip (TermVar <$> params) uVarsParams))
+    -- Insert mapping for function name in order to typecheck recursive calls
+    modifyLocalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
     (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
     (stmts',stmtsSubst) <- checkStmts stmts
-    put globalState
+    modifyLocalEnv $ const emptyEnv
     -- TODO: Check user-specified type against inferred type, insert in env
-    modifyEnv $ envInsert (FunName name) (Fun uVarsArgs (UVar uVarRet))
+    modifyGlobalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
     let s = stmtsSubst `compose` varDeclsSubst
-    modifyEnv $ envMap (subst s)
-    pure (T.FunDecl name args mTy varDecls' stmts' (Fun uVarsArgs (UVar uVarRet)), s)
+    modifyGlobalEnv $ envMap (subst s)
+    pure (T.FunDecl name params mTy varDecls' stmts' (Fun uVarsParams (UVar uVarRet)), s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
 checkStmts [] = pure ([], emptySubst)
@@ -99,7 +101,7 @@ checkStmt (T.Assign varLookup expr) = do
   where
     foo :: T.VarLookup -> UType -> CGen Subst
     foo (T.VarId name) exprType = do
-      mVarType <- lookupEnv (LocalVar name)
+      mVarType <- lookupEnv (TermVar name)
       case mVarType of
         Nothing -> throwError $ "No variable declaration matching " <> name
         Just varType -> unify exprType varType
@@ -114,25 +116,9 @@ checkStmt (T.Assign varLookup expr) = do
           uVarFst <- UVar <$> freshVar
           foo varLkp (Prod uVarFst exprType)
 
-
-
 checkStmt (T.FunCall funName args) = do
-  funType <- getFunType funName
-  case funType of
-    UScheme tVars (Fun paramTypes _) -> do
-      (args', argsTypes, argsSubst) <- checkExprs args
-      -- TODO: Unify paramTypes with argsTypes
-      s <- unifyLists paramTypes argsTypes
-      pure (T.FunCall funName args', s `compose` argsSubst)
-    _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
-  where
-    unifyLists [] [] = pure emptySubst
-    unifyLists (ty1:tys1) (ty2:tys2) = do
-      s <- unify ty1 ty2
-      ss <- unifyLists tys1 tys2
-      pure $ ss `compose` s
-    unifyLists _ _ =
-      throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
+  (args',_,s) <- checkFunCall funName args
+  pure (T.FunCall funName args', s)
 
 checkStmt (T.Return mExpr) = do
   uVarRet <- UVar . fromJust <$> ask
@@ -144,6 +130,57 @@ checkStmt (T.Return mExpr) = do
       (expr', exprType, exprSubst) <- checkExpr expr
       s <- unify uVarRet exprType
       pure (T.Return (Just expr'), s `compose` exprSubst)
+
+
+checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
+checkExpr (T.Ident name _) = do
+  -- TODO: We need a way to check whether this a local or global variable
+  mut <- lookupEnv (TermVar name)
+  case mut of
+    Nothing -> error ""
+    Just ut -> pure (T.Ident name ut, ut, emptySubst)
+checkExpr (T.Int n _) = pure (T.Int n Int, Int, emptySubst)
+checkExpr (T.Char c _) = pure (T.Char c Char, Char, emptySubst)
+checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, emptySubst)
+checkExpr (T.FunCallE funName args _) = do
+  (args', retType, s) <- checkFunCall funName args
+  pure (T.FunCallE funName args' retType, retType, s)
+checkExpr (T.EmptyList _) = pure (T.EmptyList ty, ty, emptySubst)
+  where ty = List Int -- TODO: Should be ∀a.[a]
+checkExpr (T.Tuple e1 e2 _) = do
+  (e1',t1,s1) <- checkExpr e1
+  (e2',t2,s2) <- checkExpr e2
+  let ty = Prod t1 t2
+  -- TODO: How to extract the types from e1' and e2' here?
+  pure (T.Tuple e1' e2' ty, ty, s1 `compose` s2)
+
+checkExprs :: [T.Expr ()] -> CGen ([T.Expr UType], [UType], Subst)
+checkExprs [] = pure ([],[],emptySubst)
+checkExprs (expr:exprs) = do
+  (expr', exprType, exprSubst) <- checkExpr expr
+  (exprs', exprsTypes, exprsSubst) <- checkExprs exprs
+  pure (expr':exprs', exprType:exprsTypes, exprSubst `compose` exprsSubst)
+
+
+
+checkFunCall :: T.FunName -> [T.Expr ()] -> CGen ([T.Expr UType], UType, Subst)
+checkFunCall funName args = do
+  funType <- getFunType funName
+  case funType of
+    UScheme tVars (Fun paramTypes retType) -> do
+      (args', argsTypes, argsSubst) <- checkExprs args
+      s <- unifyLists paramTypes argsTypes
+      pure (args', retType, s `compose` argsSubst)
+    _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
+  where
+    unifyLists :: [UType] -> [UType] -> CGen Subst
+    unifyLists [] [] = pure emptySubst
+    unifyLists (ty1:tys1) (ty2:tys2) = do
+      s <- unify ty1 ty2
+      ss <- unifyLists tys1 tys2
+      pure $ ss `compose` s
+    unifyLists _ _ =
+      throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
 
 
 getFunType :: T.FunName -> CGen UScheme
@@ -176,36 +213,3 @@ getFunType funName = do
     T.TailFun -> pure $ UScheme ["a"] (Fun [List $ TVar "a"] (List (TVar "a")))
     T.FstFun -> pure $ UScheme ["a","b"] (Fun [Prod (TVar "a") (TVar "b")] (TVar "a"))
     T.SndFun -> pure $ UScheme ["a","b"] (Fun [Prod (TVar "a") (TVar "b")] (TVar "b"))
-
-checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
-checkExpr (T.Ident name _) = do
-  -- TODO: We need a way to check whether this a local or global variable
-  mut <- lookupEnv (LocalVar name)
-  case mut of
-    Nothing -> error ""
-    Just ut -> pure (T.Ident name ut, ut, emptySubst)
-checkExpr (T.Int n _) = pure (T.Int n Int, Int, emptySubst)
-checkExpr (T.Char c _) = pure (T.Char c Char, Char, emptySubst)
-checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, emptySubst)
-checkExpr (T.FunCallE funName args _) = do
-  funType <- getFunType funName
-  case funType of
-    UScheme tVars (Fun paramTypes retType) -> do
-  -- TODO: Determine arg types and check against param types
-      pure (T.FunCallE funName _ _, _, _)
-    _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
-checkExpr (T.EmptyList _) = pure (T.EmptyList ty, ty, emptySubst)
-  where ty = List Int -- TODO: Should be ∀a.[a]
-checkExpr (T.Tuple e1 e2 _) = do
-  (e1',t1,s1) <- checkExpr e1
-  (e2',t2,s2) <- checkExpr e2
-  let ty = Prod t1 t2
-  -- TODO: How to extract the types from e1' and e2' here?
-  pure (T.Tuple e1' e2' ty, ty, s1 `compose` s2)
-
-checkExprs :: [T.Expr ()] -> CGen ([T.Expr UType], [UType], Subst)
-checkExprs [] = pure ([],[],emptySubst)
-checkExprs (expr:exprs) = do
-  (expr', exprType, exprSubst) <- checkExpr expr
-  (exprs', exprsTypes, exprsSubst) <- checkExprs exprs
-  pure (expr':exprs', exprType:exprsTypes, exprSubst `compose` exprsSubst)
