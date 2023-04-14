@@ -17,6 +17,9 @@ import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
 import Control.Exception
 import Syntax.Desugar (desugar)
+import TypeInference.Definition (UType, runCgen)
+import TypeInference.ConstraintGen (checkProgram)
+import TypeInference.Annotate (annotateProgram)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -46,6 +49,12 @@ printStage = Stage $ \_ input -> Right $ print input
 desugarStage :: Stage ParseAST.Program (TypeAST.Program ())
 desugarStage = Stage $ \_ p -> Right $ desugar p
 
+typecheckStage :: Stage (TypeAST.Program ()) (TypeAST.Program UType)
+typecheckStage = Stage $ \_ p ->
+  case runCgen (checkProgram p) of
+    Left err -> Left $ hPutStrLn stderr $ T.unpack err
+    Right (p', s) -> Right $ annotateProgram s p'
+
 data Args = Args FilePath (Stage T.Text (IO ()))
 
 parseArgs :: [String] -> Maybe Args
@@ -53,6 +62,7 @@ parseArgs ("lex" : filePath : _) = Just (Args filePath (lexStage >-> printStage)
 parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> printStage))
 parseArgs ("prettyprint" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
 parseArgs ("desugar" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
+parseArgs ("typecheck" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
 parseArgs _ = Nothing
 
 main :: IO ()
@@ -64,7 +74,8 @@ main = do
       \spl-compiler lex <filename>\n\t\
       \spl-compiler parse <filename>\n\t\
       \spl-compiler prettyprint <filename>\n\t\
-      \spl-compiler desugar <filename>"
+      \spl-compiler desugar <filename>\n\t\
+      \spl-compiler typecheck <filename>"
     Just (Args filePath stage) -> do
       try (T.readFile filePath) >>= loadFile filePath stage
 

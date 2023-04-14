@@ -1,4 +1,4 @@
-module TypeInference.Annotate where
+module TypeInference.Annotate (annotateProgram) where
 
 import TypeInference.Definition
 import qualified Syntax.TypeAST as T

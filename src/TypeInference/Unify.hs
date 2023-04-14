@@ -11,6 +11,7 @@ import TypeInference.Definition
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad.Except
+import qualified Data.Text as T
 
 unify :: UType -> UType -> CGen Subst
 unify Int Int = pure M.empty
@@ -35,7 +36,7 @@ unify (Prod s1 s2) (Prod t1 t2) = do
   pure $ subst2 `compose` subst1
 unify (Fun ts1 t1) (Fun ts2 t2) = unifyFunTypes (ts1,t1) (ts2,t2) M.empty
 -- TODO: Handle TVar cases
-unify _ _ = throwError "Cannot unify types!"
+unify ty1 ty2 = throwError $ "Cannot unify `" <> T.pack (show ty1) <> "` with `" <> T.pack (show ty2) <> "`"
 
 unifyFunTypes :: ([UType], UType) -> ([UType], UType) -> Subst -> CGen Subst
 unifyFunTypes ([],r1) ([],r2) acc = do
