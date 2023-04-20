@@ -140,7 +140,7 @@ checkExpr (T.Ident name _) = do
   -- TODO: We need a way to check whether this a local or global variable
   mut <- lookupEnv (TermVar name)
   case mut of
-    Nothing -> error ""
+    Nothing -> throwError $ "Could not find variable `" <> name <> "`"
     Just ut -> pure (T.Ident name ut, ut, emptySubst)
 checkExpr (T.Int n _) = pure (T.Int n Int, Int, emptySubst)
 checkExpr (T.Char c _) = pure (T.Char c Char, Char, emptySubst)
