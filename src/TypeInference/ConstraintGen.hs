@@ -8,6 +8,8 @@ import qualified Syntax.TypeAST as T
 import Control.Monad.State
 import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
+import qualified Data.Map as M
+import qualified Data.Text as T
 
 checkProgram :: T.Program () -> CGen (T.Program UType, Subst)
 checkProgram (T.Program varDecls funDecls) = do
@@ -168,9 +170,9 @@ checkExprs (expr:exprs) = do
 
 checkFunCall :: T.FunName -> [T.Expr ()] -> CGen ([T.Expr UType], UType, Subst)
 checkFunCall funName args = do
-  funType <- getFunType funName
+  funType <- getFunType funName >>= instantiateScheme
   case funType of
-    UScheme tVars (Fun paramTypes retType) -> do
+    Fun paramTypes retType -> do
       (args', argsTypes, argsSubst) <- checkExprs args
       s <- unifyLists paramTypes argsTypes
       applySubst s
@@ -186,6 +188,25 @@ checkFunCall funName args = do
     unifyLists _ _ =
       throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
 
+instantiateScheme :: UScheme -> CGen UType
+instantiateScheme (UScheme tVars ty) = do
+  freshVars <- forM tVars (const $ UVar <$> freshVar)
+  let s = M.fromList $ zip tVars freshVars
+  pure $ substTyVars s ty
+
+substTyVars :: M.Map T.Text UType -> UType -> UType
+substTyVars _ (UVar i) = UVar i
+substTyVars _ Int = Int
+substTyVars _ Bool = Bool
+substTyVars _ Char = Char
+substTyVars _ Void = Void
+substTyVars s (Prod t1 t2) = Prod (substTyVars s t1) (substTyVars s t2)
+substTyVars s (List t) = List (substTyVars s t)
+substTyVars s (Fun ts t) = Fun (substTyVars s <$> ts) (substTyVars s t)
+substTyVars s (TVar ident) =
+  case M.lookup ident s of
+    Nothing -> error $ "Could not find an instantiation for type var `" <> show ident <> "` in the scheme"
+    Just ty -> ty
 
 getFunType :: T.FunName -> CGen UScheme
 getFunType funName = do
