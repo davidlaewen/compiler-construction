@@ -10,6 +10,7 @@ import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
 import qualified Data.Map as M
 import qualified Data.Text as T
+import Debug.Trace (trace)
 
 checkProgram :: T.Program () -> CGen (T.Program UType, Subst)
 checkProgram (T.Program varDecls funDecls) = do
@@ -176,14 +177,14 @@ checkFunCall funName args = do
       (args', argsTypes, argsSubst) <- checkExprs args
       s <- unifyLists paramTypes argsTypes
       applySubst s
-      pure (args', retType, s `compose` argsSubst)
+      pure (args', subst s retType, s `compose` argsSubst)
     _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
   where
     unifyLists :: [UType] -> [UType] -> CGen Subst
     unifyLists [] [] = pure emptySubst
     unifyLists (ty1:tys1) (ty2:tys2) = do
       s <- unify ty1 ty2
-      ss <- unifyLists tys1 tys2
+      ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
       pure $ ss `compose` s
     unifyLists _ _ =
       throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
