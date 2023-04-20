@@ -197,11 +197,11 @@ getFunType funName = do
         Just funType -> pure $ UScheme [] funType
     T.Not -> pure $ UScheme [] (Fun [Bool] Bool)
     T.Neg -> pure $ UScheme [] (Fun [Int] Int)
-    T.Add -> pure $ UScheme [] (Fun [Int] Int)
-    T.Sub -> pure $ UScheme [] (Fun [Int] Int)
-    T.Mul -> pure $ UScheme [] (Fun [Int] Int)
-    T.Div -> pure $ UScheme [] (Fun [Int] Int)
-    T.Mod -> pure $ UScheme [] (Fun [Int] Int)
+    T.Add -> pure $ UScheme [] (Fun [Int, Int] Int)
+    T.Sub -> pure $ UScheme [] (Fun [Int, Int] Int)
+    T.Mul -> pure $ UScheme [] (Fun [Int, Int] Int)
+    T.Div -> pure $ UScheme [] (Fun [Int, Int] Int)
+    T.Mod -> pure $ UScheme [] (Fun [Int, Int] Int)
     T.Eq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] (TVar "a")) -- TODO: We probably want an Eq type class for this
     T.Neq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] (TVar "a")) -- Same here
     T.Lt -> pure $ UScheme [] (Fun [Int,Int] Int)
