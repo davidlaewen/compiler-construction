@@ -202,12 +202,12 @@ getFunType funName = do
     T.Mul -> pure $ UScheme [] (Fun [Int, Int] Int)
     T.Div -> pure $ UScheme [] (Fun [Int, Int] Int)
     T.Mod -> pure $ UScheme [] (Fun [Int, Int] Int)
-    T.Eq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] (TVar "a")) -- TODO: We probably want an Eq type class for this
-    T.Neq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] (TVar "a")) -- Same here
-    T.Lt -> pure $ UScheme [] (Fun [Int,Int] Int)
-    T.Gt -> pure $ UScheme [] (Fun [Int,Int] Int)
-    T.Lte -> pure $ UScheme [] (Fun [Int,Int] Int)
-    T.Gte -> pure $ UScheme [] (Fun [Int,Int] Int)
+    T.Eq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] Bool) -- TODO: We probably want an Eq type class for this
+    T.Neq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] Bool) -- Same here
+    T.Lt -> pure $ UScheme [] (Fun [Int,Int] Bool)
+    T.Gt -> pure $ UScheme [] (Fun [Int,Int] Bool)
+    T.Lte -> pure $ UScheme [] (Fun [Int,Int] Bool)
+    T.Gte -> pure $ UScheme [] (Fun [Int,Int] Bool)
     T.And -> pure $ UScheme [] (Fun [Bool,Bool] Bool)
     T.Or -> pure $ UScheme [] (Fun [Bool,Bool] Bool)
     T.Cons -> pure $ UScheme ["a"] (Fun [TVar "a", List (TVar "a")] (List (TVar "a")))
