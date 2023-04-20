@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module TypeInference.ConstraintGen where
 
@@ -9,31 +10,27 @@ import Control.Monad.State
 import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
 import qualified Data.Map as M
-import qualified Data.Text as T
-import Debug.Trace (trace)
 
 checkProgram :: T.Program () -> CGen (T.Program UType, Subst)
 checkProgram (T.Program varDecls funDecls) = do
-  (vds,s1) <- checkVarDecls varDecls True
+  (vds,s1) <- checkVarDecls varDecls GlobalLevel
   (fds,s2) <- checkFunDecls funDecls
   pure (T.Program vds fds, s1 `compose` s2)
 
-checkVarDecls :: [T.VarDecl ()] -> Bool -> CGen ([T.VarDecl UType], Subst)
+checkVarDecls :: [T.VarDecl ()] -> EnvLevel -> CGen ([T.VarDecl UType], Subst)
 checkVarDecls [] _ = pure ([], emptySubst)
-checkVarDecls (varDecl:varDecls) isTopLevel = do
-  (varDecl',s) <- checkVarDecl varDecl isTopLevel
-  (varDecls',ss) <- checkVarDecls varDecls isTopLevel
+checkVarDecls (varDecl:varDecls) envLevel = do
+  (varDecl',s) <- checkVarDecl varDecl envLevel
+  (varDecls',ss) <- checkVarDecls varDecls envLevel
   pure (varDecl':varDecls', ss `compose` s)
 
-checkVarDecl :: T.VarDecl () -> Bool -> CGen (T.VarDecl UType, Subst)
-checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
+checkVarDecl :: T.VarDecl () -> EnvLevel -> CGen (T.VarDecl UType, Subst)
+checkVarDecl (T.VarDecl mTy name expr _) envLevel = do
   uTy <- case mTy of
     Nothing -> UVar <$> freshVar
     Just ty -> pure ty
   (expr', exprType, exprSubst) <- checkExpr expr
-  if isTopLevel
-    then modifyGlobalEnv $ envInsert (TermVar name) uTy
-    else modifyLocalEnv $ envInsert (TermVar name) uTy
+  envInsertVar envLevel name uTy
   s <- unify exprType uTy
   applySubst s
   {- TODO: Check inferred type against user-specified type
@@ -55,17 +52,18 @@ checkFunDecls (funDecl:funDecls) = do
 checkFunDecl :: T.FunDecl () -> CGen (T.FunDecl UType, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   uVarsParams <- forM params (const $ UVar <$> freshVar)
+  forM_ (zip params uVarsParams) $
+    \(param, uVar) -> envInsertVar LocalLevel param uVar
   uVarRet <- freshVar
-  modifyLocalEnv (\env -> foldr (uncurry envInsert) env (zip (TermVar <$> params) uVarsParams))
-  modifyLocalEnv $ envInsert RetType (UVar uVarRet)
+  envInsertRetType (UVar uVarRet)
   -- Insert mapping for function name in order to typecheck recursive calls
-  modifyLocalEnv $ envInsert (FunName name) (Fun uVarsParams (UVar uVarRet))
-  (varDecls',varDeclsSubst) <- checkVarDecls varDecls False
+  envInsertFun LocalLevel name (Fun uVarsParams (UVar uVarRet))
+  (varDecls',varDeclsSubst) <- checkVarDecls varDecls LocalLevel
   (stmts',stmtsSubst) <- checkStmts stmts
-  modifyLocalEnv $ const emptyEnv
+  clearLocalEnv
   -- TODO: Check user-specified type against inferred type
   let s = stmtsSubst `compose` varDeclsSubst
-  modifyGlobalEnv $ envInsert (FunName name) (subst s $ Fun uVarsParams (UVar uVarRet))
+  envInsertFun GlobalLevel name (subst s $ Fun uVarsParams (UVar uVarRet))
   pure (T.FunDecl name params mTy varDecls' stmts' (Fun uVarsParams (UVar uVarRet)), s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
@@ -99,7 +97,7 @@ checkStmt (T.Assign varLookup expr) = do
   where
     foo :: T.VarLookup -> UType -> CGen Subst
     foo (T.VarId name) exprType = do
-      mVarType <- lookupEnv (TermVar name)
+      mVarType <- envLookupVar name
       case mVarType of
         Nothing -> throwError $ "No variable declaration matching " <> name
         Just varType -> do
@@ -122,7 +120,7 @@ checkStmt (T.FunCall funName args) = do
   pure (T.FunCall funName args', s)
 
 checkStmt (T.Return mExpr) = do
-  mRetType <- lookupEnv RetType
+  mRetType <- envLookupRetType
   case mRetType of
     Nothing -> error "RetType not found in environment!"
     Just retType -> do
@@ -141,10 +139,10 @@ checkStmt (T.Return mExpr) = do
 checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
 checkExpr (T.Ident name _) = do
   -- TODO: We need a way to check whether this a local or global variable
-  mut <- lookupEnv (TermVar name)
-  case mut of
-    Nothing -> throwError $ "Could not find variable `" <> name <> "`"
-    Just ut -> pure (T.Ident name ut, ut, emptySubst)
+  envLookupVar name >>=
+    \case
+      Nothing -> throwError $ "Could not find variable `" <> name <> "`"
+      Just ut -> pure (T.Ident name ut, ut, emptySubst)
 checkExpr (T.Int n _) = pure (T.Int n Int, Int, emptySubst)
 checkExpr (T.Char c _) = pure (T.Char c Char, Char, emptySubst)
 checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, emptySubst)
@@ -199,7 +197,7 @@ getFunType :: T.FunName -> CGen UScheme
 getFunType funName = do
   case funName of
     T.Name name -> do
-      mFunType <- lookupEnv (FunName name)
+      mFunType <- envLookupFun name
       case mFunType of
         Nothing -> throwError $ "No declaration for function " <> name
         Just funType -> pure $ UScheme [] funType

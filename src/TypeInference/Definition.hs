@@ -4,21 +4,20 @@ module TypeInference.Definition (
   UVar,
   UType(..),
   UScheme(..),
-  Id(..),
-  Environment,
-  emptyEnv,
   Subst,
   CGen,
+  EnvLevel(..),
   applySubst,
-  modifyGlobalEnv,
-  modifyLocalEnv,
-  lookupGlobalEnv,
-  lookupEnv,
   runCgen,
   freshVar,
-  envInsert,
-  envMap,
   emptySubst,
+  envInsertVar,
+  envInsertRetType,
+  envInsertFun,
+  clearLocalEnv,
+  envLookupVar,
+  envLookupFun,
+  envLookupRetType,
   subst,
   compose
 ) where
@@ -55,48 +54,92 @@ data UScheme = UScheme [UVar] UType
 
 -- TODO: A single var sort might be sufficient, since scoping is determined
 -- through modification of the CGen state
-data Id = TermVar T.Text | FunName T.Text | TyVar TVar | RetType
+-- data Id = TermVar T.Text | FunName T.Text | TyVar TVar | RetType
+--   deriving (Eq, Ord)
+
+data LocalId = LocalTermVar T.Text | LocalFunName T.Text | TyVar TVar | RetType
+  deriving (Eq, Ord)
+data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
   deriving (Eq, Ord)
 
-type Environment = M.Map Id UType
+data EnvLevel = GlobalLevel | LocalLevel
 
-emptyEnv :: Environment
-emptyEnv = M.empty
+type GlobalEnv = M.Map GlobalId UType
+type LocalEnv = M.Map LocalId UType
 
 type VarState = UVar
 
 type Subst = (M.Map UVar UType)
 
-data CGenState = CGenState{ globalEnv :: Environment, localEnv :: Environment, varState :: VarState }
+data CGenState = CGenState{ globalEnv :: GlobalEnv, localEnv :: LocalEnv, varState :: VarState }
 
 type CGen = StateT CGenState (Except T.Text)
 
 applySubst :: Subst -> CGen ()
 applySubst s = do
-  modifyLocalEnv $ envMap (subst s)
-  modifyGlobalEnv $ envMap (subst s)
+  modifyLocalEnv $ M.map (subst s)
+  modifyGlobalEnv $ M.map (subst s)
 
-modifyGlobalEnv :: (Environment -> Environment) -> CGen ()
+modifyGlobalEnv :: (GlobalEnv -> GlobalEnv) -> CGen ()
 modifyGlobalEnv f = modify (\s -> s{ globalEnv = f s.globalEnv })
 
-modifyLocalEnv :: (Environment -> Environment) -> CGen ()
+modifyLocalEnv :: (LocalEnv -> LocalEnv) -> CGen ()
 modifyLocalEnv f = modify (\s -> s{ localEnv = f s.localEnv })
 
-lookupGlobalEnv :: Id -> CGen (Maybe UType)
-lookupGlobalEnv name = do
-  globalEnv <- gets globalEnv
-  pure $ envLookup name globalEnv
+envInsertVar :: EnvLevel -> T.Text -> UType -> CGen ()
+envInsertVar GlobalLevel ident ty = modifyGlobalEnv (M.insert (GlobalTermVar ident) ty)
+envInsertVar LocalLevel ident ty = modifyLocalEnv (M.insert (LocalTermVar ident) ty)
 
-lookupEnv :: Id -> CGen (Maybe UType)
-lookupEnv name = do
-  localEnv <- gets localEnv
-  case envLookup name localEnv of
-    Just ty -> pure $ Just ty
-    Nothing -> lookupGlobalEnv name
+envInsertFun :: EnvLevel -> T.Text -> UType -> CGen ()
+envInsertFun GlobalLevel ident ty = modifyGlobalEnv (M.insert (GlobalFunName ident) ty)
+envInsertFun LocalLevel ident ty = modifyLocalEnv (M.insert (LocalFunName ident) ty)
+
+envInsertRetType :: UType -> CGen ()
+envInsertRetType ty = modifyLocalEnv (M.insert RetType ty)
+
+clearLocalEnv :: CGen ()
+clearLocalEnv = modifyLocalEnv (const M.empty)
+
+envLookupVar :: T.Text -> CGen (Maybe UType)
+envLookupVar name =
+  M.lookup (LocalTermVar name) <$> gets localEnv >>= \case
+    Just ty -> pure (Just ty)
+    Nothing ->
+      M.lookup (GlobalTermVar name) <$> gets globalEnv >>= \case
+        Just ty -> pure (Just ty)
+        Nothing -> pure Nothing
+
+envLookupFun :: T.Text -> CGen (Maybe UType)
+envLookupFun name =
+  M.lookup (LocalFunName name) <$> gets localEnv >>= \case
+    Just ty -> pure (Just ty)
+    Nothing ->
+      M.lookup (GlobalFunName name) <$> gets globalEnv >>= \case
+        Just ty -> pure (Just ty)
+        Nothing -> pure Nothing
+
+envLookupRetType :: CGen (Maybe UType)
+envLookupRetType = gets (M.lookup RetType . localEnv)
+
+-- envInsertFun :: EnvLevel -> T.Text -> UType -> CGen ()
+-- envInsertVar GlobalLevel ident ty = modifyGlobalEnv (M.insert (GlobalTermVar ident) ty)
+-- envInsertVar LocalLevel ident ty = modifyLocalEnv (M.insert (LocalTermVar ident) ty)
+
+-- lookupGlobalEnv :: GlobalId -> CGen (Maybe UType)
+-- lookupGlobalEnv name = do
+--   globalEnv <- gets globalEnv
+--   pure $ envLookup name globalEnv
+
+-- lookupEnv :: Id -> CGen (Maybe UType)
+-- lookupEnv name = do
+--   localEnv <- gets localEnv
+--   case envLookup name localEnv of
+--     Just ty -> pure $ Just ty
+--     Nothing -> lookupGlobalEnv name
 
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
-  x CGenState{ globalEnv = emptyEnv, localEnv = emptyEnv, varState = 0 })
+  x CGenState{ globalEnv = M.empty, localEnv = M.empty, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do
@@ -104,14 +147,11 @@ freshVar = do
   modify (\s -> s{ varState = i+1 })
   pure i
 
-envLookup :: Id -> Environment -> Maybe UType
-envLookup = M.lookup
+-- envInsert :: Id -> UType -> Environment -> Environment
+-- envInsert = M.insert
 
-envInsert :: Id -> UType -> Environment -> Environment
-envInsert = M.insert
-
-envMap :: (UType -> UType) -> Environment -> Environment
-envMap = M.map
+-- envMap :: (UType -> UType) -> Environment -> Environment
+-- envMap = M.map
 
 emptySubst :: Subst
 emptySubst = M.empty
