@@ -51,7 +51,7 @@ freeTyVars (UVar _) = error "Called `freeTyVars` on a type containing uvars!"
 freeTyVars (TVar s) = S.singleton s
 
 
-data UScheme = UScheme [TVar] UType
+data UScheme = UScheme [UVar] UType
 
 -- TODO: A single var sort might be sufficient, since scoping is determined
 -- through modification of the CGen state

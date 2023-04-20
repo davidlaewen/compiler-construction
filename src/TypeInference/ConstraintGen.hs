@@ -192,21 +192,7 @@ instantiateScheme :: UScheme -> CGen UType
 instantiateScheme (UScheme tVars ty) = do
   freshVars <- forM tVars (const $ UVar <$> freshVar)
   let s = M.fromList $ zip tVars freshVars
-  pure $ substTyVars s ty
-
-substTyVars :: M.Map T.Text UType -> UType -> UType
-substTyVars _ (UVar i) = UVar i
-substTyVars _ Int = Int
-substTyVars _ Bool = Bool
-substTyVars _ Char = Char
-substTyVars _ Void = Void
-substTyVars s (Prod t1 t2) = Prod (substTyVars s t1) (substTyVars s t2)
-substTyVars s (List t) = List (substTyVars s t)
-substTyVars s (Fun ts t) = Fun (substTyVars s <$> ts) (substTyVars s t)
-substTyVars s (TVar ident) =
-  case M.lookup ident s of
-    Nothing -> error $ "Could not find an instantiation for type var `" <> show ident <> "` in the scheme"
-    Just ty -> ty
+  pure $ subst s ty
 
 getFunType :: T.FunName -> CGen UScheme
 getFunType funName = do
@@ -223,18 +209,18 @@ getFunType funName = do
     T.Mul -> pure $ UScheme [] (Fun [Int, Int] Int)
     T.Div -> pure $ UScheme [] (Fun [Int, Int] Int)
     T.Mod -> pure $ UScheme [] (Fun [Int, Int] Int)
-    T.Eq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] Bool) -- TODO: We probably want an Eq type class for this
-    T.Neq -> pure $ UScheme ["a"] (Fun [TVar "a", TVar "a"] Bool) -- Same here
+    T.Eq -> pure $ UScheme [0] (Fun [UVar 0, UVar 0] Bool) -- TODO: We probably want an Eq type class for this
+    T.Neq -> pure $ UScheme [0] (Fun [UVar 0, UVar 0] Bool) -- Same here
     T.Lt -> pure $ UScheme [] (Fun [Int,Int] Bool)
     T.Gt -> pure $ UScheme [] (Fun [Int,Int] Bool)
     T.Lte -> pure $ UScheme [] (Fun [Int,Int] Bool)
     T.Gte -> pure $ UScheme [] (Fun [Int,Int] Bool)
     T.And -> pure $ UScheme [] (Fun [Bool,Bool] Bool)
     T.Or -> pure $ UScheme [] (Fun [Bool,Bool] Bool)
-    T.Cons -> pure $ UScheme ["a"] (Fun [TVar "a", List (TVar "a")] (List (TVar "a")))
-    T.IsEmpty -> pure $ UScheme ["a"] (Fun [List (TVar "a")] Bool)
-    T.Print -> pure $ UScheme ["a"] (Fun [TVar "a"] Void)
-    T.HeadFun -> pure $ UScheme ["a"] (Fun [List $ TVar "a"] $ TVar "a")
-    T.TailFun -> pure $ UScheme ["a"] (Fun [List $ TVar "a"] (List (TVar "a")))
-    T.FstFun -> pure $ UScheme ["a","b"] (Fun [Prod (TVar "a") (TVar "b")] (TVar "a"))
-    T.SndFun -> pure $ UScheme ["a","b"] (Fun [Prod (TVar "a") (TVar "b")] (TVar "b"))
+    T.Cons -> pure $ UScheme [0] (Fun [UVar 0, List (UVar 0)] (List (UVar 0)))
+    T.IsEmpty -> pure $ UScheme [0] (Fun [List (UVar 0)] Bool)
+    T.Print -> pure $ UScheme [0] (Fun [UVar 0] Void)
+    T.HeadFun -> pure $ UScheme [0] (Fun [List $ UVar 0] $ UVar 0)
+    T.TailFun -> pure $ UScheme [0] (Fun [List $ UVar 0] (List (UVar 0)))
+    T.FstFun -> pure $ UScheme [0, 1] (Fun [Prod (UVar 0) (UVar 1)] (UVar 0))
+    T.SndFun -> pure $ UScheme [0, 1] (Fun [Prod (UVar 0) (UVar 1)] (UVar 1))
