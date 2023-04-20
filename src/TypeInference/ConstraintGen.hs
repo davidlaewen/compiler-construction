@@ -24,12 +24,14 @@ checkVarDecls (varDecl:varDecls) isTopLevel = do
 
 checkVarDecl :: T.VarDecl () -> Bool -> CGen (T.VarDecl UType, Subst)
 checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
-  uVar <- UVar <$> freshVar
+  uTy <- case mTy of
+    Nothing -> UVar <$> freshVar
+    Just ty -> pure ty
   (expr', exprType, exprSubst) <- checkExpr expr
   if isTopLevel
-    then modifyGlobalEnv $ envInsert (TermVar name) uVar
-    else modifyLocalEnv $ envInsert (TermVar name) uVar
-  s <- unify exprType uVar
+    then modifyGlobalEnv $ envInsert (TermVar name) uTy
+    else modifyLocalEnv $ envInsert (TermVar name) uTy
+  s <- unify exprType uTy
   applySubst s
   {- TODO: Check inferred type against user-specified type
   case mTy of
@@ -38,7 +40,7 @@ checkVarDecl (T.VarDecl mTy name expr _) isTopLevel = do
       ...
     Nothing -> pure (T.VarDecl mTy name expr' uVar, exprSubst)
   -}
-  pure (T.VarDecl mTy name expr' uVar, s `compose` exprSubst)
+  pure (T.VarDecl mTy name expr' uTy, s `compose` exprSubst)
 
 checkFunDecls :: [T.FunDecl ()] -> CGen ([T.FunDecl UType], Subst)
 checkFunDecls [] = pure ([], emptySubst)
