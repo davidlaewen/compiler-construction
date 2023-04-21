@@ -4,14 +4,13 @@ module TypeInference.Definition (
   UVar,
   UType(..),
   UScheme(..),
-  Subst,
+  Subst(Subst),
   CGen,
   EnvLevel(..),
   Types(..),
   applySubst,
   runCgen,
   freshVar,
-  emptySubst,
   envInsertVar,
   envInsertRetType,
   envLocalInsertFun,
@@ -20,7 +19,6 @@ module TypeInference.Definition (
   envLookupVar,
   envLookupFun,
   envLookupRetType,
-  compose
 ) where
 
 import qualified Data.Map as M
@@ -39,18 +37,6 @@ data UType = Int | Bool | Char | Void
            | UVar UVar
            | TVar TVar
   deriving (Show, Eq)
-
--- freeTyVars :: UType -> S.Set TVar
--- freeTyVars Int = S.empty
--- freeTyVars Bool = S.empty
--- freeTyVars Char = S.empty
--- freeTyVars Void = S.empty
--- freeTyVars (Prod t1 t2) = freeTyVars t1 `S.union` freeTyVars t2
--- freeTyVars (List t) = freeTyVars t
--- freeTyVars (Fun ts t) = foldMap freeTyVars ts `S.union` freeTyVars t
--- freeTyVars (UVar _) = error "Called `freeTyVars` on a type containing uvars!"
--- freeTyVars (TVar s) = S.singleton s
-
 
 data UScheme = UScheme (S.Set UVar) UType
   deriving (Show)
@@ -76,7 +62,7 @@ type LocalEnv = M.Map LocalId UType
 
 type VarState = UVar
 
-type Subst = (M.Map UVar UType)
+newtype Subst = Subst (M.Map UVar UType)
 
 data CGenState = CGenState{ globalEnv :: GlobalEnv, localEnv :: LocalEnv, varState :: VarState }
 
@@ -131,22 +117,6 @@ envLookupFun name =
 envLookupRetType :: CGen (Maybe UType)
 envLookupRetType = gets (M.lookup RetType . localEnv)
 
--- envInsertFun :: EnvLevel -> T.Text -> UType -> CGen ()
--- envInsertVar GlobalLevel ident ty = modifyGlobalEnv (M.insert (GlobalTermVar ident) ty)
--- envInsertVar LocalLevel ident ty = modifyLocalEnv (M.insert (LocalTermVar ident) ty)
-
--- lookupGlobalEnv :: GlobalId -> CGen (Maybe UType)
--- lookupGlobalEnv name = do
---   globalEnv <- gets globalEnv
---   pure $ envLookup name globalEnv
-
--- lookupEnv :: Id -> CGen (Maybe UType)
--- lookupEnv name = do
---   localEnv <- gets localEnv
---   case envLookup name localEnv of
---     Just ty -> pure $ Just ty
---     Nothing -> lookupGlobalEnv name
-
 runCgen :: CGen a -> Either T.Text a
 runCgen x = fst <$> runExcept (runStateT
   x CGenState{ globalEnv = M.empty, localEnv = M.empty, varState = 0 })
@@ -157,15 +127,9 @@ freshVar = do
   modify (\s -> s{ varState = i+1 })
   pure i
 
--- envInsert :: Id -> UType -> Environment -> Environment
--- envInsert = M.insert
-
--- envMap :: (UType -> UType) -> Environment -> Environment
--- envMap = M.map
-
 instance Types UType where
   subst :: Subst -> UType -> UType
-  subst s (UVar i) =
+  subst (Subst s) (UVar i) =
     case M.lookup i s of
       Nothing -> UVar i
       Just t -> t
@@ -191,23 +155,13 @@ instance Types UType where
 
 instance Types UScheme where
   subst :: Subst -> UScheme -> UScheme
-  subst s (UScheme binders ty) = UScheme binders (subst (M.withoutKeys s binders) ty)
+  subst (Subst s) (UScheme binders ty) = UScheme binders (subst (Subst $ M.withoutKeys s binders) ty)
 
   freeUVars :: UScheme -> S.Set UVar
   freeUVars (UScheme binders ty) = freeUVars ty \\ binders
 
+instance Semigroup Subst where
+  Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1
 
-
--- instance Types [UType] where
---   subst :: Subst -> [UType] -> [UType]
---   subst s = map (subst s)
-
---   freeUVars :: [UType]
-
--- TODO: Use Monoid for these two operations
-emptySubst :: Subst
-emptySubst = M.empty
-
--- | Composes substition s1 after s2
-compose :: Subst -> Subst -> Subst
-compose s1 s2 = M.map (subst s1) s2 `M.union` s1
+instance Monoid Subst where
+  mempty = Subst M.empty

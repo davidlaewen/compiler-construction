@@ -16,14 +16,14 @@ checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program varDecls funDecls) = do
   (vds,s1) <- checkVarDecls varDecls GlobalLevel
   (fds,s2) <- checkFunDecls funDecls
-  pure (T.Program vds fds, s1 `compose` s2)
+  pure (T.Program vds fds, s1 <> s2)
 
 checkVarDecls :: [T.VarDecl ()] -> EnvLevel -> CGen ([T.VarDecl UType], Subst)
-checkVarDecls [] _ = pure ([], emptySubst)
+checkVarDecls [] _ = pure ([], mempty)
 checkVarDecls (varDecl:varDecls) envLevel = do
   (varDecl',s) <- checkVarDecl varDecl envLevel
   (varDecls',ss) <- checkVarDecls varDecls envLevel
-  pure (varDecl':varDecls', ss `compose` s)
+  pure (varDecl':varDecls', ss <> s)
 
 checkVarDecl :: T.VarDecl () -> EnvLevel -> CGen (T.VarDecl UType, Subst)
 checkVarDecl (T.VarDecl mTy name expr _) envLevel = do
@@ -34,14 +34,14 @@ checkVarDecl (T.VarDecl mTy name expr _) envLevel = do
   envInsertVar envLevel name uTy
   s <- unify exprType uTy
   applySubst s
-  pure (T.VarDecl mTy name expr' uTy, s `compose` exprSubst)
+  pure (T.VarDecl mTy name expr' uTy, s <> exprSubst)
 
 checkFunDecls :: [T.FunDecl () ()] -> CGen ([T.FunDecl UType UScheme], Subst)
-checkFunDecls [] = pure ([], emptySubst)
+checkFunDecls [] = pure ([], mempty)
 checkFunDecls (funDecl:funDecls) = do
   (funDecl',s) <- checkFunDecl funDecl
   (funDecls',ss) <- checkFunDecls funDecls
-  pure (funDecl':funDecls', ss `compose` s)
+  pure (funDecl':funDecls', ss <> s)
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
@@ -55,7 +55,7 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- TODO: Check user-specified type against inferred type
-  let s = stmtsSubst `compose` varDeclsSubst
+  let s = stmtsSubst <> varDeclsSubst
   let funTy = subst s $ Fun uVarsParams retTy
   let binders = freeUVars funTy
   let funScheme = UScheme binders funTy
@@ -63,11 +63,11 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   pure (T.FunDecl name params mTy varDecls' stmts' funScheme, s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
-checkStmts [] = pure ([], emptySubst)
+checkStmts [] = pure ([], mempty)
 checkStmts (stmt:stmts) = do
   (stmt',s) <- checkStmt stmt
   (stmts',ss) <- checkStmts stmts
-  pure (stmt':stmts', ss `compose` s)
+  pure (stmt':stmts', ss <> s)
 
 checkStmt :: T.Stmt () -> CGen (T.Stmt UType, Subst)
 checkStmt (T.If condExpr thenStmts elseStmts) = do
@@ -77,19 +77,19 @@ checkStmt (T.If condExpr thenStmts elseStmts) = do
   (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
   (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
   pure (T.If condExpr' thenStmts' elseStmts',
-    elseStmtsSubst `compose` thenStmtsSubst `compose` s `compose` condExprSubst)
+    elseStmtsSubst <> thenStmtsSubst <> s <> condExprSubst)
 
 checkStmt (T.While condExpr loopStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
   s <- unify condExprType Bool
   applySubst s
   (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
-  pure (T.While condExpr' loopStmts', loopStmtsSubst `compose` s `compose` condExprSubst)
+  pure (T.While condExpr' loopStmts', loopStmtsSubst <> s <> condExprSubst)
 
 checkStmt (T.Assign varLookup expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
   s <- foo varLookup exprType
-  pure (T.Assign varLookup expr', s `compose` exprSubst)
+  pure (T.Assign varLookup expr', s <> exprSubst)
   where
     foo :: T.VarLookup -> UType -> CGen Subst
     foo (T.VarId name) exprType = do
@@ -129,7 +129,7 @@ checkStmt (T.Return mExpr) = do
           (expr', exprType, exprSubst) <- checkExpr expr
           s <- unify retType exprType
           applySubst s
-          pure (T.Return (Just expr'), s `compose` exprSubst)
+          pure (T.Return (Just expr'), s <> exprSubst)
 
 
 checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
@@ -138,27 +138,27 @@ checkExpr (T.Ident name _) = do
   envLookupVar name >>=
     \case
       Nothing -> throwError $ "Could not find variable `" <> name <> "`"
-      Just ut -> pure (T.Ident name ut, ut, emptySubst)
-checkExpr (T.Int n _) = pure (T.Int n Int, Int, emptySubst)
-checkExpr (T.Char c _) = pure (T.Char c Char, Char, emptySubst)
-checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, emptySubst)
+      Just ut -> pure (T.Ident name ut, ut, mempty)
+checkExpr (T.Int n _) = pure (T.Int n Int, Int, mempty)
+checkExpr (T.Char c _) = pure (T.Char c Char, Char, mempty)
+checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, mempty)
 checkExpr (T.FunCallE funName args _) = do
   (args', retType, s) <- checkFunCall funName args
   pure (T.FunCallE funName args' retType, retType, s)
-checkExpr (T.EmptyList _) = pure (T.EmptyList ty, ty, emptySubst)
+checkExpr (T.EmptyList _) = pure (T.EmptyList ty, ty, mempty)
   where ty = List Int -- TODO: Should be ∀a.[a]
 checkExpr (T.Tuple e1 e2 _) = do
   (e1',t1,s1) <- checkExpr e1
   (e2',t2,s2) <- checkExpr e2
   let ty = Prod t1 t2
-  pure (T.Tuple e1' e2' ty, ty, s1 `compose` s2)
+  pure (T.Tuple e1' e2' ty, ty, s1 <> s2)
 
 checkExprs :: [T.Expr ()] -> CGen ([T.Expr UType], [UType], Subst)
-checkExprs [] = pure ([],[],emptySubst)
+checkExprs [] = pure ([],[],mempty)
 checkExprs (expr:exprs) = do
   (expr', exprType, exprSubst) <- checkExpr expr
   (exprs', exprsTypes, exprsSubst) <- checkExprs exprs
-  pure (expr':exprs', exprType:exprsTypes, exprSubst `compose` exprsSubst)
+  pure (expr':exprs', exprType:exprsTypes, exprSubst <> exprsSubst)
 
 
 
@@ -170,22 +170,22 @@ checkFunCall funName args = do
       (args', argsTypes, argsSubst) <- checkExprs args
       s <- unifyLists paramTypes argsTypes
       applySubst s
-      pure (args', subst s retType, s `compose` argsSubst)
+      pure (args', subst s retType, s <> argsSubst)
     _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
   where
     unifyLists :: [UType] -> [UType] -> CGen Subst
-    unifyLists [] [] = pure emptySubst
+    unifyLists [] [] = pure mempty
     unifyLists (ty1:tys1) (ty2:tys2) = do
       s <- unify ty1 ty2
       ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
-      pure $ ss `compose` s
+      pure $ ss <> s
     unifyLists _ _ =
       throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
 
 instantiateScheme :: UScheme -> CGen UType
 instantiateScheme (UScheme tVars ty) = do
   s <- sequence $ M.fromSet (const $ UVar <$> freshVar) tVars
-  pure $ subst s ty
+  pure $ subst (Subst s) ty
 
 getFunType :: T.FunName -> CGen UScheme
 getFunType funName = do
