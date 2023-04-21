@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, InstanceSigs, OverloadedStrings #-}
 
 module Syntax.Desugar (
   desugar
@@ -34,6 +34,8 @@ instance Desugar P.Stmt (T.Stmt ()) where
     T.If (desugar expr) (desugar <$> thenStmts) (desugar <$> elseStmts)
   desugar (P.While e stmts) = T.While (desugar e) (desugar <$> stmts)
   desugar (P.Assign varLookup e) = T.Assign (desugar varLookup) (desugar e)
+  desugar (P.FunCall "print" args) = T.FunCall T.Print (desugar <$> args)
+  desugar (P.FunCall "isEmpty" args) = T.FunCall T.IsEmpty (desugar <$> args)
   desugar (P.FunCall name args) = T.FunCall (T.Name name) (desugar <$> args)
   desugar (P.Return me) = T.Return (desugar <$> me)
   desugar P.GarbageS = error "Attempted to desugar GarbageS node from ParseAST!"
