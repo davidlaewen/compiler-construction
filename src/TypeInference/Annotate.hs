@@ -3,7 +3,7 @@ module TypeInference.Annotate (annotateProgram) where
 import TypeInference.Definition
 import qualified Syntax.TypeAST as T
 
-annotateProgram :: Subst -> T.Program UType -> T.Program UType
+annotateProgram :: Subst -> T.Program UType UScheme -> T.Program UType UScheme
 annotateProgram s (T.Program varDecls funDecls) =
   T.Program (annotateVarDecl s <$> varDecls) (annotateFunDecl s <$> funDecls)
 
@@ -11,7 +11,7 @@ annotateVarDecl :: Subst -> T.VarDecl UType -> T.VarDecl UType
 annotateVarDecl s (T.VarDecl mTy name expr ty) =
   T.VarDecl mTy name (annotateExpr s expr) (subst s ty)
 
-annotateFunDecl :: Subst -> T.FunDecl UType -> T.FunDecl UType
+annotateFunDecl :: Subst -> T.FunDecl UType UScheme -> T.FunDecl UType UScheme
 annotateFunDecl s (T.FunDecl name params mTy varDecls stmts ty) =
   T.FunDecl name params mTy (annotateVarDecl s <$> varDecls) (annotateStmt s <$> stmts) (subst s ty)
 

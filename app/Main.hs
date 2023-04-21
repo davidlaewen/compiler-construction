@@ -17,7 +17,7 @@ import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
 import Control.Exception
 import Syntax.Desugar (desugar)
-import TypeInference.Definition (UType, runCgen)
+import TypeInference.Definition (UType, UScheme, runCgen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
 
@@ -46,10 +46,10 @@ prettyPrintStage = Stage $ const $ \program -> Right $ prettyPrinter program
 printStage :: Show a => Stage a (IO ())
 printStage = Stage $ \_ input -> Right $ print input
 
-desugarStage :: Stage ParseAST.Program (TypeAST.Program ())
+desugarStage :: Stage ParseAST.Program (TypeAST.Program () ())
 desugarStage = Stage $ \_ p -> Right $ desugar p
 
-typecheckStage :: Stage (TypeAST.Program ()) (TypeAST.Program UType)
+typecheckStage :: Stage (TypeAST.Program () ()) (TypeAST.Program UType UScheme)
 typecheckStage = Stage $ \_ p ->
   case runCgen (checkProgram p) of
     Left err -> Left $ hPutStrLn stderr $ T.unpack err

@@ -12,13 +12,13 @@ module Syntax.TypeAST (
 import qualified Data.Text as T
 import TypeInference.Definition
 
-data Program a = Program [VarDecl a] [FunDecl a]
+data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunDecl varAnnot funAnnot]
   deriving Show
 
 data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
   deriving Show
 
-data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
+data FunDecl a b = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
   deriving Show
 
 data Stmt a = If (Expr a) [Stmt a] [Stmt a]

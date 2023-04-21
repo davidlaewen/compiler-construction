@@ -11,8 +11,8 @@ import qualified TypeInference.Definition as U
 class Desugar a b where
   desugar :: a -> b
 
-instance Desugar P.Program (T.Program ()) where
-  desugar :: P.Program -> T.Program ()
+instance Desugar P.Program (T.Program () ()) where
+  desugar :: P.Program -> T.Program () ()
   desugar (P.Program varDecls funDecls) =
     T.Program (desugar <$> varDecls) (desugar <$> funDecls)
 
@@ -22,8 +22,8 @@ instance Desugar P.VarDecl (T.VarDecl ()) where
   desugar (P.VarDecl mt name e) = T.VarDecl (desugar <$> mt) name (desugar e) ()
 
 
-instance Desugar P.FunDecl (T.FunDecl ()) where
-  desugar :: P.FunDecl -> T.FunDecl ()
+instance Desugar P.FunDecl (T.FunDecl () ()) where
+  desugar :: P.FunDecl -> T.FunDecl () ()
   desugar (P.FunDecl name args rt varDecls stmts) =
     T.FunDecl name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
 

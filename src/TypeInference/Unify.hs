@@ -9,7 +9,6 @@ module TypeInference.Unify (
 ) where
 import TypeInference.Definition
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Control.Monad.Except
 import qualified Data.Text as T
 
@@ -49,14 +48,3 @@ unifyFunTypes _ _ _ = throwError "Function argument count mismatch!"
 
 occurs :: UVar -> UType -> Bool
 occurs v t = v `elem` freeUVars t
-
-freeUVars :: UType -> S.Set UVar
-freeUVars Int = S.empty
-freeUVars Bool = S.empty
-freeUVars Char = S.empty
-freeUVars Void = S.empty
-freeUVars (Prod t1 t2) = S.union (freeUVars t1) (freeUVars t2)
-freeUVars (List t) = freeUVars t
-freeUVars (Fun ts t) = S.union (foldMap freeUVars ts) (freeUVars t)
-freeUVars (UVar x) = S.singleton x
-freeUVars (TVar _) = error "Called `freeUVars` on user-defined type!"
