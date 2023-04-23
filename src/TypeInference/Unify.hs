@@ -18,6 +18,7 @@ unify Bool Bool = pure mempty
 unify Char Char = pure mempty
 unify Void Void = pure mempty
 unify (UVar i) (UVar j) | i == j = pure mempty
+unify (TVar t1) (TVar t2) | t1 == t2 = pure mempty
 unify (UVar i) t =
   if occurs i t
   then throwError "Occurs check failed!"
@@ -34,7 +35,6 @@ unify (Prod s1 s2) (Prod t1 t2) = do
   subst2 <- unify s2' t2'
   pure $ subst2 <> subst1
 unify (Fun ts1 t1) (Fun ts2 t2) = unifyFunTypes (ts1,t1) (ts2,t2) mempty
--- TODO: Handle TVar cases
 unify ty1 ty2 = throwError $ "Cannot unify `" <> T.pack (show ty1) <> "` with `" <> T.pack (show ty2) <> "`"
 
 unifyFunTypes :: ([UType], UType) -> ([UType], UType) -> Subst -> CGen Subst

@@ -55,6 +55,7 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- TODO: Check user-specified type against inferred type
+  -- TODO: Generalize over TyVars
   let s = stmtsSubst <> varDeclsSubst
   let funTy = subst s $ Fun uVarsParams retTy
   let binders = freeUVars funTy

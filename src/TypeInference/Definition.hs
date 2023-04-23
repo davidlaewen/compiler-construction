@@ -140,7 +140,7 @@ instance Types UType where
   subst s (Prod t1 t2) = Prod (subst s t1) (subst s t2)
   subst s (List t) = List (subst s t)
   subst s (Fun ts t) = Fun (subst s <$> ts) (subst s t)
-  subst _ (TVar _) = error "Called `subst` on a user-defined type!"
+  subst _ (TVar t) = TVar t
 
   freeUVars :: UType -> S.Set UVar
   freeUVars Int = S.empty
