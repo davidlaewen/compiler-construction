@@ -63,7 +63,8 @@ instance Desugar P.Expr (T.Expr ()) where
   desugar (P.Int i) = T.Int i ()
   desugar (P.Char c) = T.Char c ()
   desugar (P.Bool b) = T.Bool b ()
-
+  desugar (P.FunCallE "print" args) = T.FunCallE T.Print (desugar <$> args) ()
+  desugar (P.FunCallE "isEmpty" args) = T.FunCallE T.IsEmpty (desugar <$> args) ()
   desugar (P.FunCallE name args) = T.FunCallE (T.Name name) (desugar <$> args) ()
   desugar P.EmptyList = T.EmptyList ()
   desugar (P.Tuple e1 e2) = T.Tuple (desugar e1) (desugar e2) ()
