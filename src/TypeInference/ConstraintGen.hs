@@ -145,8 +145,9 @@ checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, mempty)
 checkExpr (T.FunCallE funName args _) = do
   (args', retType, s) <- checkFunCall funName args
   pure (T.FunCallE funName args' retType, retType, s)
-checkExpr (T.EmptyList _) = pure (T.EmptyList ty, ty, mempty)
-  where ty = List Int -- TODO: Should be ∀a.[a]
+checkExpr (T.EmptyList _) = do
+  ty <- List . UVar <$> freshVar
+  pure (T.EmptyList ty, ty, mempty)
 checkExpr (T.Tuple e1 e2 _) = do
   (e1',t1,s1) <- checkExpr e1
   (e2',t2,s2) <- checkExpr e2
