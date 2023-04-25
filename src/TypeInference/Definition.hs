@@ -45,12 +45,7 @@ class Types a where
   subst :: Subst -> a -> a
   freeUVars :: a -> S.Set UVar
 
--- TODO: A single var sort might be sufficient, since scoping is determined
--- through modification of the CGen state
--- data Id = TermVar T.Text | FunName T.Text | TyVar TVar | RetType
---   deriving (Eq, Ord)
-
-data LocalId = LocalTermVar T.Text | LocalFunName T.Text | TyVar TVar | RetType
+data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
   deriving (Eq, Ord)
 data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
   deriving (Eq, Ord)
