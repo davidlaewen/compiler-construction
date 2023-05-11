@@ -20,6 +20,8 @@ import Syntax.Desugar (desugar)
 import TypeInference.Definition (UType, UScheme, runCgen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
+import qualified CodeGen.CodeGen as CodeGen
+import CodeGen.CodeGen (codegen)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -55,6 +57,9 @@ typecheckStage = Stage $ \_ p ->
     Left err -> Left $ hPutStrLn stderr $ T.unpack err
     Right (p', s) -> Right $ annotateProgram s p'
 
+codeGenStage :: Stage (TypeAST.Program UType UScheme) CodeGen.Program
+codeGenStage = Stage $ \_ -> Right . codegen
+
 data Args = Args FilePath (Stage T.Text (IO ()))
 
 parseArgs :: [String] -> Maybe Args
@@ -63,6 +68,7 @@ parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStag
 parseArgs ("prettyprint" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
 parseArgs ("desugar" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
 parseArgs ("typecheck" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
+parseArgs ("codegen" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> printStage))
 parseArgs _ = Nothing
 
 main :: IO ()
