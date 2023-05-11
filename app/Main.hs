@@ -21,7 +21,7 @@ import TypeInference.Definition (UType, UScheme, runCgen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
 import qualified CodeGen.CodeGen as CodeGen
-import CodeGen.CodeGen (codegen)
+import CodeGen.CodeGen (codegen, runCodegen)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -58,7 +58,7 @@ typecheckStage = Stage $ \_ p ->
     Right (p', s) -> Right $ annotateProgram s p'
 
 codeGenStage :: Stage (TypeAST.Program UType UScheme) CodeGen.Program
-codeGenStage = Stage $ \_ -> Right . codegen
+codeGenStage = Stage $ \_ p -> Right $ runCodegen $ codegen p
 
 data Args = Args FilePath (Stage T.Text (IO ()))
 
