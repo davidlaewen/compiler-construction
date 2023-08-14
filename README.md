@@ -10,6 +10,14 @@ import Data.Void
 parseTest <parser> <input string>
 ```
 
+**To do:**
+- [ ] Printer helpers for parentheses, brackets and braces
+- [ ] Test type checking and type generation
+- [ ] Code generation
+- [ ] Extension
+- [ ] Improve parser errors
+
+
 ## Test inputs
 ```
 scale(p, scalar) :: (Int, Int) Int -> (Int, Int) {\n	return (p.fst * scalar, p.snd * scalar);\n}
@@ -27,6 +35,9 @@ var x = 1
 
 ## Useful docs & tutorials
 [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/GUIDE/)
+
 [SPL test files](https://docs.haskellstack.org/en/stable/GUIDE/)
+
 [Megaparsec tutorial blogpost](https://markkarpov.com/tutorial/megaparsec.html)
+
 [Duo Lang parser module](https://github.com/duo-lang/duo-lang/tree/main/src/Parser)

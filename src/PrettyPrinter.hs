@@ -4,55 +4,56 @@ import Data.List (intersperse)
 import qualified Data.Text.IO as T
 import Syntax.ParseAST
 import Control.Monad (unless)
+import Parser.Tokens (Keyword(..), Token(..), Symbol (..))
 
 -- Represents the amount of spaces to indent after a newline
-type Indenation = Int
+type Indentation = Int
 
-tabWidth :: Indenation
+tabWidth :: Indentation
 tabWidth = 4
 
-printIndentation :: Indenation -> IO ()
+printIndentation :: Indentation -> IO ()
 printIndentation i = putStr (replicate i ' ')
 
 sepBy :: String -> (a -> IO ()) -> [a] -> IO ()
 sepBy sep f xs =
   sequence_ $ intersperse (putStr sep) $ f <$> xs
 
-prettyPrintProgram :: Indenation -> Program -> IO ()
+prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" prettyPrintFunDecl funDecls
   putStrLn ""
 
-prettyPrintVarDecl :: Indenation -> VarDecl -> IO ()
+prettyPrintVarDecl :: Indentation -> VarDecl -> IO ()
 prettyPrintVarDecl i (VarDecl typeM ident e) = do
   printIndentation i
   case typeM of
-    Nothing -> putStr "var"
+    Nothing -> putStr $ show KwVar
     Just typ -> prettyPrintType typ
   putChar ' '
   T.putStr ident
   putStr " = "
   prettyPrintExpr e
-  putChar ';'
+  putStr $ show SymSemicolon
 
 prettyPrintType :: Type -> IO ()
-prettyPrintType IntT = putStr "Int"
-prettyPrintType BoolT = putStr "Bool"
-prettyPrintType CharT = putStr "Char"
-prettyPrintType Void = putStr "Void"
+prettyPrintType IntT = putStr $ show KwInt
+prettyPrintType BoolT = putStr $ show KwBool
+prettyPrintType CharT = putStr $ show KwChar
+prettyPrintType Void = putStr $ show KwVoid
 prettyPrintType (TyVar ident) = T.putStr ident
 prettyPrintType (Prod t1 t2) = do
-  putChar '('
+  putStr $ show SymParenLeft
   prettyPrintType t1
   putStr ", "
   prettyPrintType t2
-  putChar ')'
+  putStr $ show SymParenRight
 prettyPrintType (List t) = do
-  putChar '['
+  putStr $ show SymBracketLeft
   prettyPrintType t
-  putChar ']'
+  putStr $ show SymBracketRight
 prettyPrintType (Fun argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   putStr " -> "
@@ -67,8 +68,7 @@ prettyPrintExpr = go 0
     go _ (ExprLookup exprLookup) = prettyPrintExprLookup exprLookup
     go _ (Int n) = putStr $ show n
     go _ (Char c) = putChar '\'' >> putChar c >> putChar '\''
-    go _ (Bool True) = putStr "true"
-    go _ (Bool False) = putStr "false"
+    go _ (Bool b) = putStr $ show (BoolLit b)
     go _ EmptyList = putStr "[]"
     go _ (FunCallE name args) = do
       T.putStr name
@@ -148,7 +148,7 @@ prettyPrintFunDecl (FunDecl funName argNames retTypeM varDecls stmts) = do
   putStrLn ""
   putChar '}'
 
-prettyPrintStmt :: Indenation -> Stmt -> IO ()
+prettyPrintStmt :: Indentation -> Stmt -> IO ()
 prettyPrintStmt i (If e stmts1 stmts2) = do
   printIndentation i
   putStr "if ("
@@ -206,11 +206,12 @@ prettyPrintExprLookup (ExprField expr field) =
   prettyPrintExpr expr >> prettyPrintField field
 
 prettyPrintField :: Field -> IO ()
-prettyPrintField Head = putStr ".hd"
-prettyPrintField Tail = putStr ".tl"
-prettyPrintField Fst  = putStr ".fst"
-prettyPrintField Snd  = putStr ".snd"
-
+prettyPrintField f = putStr $ show SymDot ++ show (field2Kw f)
+  where
+    field2Kw Head = KwHead
+    field2Kw Tail = KwTail
+    field2Kw Fst = KwFst
+    field2Kw Snd = KwSnd
 
 
 prettyPrinter :: Program -> IO ()
