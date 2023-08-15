@@ -12,7 +12,7 @@ import qualified Data.Text as T
 import CodeGen.Instructions (Register(..), Instr(..))
 import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
 import qualified Syntax.TypeAST as TypeAST
-import TypeInference.Definition
+import TypeInference.Definition (UScheme, UType)
 import Control.Monad.State (State, evalState, modify, gets, forM_)
 import qualified TypeInference.Definition as UType
 import qualified Data.Map as M

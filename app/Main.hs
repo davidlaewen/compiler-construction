@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
@@ -15,12 +14,11 @@ import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
-import Control.Exception
+import Control.Exception (try, IOException)
 import Syntax.Desugar (desugar)
 import TypeInference.Definition (UType, UScheme, runCgen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
-import qualified CodeGen.CodeGen as CodeGen
 import CodeGen.CodeGen (codegen, runCodegen)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}

@@ -10,12 +10,30 @@ import Data.Void
 parseTest <parser> <input string>
 ```
 
-**To do:**
+## To Do
+Code gen:
+- [ ] Global variables
+- [ ] Tuples
+- [ ] Lists
+- [ ] Polymorphism
+
+Extension:
+- [ ] Lambdas
+- [ ] Further idea
+
+Pretty printing:
 - [ ] Printer helpers for parentheses, brackets and braces
-- [ ] Test type checking and type generation
-- [ ] Code generation
-- [ ] Extension
+- [ ] Possibly refactor with `Prettyprinter` library
+
+QoL:
 - [ ] Improve parser errors
+- [ ] Locations for all type checking errors
+- [ ] Better type checking errors
+
+Testing & Debugging:
+- [ ] Implement test suite
+- [ ] Set up workflow/action for testing
+- [ ] Test type checking and type generation
 
 
 ## Test inputs
