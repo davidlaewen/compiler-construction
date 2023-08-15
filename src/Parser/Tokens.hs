@@ -21,8 +21,8 @@ data Token = IntLit Integer | BoolLit Bool | CharLit Char
 
 instance Show Token where
   show (IntLit n) = show n
-  show (BoolLit b) = if b then "true" else "false"
-  show (CharLit c) = [c]
+  show (BoolLit b) = if b then "True" else "False"
+  show (CharLit c) = ['\'', c, '\'']
   show (IdToken t) = T.unpack t
   show (Symbol s) = show s
   show (Keyword k) = show k

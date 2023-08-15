@@ -57,8 +57,11 @@ typecheckStage = Stage $ \_ p ->
     Left err -> Left $ hPutStrLn stderr $ T.unpack err
     Right (p', s) -> Right $ annotateProgram s p'
 
-codeGenStage :: Stage (TypeAST.Program UType UScheme) CodeGen.Program
-codeGenStage = Stage $ \_ p -> Right $ runCodegen $ codegen p
+codeGenStage :: Stage (TypeAST.Program UType UScheme) String
+codeGenStage = Stage $ \_ p -> Right $ unlines $ show <$> runCodegen (codegen p)
+
+putStrStage :: Stage String (IO ())
+putStrStage = Stage $ \_ str -> Right $ putStr str
 
 data Args = Args FilePath (Stage T.Text (IO ()))
 
@@ -68,7 +71,7 @@ parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStag
 parseArgs ("prettyprint" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
 parseArgs ("desugar" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
 parseArgs ("typecheck" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
-parseArgs ("codegen" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> printStage))
+parseArgs ("codegen" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> putStrStage))
 parseArgs _ = Nothing
 
 main :: IO ()
@@ -81,7 +84,8 @@ main = do
       \spl-compiler parse <filename>\n\t\
       \spl-compiler prettyprint <filename>\n\t\
       \spl-compiler desugar <filename>\n\t\
-      \spl-compiler typecheck <filename>"
+      \spl-compiler typecheck <filename>\n\t\
+      \spl-compiler codegen <filename>"
     Just (Args filePath stage) -> do
       try (T.readFile filePath) >>= loadFile filePath stage
 
