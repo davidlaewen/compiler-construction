@@ -10,10 +10,10 @@ where
 
 import qualified Data.Text as T
 import CodeGen.Instructions (Register(..), Instr(..))
-import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..))
+import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
 import qualified Syntax.TypeAST as TypeAST
 import TypeInference.Definition
-import Control.Monad.State (State, evalState, modify, gets)
+import Control.Monad.State (State, evalState, modify, gets, forM_)
 import qualified TypeInference.Definition as UType
 import qualified Data.Map as M
 
@@ -31,8 +31,10 @@ freshLabel t = do
 modifyLocalOffsets :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
 modifyLocalOffsets f = modify (\s -> s { localOffsets = f (localOffsets s) })
 
-lookupLocalOffset :: T.Text -> Codegen (Maybe Int)
-lookupLocalOffset ident = gets (M.lookup ident . localOffsets)
+lookupLocalOffset :: T.Text -> Codegen Int
+lookupLocalOffset ident = gets (M.lookup ident . localOffsets) >>= \case
+  Nothing -> error $ "Couldn't find entry for local identifier " <> T.unpack ident
+  Just offset -> pure offset
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM _ [] = pure []
@@ -49,18 +51,20 @@ runCodegen = flip evalState initialState
 codegen :: TypeAST.Program UType UScheme -> Codegen Program
 codegen (TypeAST.Program [] funDecls) = do
   program <- concatMapM codegenFunDecl funDecls
-  pure $ BranchSubr "main" : Halt : program
+  pure $ BranchAlways "main" : program ++ [Halt]
 codegen (TypeAST.Program _ _) = error "TODO: vardecls"
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
-codegenFunDecl (FunDecl funName [] retType varDecls stmts uScheme) = do
+codegenFunDecl (FunDecl funName args retType varDecls stmts uScheme) = do
   modifyLocalOffsets (const M.empty)
+  -- Arguments at negative offsets from MP, reverse order
+  -- TODO: Calculate sizes
+  forM_ (zip (reverse args) (map (* (-1)) [2..]))
+    (\(argName, i) -> modifyLocalOffsets (M.insert argName i))
   let varDeclsSize = foldr (\(VarDecl _ _ _ ty) -> (+ uTypeSize ty)) 0 varDecls
-  varDeclsProgram <- concatMapM codegenVarDecl (zip [0..] varDecls)
+  varDeclsProgram <- concatMapM codegenVarDecl (zip [1..] varDecls)
   stmtsProgram <- concatMapM codegenStmt stmts
   pure $ Label funName : Link varDeclsSize : varDeclsProgram ++ stmtsProgram
-codegenFunDecl (FunDecl funName argNames retType varDecls stmts uScheme) =
-  error "TODO: Allocation of args"
 
 codegenVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenVarDecl (i, VarDecl _ ident e _) = do
@@ -77,10 +81,6 @@ uTypeSize (UType.List _) = 1
 uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
 
 codegenStmt :: Stmt UType -> Codegen Program
-codegenStmt (Return Nothing) = pure [Unlink, Ret]
-codegenStmt (Return (Just expr)) = do
-  program <- codegenExpr expr
-  pure $ program ++ [StoreReg RetReg, Unlink, Ret]
 codegenStmt (If condition thenStmts elseStmts) = do
   conditionProgram <- codegenExpr condition
   thenProgram <- concatMapM codegenStmt thenStmts
@@ -91,6 +91,7 @@ codegenStmt (If condition thenStmts elseStmts) = do
     conditionProgram ++ [BranchFalse elseLabel]
     ++ thenProgram ++ [BranchAlways endLabel, Label elseLabel]
     ++ elseProgram ++ [Label endLabel]
+
 codegenStmt (While cond loopStmts) = do
   condProgram <- codegenExpr cond
   loopProgram <- concatMapM codegenStmt loopStmts
@@ -100,9 +101,24 @@ codegenStmt (While cond loopStmts) = do
     [Label topLabel] ++ condProgram ++ [BranchFalse endLabel]
     ++ loopProgram ++ [BranchAlways topLabel]
     ++ [Label endLabel]
+
+codegenStmt (Assign (VarId ident) expr) = do
+  offset <- lookupLocalOffset ident
+  exprProgram <- codegenExpr expr
+  pure $ exprProgram ++ [StoreLocal offset]
+
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args
-  pure $ argsProgram ++ [funName2Instr funName]
+  pure $ argsProgram ++
+    case funName of
+      -- TODO: Calculate sizes
+      Name name -> [BranchSubr name, Adjust $ (-1) * length args]
+      _ -> [funName2Instr funName]
+
+codegenStmt (Return Nothing) = pure [Unlink, Ret]
+codegenStmt (Return (Just expr)) = do
+  program <- codegenExpr expr
+  pure $ program ++ [StoreReg RetReg, Unlink, Ret]
 
 codegenStmt stmt = error $ "TODO: codegenStmt: " <> show stmt
 
@@ -111,21 +127,23 @@ codegenExpr (TypeAST.Int i _) = pure [LoadConst i]
 codegenExpr (TypeAST.Bool True _) = pure [LoadConst (-1)]
 codegenExpr (TypeAST.Bool False _) = pure [LoadConst 0]
 codegenExpr (TypeAST.Ident ident _) = do
-  lookupLocalOffset ident >>= \case
-    Nothing -> error $ "Tried to lookup local `" <> T.unpack ident <> "` but it wasn't in the map"
-    Just offset -> pure [LoadLocal offset]
+  offset <- lookupLocalOffset ident
+  pure [LoadLocal offset]
 
 codegenExpr (FunCallE funName args _) = do
   argsProgram <- concatMapM codegenExpr args
   pure $ argsProgram ++
     case funName of
-      Name name -> BranchSubr name : [LoadReg RetReg] -- Subroutine
+      -- TODO: Calculate sizes
+      Name name -> BranchSubr name : [Adjust $ (-1) * length args, LoadReg RetReg] -- Subroutine
       _ -> [funName2Instr funName] -- Primitive operation
 
 codegenExpr expr = error $ "TODO: codegenExpr: " <> show expr
 
+
 funName2Instr :: FunName -> Instr
-funName2Instr (Name _) = error "funName2Instr shouldn't be called with Name"
+funName2Instr (Name name) =
+  error $ "funName2Instr was called with Name " <> T.unpack name
 funName2Instr Not = NotOp
 funName2Instr Neg = NegOp
 funName2Instr Add = AddOp

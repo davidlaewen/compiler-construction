@@ -17,7 +17,7 @@ instance Show Register where
   show Scratch2 = "R6"
   show Scratch3 = "R7"
 
-data Instr = Label T.Text | Ret | Halt | Link Int | Unlink
+data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
            | StoreReg Register | LoadReg Register
            | LoadLocal Int | StoreLocal Int
            | LoadConst Integer
@@ -27,42 +27,46 @@ data Instr = Label T.Text | Ret | Halt | Link Int | Unlink
            | NegOp | AddOp | SubOp | MulOp | DivOp | ModOp
            | TrapInt | TrapChar
 
+tab :: String
+tab = "  "
+
 instance Show Instr where
   show (Label t) = T.unpack t <> ":"
-  show Ret = "ret"
-  show Halt = "halt"
-  show (Link i) = "link " <> show i
-  show Unlink = "unlink"
+  show Ret = tab <> "ret"
+  show Halt = tab <> "halt"
+  show (Link i) = tab <> "link " <> show i
+  show Unlink = tab <> "unlink"
+  show (Adjust i) = tab <> "ajs " <> show i
 
-  show (StoreReg r) = "str " <> show r
-  show (LoadReg r) = "ldr " <> show r
-  show (LoadLocal i) = "ldl " <> show i
-  show (StoreLocal i) = "stl " <> show i
+  show (StoreReg r) = tab <> "str " <> show r
+  show (LoadReg r) = tab <> "ldr " <> show r
+  show (LoadLocal i) = tab <> "ldl " <> show i
+  show (StoreLocal i) = tab <> "stl " <> show i
 
-  show (LoadConst i) = "ldc " <> show i
+  show (LoadConst i) = tab <> "ldc " <> show i
 
-  show (BranchSubr t) = "bsr " <> T.unpack t
-  show (BranchAlways t) = "bra " <> T.unpack t
-  show (BranchFalse t) = "brf " <> T.unpack t
+  show (BranchSubr t) = tab <> "bsr " <> T.unpack t
+  show (BranchAlways t) = tab <> "bra " <> T.unpack t
+  show (BranchFalse t) = tab <> "brf " <> T.unpack t
 
-  show NotOp = "not"
-  show AndOp = "and"
-  show OrOp = "or"
-  show XorOp = "xor"
+  show NotOp = tab <> "not"
+  show AndOp = tab <> "and"
+  show OrOp = tab <> "or"
+  show XorOp = tab <> "xor"
 
-  show EqOp = "eq"
-  show NeOp = "ne"
-  show LtOp = "lt"
-  show LeOp = "le"
-  show GtOp = "gt"
-  show GeOp = "ge"
+  show EqOp = tab <> "eq"
+  show NeOp = tab <> "ne"
+  show LtOp = tab <> "lt"
+  show LeOp = tab <> "le"
+  show GtOp = tab <> "gt"
+  show GeOp = tab <> "ge"
 
-  show NegOp = "neg"
-  show AddOp = "add"
-  show SubOp = "sub"
-  show MulOp = "mul"
-  show DivOp = "div"
-  show ModOp = "mod"
+  show NegOp = tab <> "neg"
+  show AddOp = tab <> "add"
+  show SubOp = tab <> "sub"
+  show MulOp = tab <> "mul"
+  show DivOp = tab <> "div"
+  show ModOp = tab <> "mod"
 
-  show TrapInt = "trap 0"
-  show TrapChar = "trap 1"
+  show TrapInt = tab <> "trap 0"
+  show TrapChar = tab <> "trap 1"
