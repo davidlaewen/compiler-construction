@@ -1,15 +1,5 @@
 # SPL Compiler
 
-Current parser testing setup:
-```
-import Text.Megaparsec
-import Text.Megaparsec.Char
-import Data.Text (Text)
-import Data.Void
-:set -XOverloadedStrings
-parseTest <parser> <input string>
-```
-
 ## To Do
 Code gen:
 - [ ] Global variables
@@ -29,6 +19,7 @@ QoL:
 - [ ] Improve parser errors
 - [ ] Locations for all type checking errors
 - [ ] Better type checking errors
+- [ ] Constant folding
 
 Testing & Debugging:
 - [ ] Implement test suite
@@ -59,3 +50,13 @@ var x = 1
 [Megaparsec tutorial blogpost](https://markkarpov.com/tutorial/megaparsec.html)
 
 [Duo Lang parser module](https://github.com/duo-lang/duo-lang/tree/main/src/Parser)
+
+## Old parser testing setup
+```
+import Text.Megaparsec
+import Text.Megaparsec.Char
+import Data.Text (Text)
+import Data.Void
+:set -XOverloadedStrings
+parseTest <parser> <input string>
+```

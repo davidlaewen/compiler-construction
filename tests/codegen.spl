@@ -1,16 +1,9 @@
 Int a = 42;
-Int b = 43;
-Int c = 44;
-Int d = 45;
-Int e = 46;
+Int b = a+1;
+Int c = a+2;
+Int d = b+2;
+Int e = a+4;
 
 main() {
-
-  while (c < 50) {
-    c = c + 1;
-    print(c);
-  }
-
-  print(False);
   print(c);
 }

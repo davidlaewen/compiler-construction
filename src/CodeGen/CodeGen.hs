@@ -13,36 +13,9 @@ import CodeGen.Instructions (Register(..), Instr(..))
 import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
 import qualified Syntax.TypeAST as TypeAST
 import TypeInference.Definition (UScheme, UType)
-import Control.Monad.State (State, evalState, modify, gets, forM_)
+import Control.Monad.State (gets, forM_)
 import qualified Data.Map as M
 
-type LocMap = M.Map T.Text Int
-type Program = [Instr]
-
-data Loc = Offset Int | HeapLoc Int
-
-heapLow :: Int
-heapLow = 0x0007D0
-
-data CodegenState = CodegenState {
-  labelCounter :: Int,
-  offsets :: LocMap,
-  heapLocs :: LocMap
-}
-
-type Codegen = State CodegenState
-
-freshLabel :: T.Text -> Codegen T.Text
-freshLabel t = do
-  i <- gets labelCounter
-  modify (\s -> s { labelCounter = i + 1 })
-  pure $ t <> "_" <> T.pack (show i)
-
-modifyOffsets :: (LocMap -> LocMap) -> Codegen ()
-modifyOffsets f = modify (\s -> s { offsets = f (offsets s) })
-
-modifyHeapLocs :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
-modifyHeapLocs f = modify (\s -> s { heapLocs = f (heapLocs s) })
 
 lookupOffset :: T.Text -> Codegen Loc
 lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
@@ -61,11 +34,6 @@ storeIdent ident = lookupOffset ident >>= \case
   Offset offset -> pure [StoreLocal offset]
   HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddress 0]
 
-runCodegen :: Codegen a -> a
-runCodegen = flip evalState initialState
-  where
-    initialState = CodegenState 0 M.empty M.empty
-
 codegen :: TypeAST.Program UType UScheme -> Codegen Program
 codegen (TypeAST.Program varDecls funDecls) = do
   -- TODO: Global variable declarations
@@ -80,6 +48,7 @@ codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenGlobalVarDecl (i, VarDecl _ ident e _) = do
   program <- codegenExpr e
   modifyHeapLocs (M.insert ident i)
+  -- Store immediately, since later global vars may use this declaration
   pure $ program ++ [StoreHeap]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
