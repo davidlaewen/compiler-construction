@@ -6,11 +6,12 @@ module Syntax.TypeAST (
   VarLookup(..),
   Field(..),
   FunName(..),
-  Expr(..)
+  Expr(..),
+  getTypeExpr
 ) where
 
 import qualified Data.Text as T
-import TypeInference.Definition
+import TypeInference.Definition ( UType )
 
 data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunDecl varAnnot funAnnot]
   deriving Show
@@ -39,8 +40,9 @@ data FunName = Name T.Text
              | Add | Sub | Mul | Div | Mod
              | Eq | Neq | Lt | Gt | Lte | Gte
              | And | Or
-             | Cons | IsEmpty | Print
+             | Cons | IsEmpty
              | HeadFun | TailFun | FstFun | SndFun
+             | Print
   deriving Show
 
 data Expr a = Ident T.Text a
@@ -51,3 +53,12 @@ data Expr a = Ident T.Text a
             | EmptyList a
             | Tuple (Expr a) (Expr a) a
   deriving Show
+
+getTypeExpr :: Expr a -> a
+getTypeExpr (Ident _ ty) = ty
+getTypeExpr (Int _ ty) = ty
+getTypeExpr (Char _ ty) = ty
+getTypeExpr (Bool _ ty) = ty
+getTypeExpr (FunCallE _ _ ty) = ty
+getTypeExpr (EmptyList ty) = ty
+getTypeExpr (Tuple _ _ ty) = ty

@@ -1,9 +1,5 @@
-Int a = 42;
-Int b = a+1;
-Int c = a+2;
-Int d = b+2;
-Int e = a+4;
+var p = (42,'c');
 
 main() {
-  print(c);
+  print(p.fst);
 }

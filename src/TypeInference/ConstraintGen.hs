@@ -14,19 +14,22 @@ import qualified Data.Set as S
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program varDecls funDecls) = do
-  (vds,s1) <- checkVarDecls varDecls GlobalLevel
+  (vds,s1) <- checkVarDecls GlobalLevel varDecls
   (fds,s2) <- checkFunDecls funDecls
   pure (T.Program vds fds, s1 <> s2)
 
-checkVarDecls :: [T.VarDecl ()] -> EnvLevel -> CGen ([T.VarDecl UType], Subst)
-checkVarDecls [] _ = pure ([], mempty)
-checkVarDecls (varDecl:varDecls) envLevel = do
-  (varDecl',s) <- checkVarDecl varDecl envLevel
-  (varDecls',ss) <- checkVarDecls varDecls envLevel
-  pure (varDecl':varDecls', ss <> s)
+checkList :: (a -> CGen (b, Subst)) -> [a] -> CGen ([b], Subst)
+checkList _ [] = pure ([], mempty)
+checkList f (x:xs) = do
+  (x',s) <- f x
+  (xs',ss) <- checkList f xs
+  pure (x':xs', ss <> s)
 
-checkVarDecl :: T.VarDecl () -> EnvLevel -> CGen (T.VarDecl UType, Subst)
-checkVarDecl (T.VarDecl mTy name expr _) envLevel = do
+checkVarDecls :: EnvLevel -> [T.VarDecl ()] -> CGen ([T.VarDecl UType], Subst)
+checkVarDecls envLevel = checkList $ checkVarDecl envLevel
+
+checkVarDecl :: EnvLevel -> T.VarDecl () -> CGen (T.VarDecl UType, Subst)
+checkVarDecl envLevel (T.VarDecl mTy name expr _) = do
   uTy <- case mTy of
     Nothing -> UVar <$> freshVar
     Just ty -> pure ty
@@ -37,21 +40,17 @@ checkVarDecl (T.VarDecl mTy name expr _) envLevel = do
   pure (T.VarDecl mTy name expr' uTy, s <> exprSubst)
 
 checkFunDecls :: [T.FunDecl () ()] -> CGen ([T.FunDecl UType UScheme], Subst)
-checkFunDecls [] = pure ([], mempty)
-checkFunDecls (funDecl:funDecls) = do
-  (funDecl',s) <- checkFunDecl funDecl
-  (funDecls',ss) <- checkFunDecls funDecls
-  pure (funDecl':funDecls', ss <> s)
+checkFunDecls = checkList checkFunDecl
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   uVarsParams <- forM params (const $ UVar <$> freshVar)
   forM_ (zip params uVarsParams) $
-    \(param, uVar) -> envInsertVar LocalLevel param uVar
+    uncurry (envInsertVar LocalLevel)
   retTy <- UVar <$> freshVar
   envInsertRetType retTy
   envLocalInsertFun name (Fun uVarsParams retTy)
-  (varDecls',varDeclsSubst) <- checkVarDecls varDecls LocalLevel
+  (varDecls',varDeclsSubst) <- checkVarDecls LocalLevel varDecls
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- TODO: Check user-specified type against inferred type
@@ -64,11 +63,7 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   pure (T.FunDecl name params mTy varDecls' stmts' funScheme, s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
-checkStmts [] = pure ([], mempty)
-checkStmts (stmt:stmts) = do
-  (stmt',s) <- checkStmt stmt
-  (stmts',ss) <- checkStmts stmts
-  pure (stmt':stmts', ss <> s)
+checkStmts = checkList checkStmt
 
 checkStmt :: T.Stmt () -> CGen (T.Stmt UType, Subst)
 checkStmt (T.If condExpr thenStmts elseStmts) = do

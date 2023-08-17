@@ -20,7 +20,8 @@ instance Show Register where
 data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
            | LoadReg Register | StoreReg Register
            | LoadLocal Int | StoreLocal Int
-           | LoadHeap Int | StoreHeap | StoreAddress Int
+           | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
+           | StoreAddress Int
            | LoadConst Int
            | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
            | NotOp | AndOp | OrOp | XorOp
@@ -31,27 +32,33 @@ data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
 tab :: String
 tab = "  "
 
+(<+>) :: String -> String -> String
+s1 <+> s2 = s1 <> " " <> s2
+
 instance Show Instr where
   show (Label t) = T.unpack t <> ":"
   show Ret = tab <> "ret"
   show Halt = tab <> "halt"
-  show (Link i) = tab <> "link " <> show i
+  show (Link i) = tab <> "link" <+> show i
   show Unlink = tab <> "unlink"
-  show (Adjust i) = tab <> "ajs " <> show i
+  show (Adjust i) = tab <> "ajs" <+> show i
 
-  show (LoadReg r) = tab <> "ldr " <> show r
-  show (StoreReg r) = tab <> "str " <> show r
-  show (LoadLocal o) = tab <> "ldl " <> show o
-  show (StoreLocal o) = tab <> "stl " <> show o
-  show (LoadHeap o) = tab <> "ldh " <> show o
+  show (LoadReg r) = tab <> "ldr" <+> show r
+  show (StoreReg r) = tab <> "str" <+> show r
+  show (LoadLocal o) = tab <> "ldl" <+> show o
+  show (StoreLocal o) = tab <> "stl" <+> show o
+  show (LoadHeap o) = tab <> "ldh" <+> show o
   show StoreHeap = tab <> "sth"
-  show (StoreAddress o) = tab <> "sta " <> show o
+  show (LoadHeapMulti o s) = tab <> "ldmh" <+> show o <+> show s
+  show (StoreHeapMulti s) = tab <> "stmh" <+> show s
 
-  show (LoadConst c) = tab <> "ldc " <> show c
+  show (StoreAddress o) = tab <> "sta" <+> show o
 
-  show (BranchSubr t) = tab <> "bsr " <> T.unpack t
-  show (BranchAlways t) = tab <> "bra " <> T.unpack t
-  show (BranchFalse t) = tab <> "brf " <> T.unpack t
+  show (LoadConst c) = tab <> "ldc" <+> show c
+
+  show (BranchSubr t) = tab <> "bsr" <+> T.unpack t
+  show (BranchAlways t) = tab <> "bra" <+> T.unpack t
+  show (BranchFalse t) = tab <> "brf" <+> T.unpack t
 
   show NotOp = tab <> "not"
   show AndOp = tab <> "and"

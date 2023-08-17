@@ -47,6 +47,7 @@ class Types a where
 
 data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
   deriving (Eq, Ord)
+
 data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
   deriving (Eq, Ord)
 
@@ -92,10 +93,10 @@ clearLocalEnv = modifyLocalEnv (const M.empty)
 
 envLookupVar :: T.Text -> CGen (Maybe UType)
 envLookupVar name =
-  M.lookup (LocalTermVar name) <$> gets localEnv >>= \case
+  gets (M.lookup (LocalTermVar name) . localEnv) >>= \case
     Just ty -> pure (Just ty)
     Nothing ->
-      M.lookup (GlobalTermVar name) <$> gets globalEnv >>= \case
+      gets (M.lookup (GlobalTermVar name) . globalEnv) >>= \case
         Just (UScheme binders ty) ->
           if S.null binders
             then pure (Just ty)
@@ -104,10 +105,10 @@ envLookupVar name =
 
 envLookupFun :: T.Text -> CGen (Maybe UScheme)
 envLookupFun name =
-  M.lookup (LocalFunName name) <$> gets localEnv >>= \case
+  gets (M.lookup (LocalFunName name) . localEnv) >>= \case
     Just ty -> pure (Just (UScheme S.empty ty))
     Nothing ->
-      M.lookup (GlobalFunName name) <$> gets globalEnv
+      gets (M.lookup (GlobalFunName name) . globalEnv)
 
 envLookupRetType :: CGen (Maybe UType)
 envLookupRetType = gets (M.lookup RetType . localEnv)

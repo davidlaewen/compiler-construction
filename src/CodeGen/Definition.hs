@@ -68,6 +68,6 @@ uTypeSize :: UType -> Int
 uTypeSize UType.Int = 1
 uTypeSize UType.Bool = 1
 uTypeSize UType.Char = 1
-uTypeSize (UType.Prod t1 t2) = uTypeSize t1 + uTypeSize t2
+uTypeSize (UType.Prod _ _) = 2 -- TODO: uTypeSize t1 + uTypeSize t2
 uTypeSize (UType.List _) = 1
 uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t

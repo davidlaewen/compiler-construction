@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
+
 module Parser.Parser (parser) where
 
 import Control.Applicative hiding (many,some)

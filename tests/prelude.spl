@@ -1,0 +1,15 @@
+printBool(b) :: Bool -> Void {
+  if (b) {
+    print('T');
+    print('r');
+    print('u');
+    print('e');
+  } else {
+    print('F');
+    print('a');
+    print('l');
+    print('s');
+    print('e');
+  }
+  return;
+}
