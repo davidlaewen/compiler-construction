@@ -1,26 +1,36 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
-module CodeGen.CodeGen
-  ( codegen,
-    runCodegen,
-    Program,
-  )
-where
+module CodeGen.CodeGen(
+  codegen,
+  runCodegen,
+  Program,
+) where
 
 import qualified Data.Text as T
+import CodeGen.Definition
 import CodeGen.Instructions (Register(..), Instr(..))
 import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
 import qualified Syntax.TypeAST as TypeAST
 import TypeInference.Definition (UScheme, UType)
 import Control.Monad.State (State, evalState, modify, gets, forM_)
-import qualified TypeInference.Definition as UType
 import qualified Data.Map as M
 
-data CodegenState = CodegenState { labelCounter :: Int, localOffsets :: M.Map T.Text Int }
-type Codegen = State CodegenState
-
+type LocMap = M.Map T.Text Int
 type Program = [Instr]
+
+data Loc = Offset Int | HeapLoc Int
+
+heapLow :: Int
+heapLow = 0x0007D0
+
+data CodegenState = CodegenState {
+  labelCounter :: Int,
+  offsets :: LocMap,
+  heapLocs :: LocMap
+}
+
+type Codegen = State CodegenState
 
 freshLabel :: T.Text -> Codegen T.Text
 freshLabel t = do
@@ -28,57 +38,67 @@ freshLabel t = do
   modify (\s -> s { labelCounter = i + 1 })
   pure $ t <> "_" <> T.pack (show i)
 
-modifyLocalOffsets :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
-modifyLocalOffsets f = modify (\s -> s { localOffsets = f (localOffsets s) })
+modifyOffsets :: (LocMap -> LocMap) -> Codegen ()
+modifyOffsets f = modify (\s -> s { offsets = f (offsets s) })
 
-lookupLocalOffset :: T.Text -> Codegen Int
-lookupLocalOffset ident = gets (M.lookup ident . localOffsets) >>= \case
-  Nothing -> error $ "Couldn't find entry for local identifier " <> T.unpack ident
-  Just offset -> pure offset
+modifyHeapLocs :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
+modifyHeapLocs f = modify (\s -> s { heapLocs = f (heapLocs s) })
 
-concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM _ [] = pure []
-concatMapM f (x : xs) = do
-  y <- f x
-  ys <- concatMapM f xs
-  pure $ y ++ ys
+lookupOffset :: T.Text -> Codegen Loc
+lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
+  Nothing -> gets (M.lookup ident . heapLocs) >>= \case
+    Nothing -> error $ "Couldn't find offset for identifer " <> T.unpack ident
+    Just offset -> pure $ HeapLoc offset
+  Just offset -> pure $ Offset offset
+
+loadIdent :: T.Text -> Codegen Program
+loadIdent ident = lookupOffset ident >>= \case
+  Offset offset -> pure [LoadLocal offset]
+  HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeap 0]
+
+storeIdent :: T.Text -> Codegen Program
+storeIdent ident = lookupOffset ident >>= \case
+  Offset offset -> pure [StoreLocal offset]
+  HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddress 0]
 
 runCodegen :: Codegen a -> a
 runCodegen = flip evalState initialState
   where
-    initialState = CodegenState 0 M.empty
+    initialState = CodegenState 0 M.empty M.empty
 
 codegen :: TypeAST.Program UType UScheme -> Codegen Program
-codegen (TypeAST.Program [] funDecls) = do
-  program <- concatMapM codegenFunDecl funDecls
-  pure $ BranchAlways "main" : program ++ [Halt]
-codegen (TypeAST.Program _ _) = error "TODO: vardecls"
+codegen (TypeAST.Program varDecls funDecls) = do
+  -- TODO: Global variable declarations
+  let varDeclsSize = sum $ map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
+  varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip [0..] varDecls)
+  funDeclsProgram <- concatMapM codegenFunDecl funDecls
+  pure $
+    varDeclsProgram ++ Adjust (negate varDeclsSize) :
+      BranchAlways "main" : funDeclsProgram ++ [Halt]
+
+codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
+codegenGlobalVarDecl (i, VarDecl _ ident e _) = do
+  program <- codegenExpr e
+  modifyHeapLocs (M.insert ident i)
+  pure $ program ++ [StoreHeap]
+
+codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
+codegenLocalVarDecl (i, VarDecl _ ident e _) = do
+  program <- codegenExpr e
+  modifyOffsets (M.insert ident i)
+  pure $ program ++ [StoreLocal i]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
 codegenFunDecl (FunDecl funName args retType varDecls stmts uScheme) = do
-  modifyLocalOffsets (const M.empty)
+  modifyOffsets (const M.empty)
   -- Arguments at negative offsets from MP, reverse order
   -- TODO: Calculate sizes
   forM_ (zip (reverse args) (map (* (-1)) [2..]))
-    (\(argName, i) -> modifyLocalOffsets (M.insert argName i))
-  let varDeclsSize = foldr (\(VarDecl _ _ _ ty) -> (+ uTypeSize ty)) 0 varDecls
-  varDeclsProgram <- concatMapM codegenVarDecl (zip [1..] varDecls)
+    (\(argName, i) -> modifyOffsets (M.insert argName i))
+  let varDeclsSize = sum $ map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
+  varDeclsProgram <- concatMapM codegenLocalVarDecl (zip [1..] varDecls)
   stmtsProgram <- concatMapM codegenStmt stmts
   pure $ Label funName : Link varDeclsSize : varDeclsProgram ++ stmtsProgram
-
-codegenVarDecl :: (Int, VarDecl UType) -> Codegen Program
-codegenVarDecl (i, VarDecl _ ident e _) = do
-  program <- codegenExpr e
-  modifyLocalOffsets (M.insert ident i)
-  pure $ program ++ [StoreLocal i]
-
-uTypeSize :: UType -> Int
-uTypeSize UType.Int = 1
-uTypeSize UType.Bool = 1
-uTypeSize UType.Char = 1
-uTypeSize (UType.Prod t1 t2) = uTypeSize t1 + uTypeSize t2
-uTypeSize (UType.List _) = 1
-uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
 
 codegenStmt :: Stmt UType -> Codegen Program
 codegenStmt (If condition thenStmts elseStmts) = do
@@ -103,9 +123,9 @@ codegenStmt (While cond loopStmts) = do
     ++ [Label endLabel]
 
 codegenStmt (Assign (VarId ident) expr) = do
-  offset <- lookupLocalOffset ident
+  storeProgram <- storeIdent ident
   exprProgram <- codegenExpr expr
-  pure $ exprProgram ++ [StoreLocal offset]
+  pure $ exprProgram ++ storeProgram
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args
@@ -120,15 +140,13 @@ codegenStmt (Return (Just expr)) = do
   program <- codegenExpr expr
   pure $ program ++ [StoreReg RetReg, Unlink, Ret]
 
-codegenStmt stmt = error $ "TODO: codegenStmt: " <> show stmt
+codegenStmt stmt = error $ "Case of codegenStmt not yet implemented: " <> show stmt
 
 codegenExpr :: Expr UType -> Codegen Program
 codegenExpr (TypeAST.Int i _) = pure [LoadConst i]
 codegenExpr (TypeAST.Bool True _) = pure [LoadConst (-1)]
 codegenExpr (TypeAST.Bool False _) = pure [LoadConst 0]
-codegenExpr (TypeAST.Ident ident _) = do
-  offset <- lookupLocalOffset ident
-  pure [LoadLocal offset]
+codegenExpr (TypeAST.Ident ident _) = loadIdent ident
 
 codegenExpr (FunCallE funName args _) = do
   argsProgram <- concatMapM codegenExpr args

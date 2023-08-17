@@ -53,7 +53,7 @@ data Field = Head | Tail | Fst | Snd
 
 data Expr = Ident T.Text
           | ExprLookup ExprLookup
-          | Int Integer
+          | Int Int
           | Char Char
           | Bool Bool
           | UnOp UnaryOp Expr

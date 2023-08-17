@@ -44,7 +44,7 @@ data FunName = Name T.Text
   deriving Show
 
 data Expr a = Ident T.Text a
-            | Int Integer a
+            | Int Int a
             | Char Char a
             | Bool Bool a
             | FunCallE FunName [Expr a] a

@@ -13,7 +13,7 @@ import Data.Text ( Text )
 import qualified Data.Text as T
 
 
-data Token = IntLit Integer | BoolLit Bool | CharLit Char
+data Token = IntLit Int | BoolLit Bool | CharLit Char
            | IdToken T.Text
            | Symbol Symbol
            | Keyword Keyword

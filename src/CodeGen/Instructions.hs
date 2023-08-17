@@ -18,9 +18,10 @@ instance Show Register where
   show Scratch3 = "R7"
 
 data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
-           | StoreReg Register | LoadReg Register
+           | LoadReg Register | StoreReg Register
            | LoadLocal Int | StoreLocal Int
-           | LoadConst Integer
+           | LoadHeap Int | StoreHeap | StoreAddress Int
+           | LoadConst Int
            | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
            | NotOp | AndOp | OrOp | XorOp
            | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
@@ -38,12 +39,15 @@ instance Show Instr where
   show Unlink = tab <> "unlink"
   show (Adjust i) = tab <> "ajs " <> show i
 
-  show (StoreReg r) = tab <> "str " <> show r
   show (LoadReg r) = tab <> "ldr " <> show r
-  show (LoadLocal i) = tab <> "ldl " <> show i
-  show (StoreLocal i) = tab <> "stl " <> show i
+  show (StoreReg r) = tab <> "str " <> show r
+  show (LoadLocal o) = tab <> "ldl " <> show o
+  show (StoreLocal o) = tab <> "stl " <> show o
+  show (LoadHeap o) = tab <> "ldh " <> show o
+  show StoreHeap = tab <> "sth"
+  show (StoreAddress o) = tab <> "sta " <> show o
 
-  show (LoadConst i) = tab <> "ldc " <> show i
+  show (LoadConst c) = tab <> "ldc " <> show c
 
   show (BranchSubr t) = tab <> "bsr " <> T.unpack t
   show (BranchAlways t) = tab <> "bra " <> T.unpack t

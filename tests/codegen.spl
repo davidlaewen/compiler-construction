@@ -1,12 +1,16 @@
-foo(x) {
-  return x + 1;
-}
-
-bar(x,y) {
-  var z = 4;
-  return x + foo(y) + z;
-}
+Int a = 42;
+Int b = 43;
+Int c = 44;
+Int d = 45;
+Int e = 46;
 
 main() {
-  bar(30,8);
+
+  while (c < 50) {
+    c = c + 1;
+    print(c);
+  }
+
+  print(False);
+  print(c);
 }
