@@ -19,6 +19,7 @@ instance Show Register where
 
 data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
            | LoadReg Register | StoreReg Register
+           | LoadStack Int | StoreStack Int | LoadStackMulti Int Int | StoreStackMulti Int Int
            | LoadLocal Int | StoreLocal Int
            | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
            | StoreAddress Int
@@ -45,8 +46,13 @@ instance Show Instr where
 
   show (LoadReg r) = tab <> "ldr" <+> show r
   show (StoreReg r) = tab <> "str" <+> show r
+  show (LoadStack o) = tab <> "lds" <+> show o
+  show (StoreStack o) = tab <> "sts" <+> show o
+  show (LoadStackMulti o s) = tab <> "ldms" <+> show o <+> show s
+  show (StoreStackMulti o s) = tab <> "stms" <+> show o <+> show s
   show (LoadLocal o) = tab <> "ldl" <+> show o
   show (StoreLocal o) = tab <> "stl" <+> show o
+
   show (LoadHeap o) = tab <> "ldh" <+> show o
   show StoreHeap = tab <> "sth"
   show (LoadHeapMulti o s) = tab <> "ldmh" <+> show o <+> show s

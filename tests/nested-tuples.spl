@@ -1,5 +1,3 @@
-// var p = (42,'c');
-
 main() {
   // Should print 42 nine times
   print( (42,'a').fst );

@@ -106,10 +106,10 @@ codegenStmt (Assign (VarField varLookup field) expr) =
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args
+  let argsSize = sum $ uTypeSize . TypeAST.getTypeExpr <$> args
   pure $ argsProgram ++
-    case funName of
-      -- TODO: Calculate sizes
-      Name name -> [BranchSubr name, Adjust $ (-1) * length args]
+    case funName of -- Relinquish args on stack after returning
+      Name name -> [BranchSubr name, Adjust $ negate argsSize]
       _ -> funName2Program funName (TypeAST.getTypeExpr <$> args)
 
 codegenStmt (Return Nothing) = pure [Unlink, Ret]
@@ -127,19 +127,16 @@ codegenExpr (TypeAST.Bool False _) = pure [LoadConst 0]
 
 codegenExpr (FunCallE funName args _) = do
   argsProgram <- concatMapM codegenExpr args
+  let argsSize = sum $ uTypeSize . TypeAST.getTypeExpr <$> args
   pure $ argsProgram ++
     case funName of
-      -- TODO: Calculate sizes
-      Name name -> BranchSubr name : [Adjust $ (-1) * length args, LoadReg RetReg] -- Subroutine
+      Name name -> BranchSubr name : [Adjust $ negate argsSize, LoadReg RetReg] -- Subroutine
       _ -> funName2Program funName (TypeAST.getTypeExpr <$> args) -- Primitive operation
 
-codegenExpr (TypeAST.Tuple e1 e2 (TI.Prod ty1 ty2)) = do
+codegenExpr (TypeAST.Tuple e1 e2 (TI.Prod _ _)) = do
   e1Program <- codegenExpr e1
   e2Program <- codegenExpr e2
-  let size = uTypeSize ty1 + uTypeSize ty2
-  pure $ e1Program ++ e2Program ++
-    -- Push both entries to heap, compute address of left component
-    [ StoreHeapMulti size, LoadConst (size - 1), SubOp ]
+  pure $ e1Program ++ e2Program
 
 codegenExpr expr = error $ "TODO: codegenExpr: " <> show expr
 
@@ -167,9 +164,14 @@ funName2Program Cons _ = undefined
 funName2Program IsEmpty _ = undefined
 funName2Program HeadFun _ = undefined
 funName2Program TailFun _ = undefined
-funName2Program FstFun [TI.Prod _ _] = [LoadHeap 0]
+-- Move SP to end of first component
+funName2Program FstFun [TI.Prod _ ty2] = [Adjust $ negate $ uTypeSize ty2 ]
 funName2Program FstFun _ = error "Called `fst` on non-tuple"
-funName2Program SndFun [TI.Prod _ _] = [LoadHeap 1]
+funName2Program SndFun [TI.Prod ty1 ty2] =
+  let size1 = uTypeSize ty1
+      size2 = uTypeSize ty2
+      offset = negate $ size1 + size2 - 1 in
+  [ StoreStackMulti offset size2, Adjust $ size2 - size1 ]
 funName2Program SndFun _ = error "Called `snd` on non-tuple"
 
 funName2Program Print [ty] = case ty of
