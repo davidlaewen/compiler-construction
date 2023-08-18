@@ -20,9 +20,9 @@ instance Show Register where
 data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
            | LoadReg Register | StoreReg Register
            | LoadStack Int | StoreStack Int | LoadStackMulti Int Int | StoreStackMulti Int Int
-           | LoadLocal Int | StoreLocal Int
+           | LoadLocal Int | StoreLocal Int | LoadLocalMulti Int Int | StoreLocalMulti Int Int
            | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
-           | StoreAddress Int
+           | StoreAddress Int | StoreAddressMulti Int Int
            | LoadConst Int
            | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
            | NotOp | AndOp | OrOp | XorOp
@@ -52,6 +52,8 @@ instance Show Instr where
   show (StoreStackMulti o s) = tab <> "stms" <+> show o <+> show s
   show (LoadLocal o) = tab <> "ldl" <+> show o
   show (StoreLocal o) = tab <> "stl" <+> show o
+  show (LoadLocalMulti o s) = tab <> "ldml" <+> show o <+> show s
+  show (StoreLocalMulti o s) = tab <> "stml" <+> show o <+> show s
 
   show (LoadHeap o) = tab <> "ldh" <+> show o
   show StoreHeap = tab <> "sth"
@@ -59,6 +61,7 @@ instance Show Instr where
   show (StoreHeapMulti s) = tab <> "stmh" <+> show s
 
   show (StoreAddress o) = tab <> "sta" <+> show o
+  show (StoreAddressMulti o s) = tab <> "stma" <+> show o <+> show s
 
   show (LoadConst c) = tab <> "ldc" <+> show c
 

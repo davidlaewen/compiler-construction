@@ -25,32 +25,42 @@ lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
     Just offset -> pure $ HeapLoc offset
   Just offset -> pure $ Offset offset
 
-loadIdent :: T.Text -> Codegen Program
-loadIdent ident = lookupOffset ident >>= \case
-  Offset offset -> pure [LoadLocal offset]
-  HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeap 0]
+loadIdent :: T.Text -> UType -> Codegen Program
+loadIdent ident ty = let size = uTypeSize ty in
+  lookupOffset ident >>= \case
+    Offset offset -> pure [LoadLocalMulti offset size]
+    HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeapMulti 0 size]
 
-storeIdent :: T.Text -> Codegen Program
-storeIdent ident = lookupOffset ident >>= \case
-  Offset offset -> pure [StoreLocal offset]
-  HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddress 0]
+storeIdent :: T.Text -> UType -> Codegen Program
+storeIdent ident ty = let size = uTypeSize ty in
+  lookupOffset ident >>= \case
+    Offset offset -> pure [StoreLocalMulti offset size]
+    HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddressMulti (negate size + 1) size]
+
+computeOffsets :: [Int] -> [Int]
+computeOffsets = go 0
+  where
+    go _ [] = []
+    go acc (x:xs) = acc : go (x + acc) xs
 
 codegen :: TypeAST.Program UType UScheme -> Codegen Program
 codegen (TypeAST.Program varDecls funDecls) = do
   -- TODO: Global variable declarations
-  let varDeclsSize = sum $ map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
-  varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip [0..] varDecls)
+  let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
+  let varOffsets = computeOffsets varSizes
+  -- TODO: Compute offsets
+  varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunDecl funDecls
   pure $
-    varDeclsProgram ++ Adjust (negate varDeclsSize) :
+    varDeclsProgram ++ Adjust (negate $ length varDecls) :
       BranchAlways "main" : funDeclsProgram ++ [Halt]
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
-codegenGlobalVarDecl (i, VarDecl _ ident e _) = do
+codegenGlobalVarDecl (i, VarDecl _ ident e ty) = do
   program <- codegenExpr e
-  modifyHeapLocs (M.insert ident i)
-  -- Store immediately, since later global vars may use this declaration
-  pure $ program ++ [StoreHeap]
+  modifyHeapLocs (M.insert ident $ i + uTypeSize ty - 1)
+  -- Store immediately, since subsequent global vars may refer to this decl
+  pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenLocalVarDecl (i, VarDecl _ ident e _) = do
@@ -94,7 +104,8 @@ codegenStmt (While cond loopStmts) = do
 
 codegenStmt (Assign (VarId ident) expr) = do
   exprProgram <- codegenExpr expr
-  storeProgram <- storeIdent ident
+  let exprTy = TypeAST.getTypeExpr expr
+  storeProgram <- storeIdent ident exprTy
   pure $ exprProgram ++ storeProgram
 
 codegenStmt (Assign (VarField varLookup field) expr) =
@@ -119,7 +130,7 @@ codegenStmt (Return (Just expr)) = do
 
 
 codegenExpr :: Expr UType -> Codegen Program
-codegenExpr (TypeAST.Ident ident _) = loadIdent ident
+codegenExpr (TypeAST.Ident ident ty) = loadIdent ident ty
 codegenExpr (TypeAST.Int i _) = pure [LoadConst i]
 codegenExpr (TypeAST.Char c _) = pure [LoadConst $ fromEnum c]
 codegenExpr (TypeAST.Bool True _) = pure [LoadConst (-1)]

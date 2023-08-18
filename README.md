@@ -5,8 +5,9 @@ Code gen:
 - [x] Global variables
 - [ ] Tuples
 - [ ] Lists
-- [ ] Compute `heapLow` dynamically
 - [ ] Polymorphism
+- [ ] Compute `heapLow` dynamically
+- [ ] Strip output of no-op instructions (e.g. `ajs 0`)
 
 Extension:
 - [ ] Lambdas
