@@ -44,12 +44,14 @@ checkFunDecls = checkList checkFunDecl
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
+  -- Generate uvars for params and return type, add to environment
   uVarsParams <- forM params (const $ UVar <$> freshVar)
   forM_ (zip params uVarsParams) $
     uncurry (envInsertVar LocalLevel)
   retTy <- UVar <$> freshVar
   envInsertRetType retTy
   envLocalInsertFun name (Fun uVarsParams retTy)
+  -- Check var decls and statements
   (varDecls',varDeclsSubst) <- checkVarDecls LocalLevel varDecls
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
@@ -148,7 +150,7 @@ checkExpr (T.Tuple e1 e2 _) = do
   (e1',t1,s1) <- checkExpr e1
   (e2',t2,s2) <- checkExpr e2
   let ty = Prod t1 t2
-  pure (T.Tuple e1' e2' ty, ty, s1 <> s2)
+  pure (T.Tuple e1' e2' ty, ty, s2 <> s1)
 
 checkExprs :: [T.Expr ()] -> CGen ([T.Expr UType], [UType], Subst)
 checkExprs [] = pure ([],[],mempty)
@@ -156,8 +158,6 @@ checkExprs (expr:exprs) = do
   (expr', exprType, exprSubst) <- checkExpr expr
   (exprs', exprsTypes, exprsSubst) <- checkExprs exprs
   pure (expr':exprs', exprType:exprsTypes, exprSubst <> exprsSubst)
-
-
 
 checkFunCall :: T.FunName -> [T.Expr ()] -> CGen ([T.Expr UType], UType, Subst)
 checkFunCall funName args = do

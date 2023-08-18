@@ -69,7 +69,7 @@ codegenLocalVarDecl (i, VarDecl _ ident e _) = do
   pure $ program ++ [StoreLocal i]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
-codegenFunDecl (FunDecl funName args retType varDecls stmts uScheme) = do
+codegenFunDecl (FunDecl funName args _ varDecls stmts _) = do
   modifyOffsets (const M.empty)
   -- Arguments at negative offsets from MP, reverse order
   -- TODO: Calculate sizes
@@ -108,7 +108,7 @@ codegenStmt (Assign (VarId ident) expr) = do
   storeProgram <- storeIdent ident exprTy
   pure $ exprProgram ++ storeProgram
 
-codegenStmt (Assign (VarField varLookup field) expr) =
+codegenStmt (Assign (VarField _ field) _) =
   case field of
     TypeAST.Head -> undefined
     TypeAST.Tail -> undefined
