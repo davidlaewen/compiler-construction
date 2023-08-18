@@ -28,7 +28,7 @@ lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
 loadIdent :: T.Text -> UType -> Codegen Program
 loadIdent ident ty = let size = uTypeSize ty in
   lookupOffset ident >>= \case
-    Offset offset -> pure [LoadLocalMulti offset size]
+    Offset offset -> pure [LoadLocalMulti (offset - size + 1) size]
     HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeapMulti 0 size]
 
 storeIdent :: T.Text -> UType -> Codegen Program
@@ -37,17 +37,15 @@ storeIdent ident ty = let size = uTypeSize ty in
     Offset offset -> pure [StoreLocalMulti offset size]
     HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddressMulti (negate size + 1) size]
 
-computeOffsets :: [Int] -> [Int]
-computeOffsets = go 0
-  where
-    go _ [] = []
-    go acc (x:xs) = acc : go (x + acc) xs
+computeOffsets :: [Int] -> Int -> [Int]
+computeOffsets [] _ = []
+computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 
 codegen :: TypeAST.Program UType UScheme -> Codegen Program
 codegen (TypeAST.Program varDecls funDecls) = do
   -- TODO: Global variable declarations
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
-  let varOffsets = computeOffsets varSizes
+  let varOffsets = computeOffsets varSizes 0
   -- TODO: Compute offsets
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunDecl funDecls
@@ -69,11 +67,16 @@ codegenLocalVarDecl (i, VarDecl _ ident e _) = do
   pure $ program ++ [StoreLocal i]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
-codegenFunDecl (FunDecl funName args _ varDecls stmts _) = do
+codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do
+  -- TODO: Polymorphic function types
+  let argTypes = case uScheme of
+        TI.UScheme _ (TI.Fun argTys _) -> argTys
+        _ -> error ""
   modifyOffsets (const M.empty)
+  let argSizes = map uTypeSize argTypes
+  let argOffsets = computeOffsets (reverse argSizes) 2
   -- Arguments at negative offsets from MP, reverse order
-  -- TODO: Calculate sizes
-  forM_ (zip (reverse args) (map (* (-1)) [2..]))
+  forM_ (zip (reverse args) (map negate argOffsets))
     (\(argName, i) -> modifyOffsets (M.insert argName i))
   let varDeclsSize = sum $ map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
   varDeclsProgram <- concatMapM codegenLocalVarDecl (zip [1..] varDecls)
