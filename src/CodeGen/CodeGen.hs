@@ -11,12 +11,14 @@ import qualified Data.Text as T
 import CodeGen.Definition
 import CodeGen.Instructions (Register(..), Instr(..))
 import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
-import qualified Syntax.TypeAST as TypeAST
+import qualified Syntax.TypeAST as TA
 import TypeInference.Definition (UScheme, UType)
 import qualified TypeInference.Definition as TI
 import Control.Monad.State (gets, forM_)
 import qualified Data.Map as M
 
+---------------------------------
+-- Variable loading & storing
 
 lookupOffset :: T.Text -> Codegen Loc
 lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
@@ -41,12 +43,14 @@ computeOffsets :: [Int] -> Int -> [Int]
 computeOffsets [] _ = []
 computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 
-codegen :: TypeAST.Program UType UScheme -> Codegen Program
-codegen (TypeAST.Program varDecls funDecls) = do
-  -- TODO: Global variable declarations
+
+--------------------------
+-- Code generation
+
+codegen :: TA.Program UType UScheme -> Codegen Program
+codegen (TA.Program varDecls funDecls) = do
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
   let varOffsets = computeOffsets varSizes 0
-  -- TODO: Compute offsets
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunDecl funDecls
   pure $
@@ -55,16 +59,18 @@ codegen (TypeAST.Program varDecls funDecls) = do
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenGlobalVarDecl (i, VarDecl _ ident e ty) = do
+  let size = uTypeSize ty
   program <- codegenExpr e
-  modifyHeapLocs (M.insert ident $ i + uTypeSize ty - 1)
+  modifyHeapLocs (M.insert ident $ i + size - 1)
   -- Store immediately, since subsequent global vars may refer to this decl
-  pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
+  pure $ program ++ [StoreHeapMulti size]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
-codegenLocalVarDecl (i, VarDecl _ ident e _) = do
+codegenLocalVarDecl (i, VarDecl _ ident e ty) = do
+  let size = uTypeSize ty
   program <- codegenExpr e
-  modifyOffsets (M.insert ident i)
-  pure $ program ++ [StoreLocal i]
+  modifyOffsets (M.insert ident $ i + size - 1)
+  pure $ program ++ [StoreLocalMulti i size]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
 codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do
@@ -107,53 +113,65 @@ codegenStmt (While cond loopStmts) = do
 
 codegenStmt (Assign (VarId ident) expr) = do
   exprProgram <- codegenExpr expr
-  let exprTy = TypeAST.getTypeExpr expr
+  let exprTy = TA.getTypeExpr expr
   storeProgram <- storeIdent ident exprTy
   pure $ exprProgram ++ storeProgram
 
 codegenStmt (Assign (VarField _ field) _) =
   case field of
-    TypeAST.Head -> undefined
-    TypeAST.Tail -> undefined
-    TypeAST.Fst -> undefined
-    TypeAST.Snd -> undefined
+    TA.Head -> undefined
+    TA.Tail -> undefined
+    TA.Fst -> undefined
+    TA.Snd -> undefined
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args
-  let argsSize = sum $ uTypeSize . TypeAST.getTypeExpr <$> args
+  let argsSize = sum $ uTypeSize . TA.getTypeExpr <$> args
   pure $ argsProgram ++
     case funName of -- Relinquish args on stack after returning
       Name name -> [BranchSubr name, Adjust $ negate argsSize]
-      _ -> funName2Program funName (TypeAST.getTypeExpr <$> args)
+      _ -> funName2Program funName (TA.getTypeExpr <$> args)
 
 codegenStmt (Return Nothing) = pure [Unlink, Ret]
 codegenStmt (Return (Just expr)) = do
-  program <- codegenExpr expr
-  pure $ program ++ [StoreReg RetReg, Unlink, Ret]
+  let retSize = uTypeSize $ TA.getTypeExpr expr
+  exprProgram <- codegenExpr expr
+  let storeProgram = case retSize of
+        1 -> []
+        _ -> [StoreHeapMulti retSize]
+  pure $ exprProgram ++ storeProgram ++ [StoreReg RetReg, Unlink, Ret]
 
 
 codegenExpr :: Expr UType -> Codegen Program
-codegenExpr (TypeAST.Ident ident ty) = loadIdent ident ty
-codegenExpr (TypeAST.Int i _) = pure [LoadConst i]
-codegenExpr (TypeAST.Char c _) = pure [LoadConst $ fromEnum c]
-codegenExpr (TypeAST.Bool True _) = pure [LoadConst (-1)]
-codegenExpr (TypeAST.Bool False _) = pure [LoadConst 0]
+codegenExpr (TA.Ident ident ty) = loadIdent ident ty
+codegenExpr (TA.Int i _) = pure [LoadConst i]
+codegenExpr (TA.Char c _) = pure [LoadConst $ fromEnum c]
+codegenExpr (TA.Bool True _) = pure [LoadConst (-1)]
+codegenExpr (TA.Bool False _) = pure [LoadConst 0]
 
-codegenExpr (FunCallE funName args _) = do
+codegenExpr (FunCallE funName args retType) = do
   argsProgram <- concatMapM codegenExpr args
-  let argsSize = sum $ uTypeSize . TypeAST.getTypeExpr <$> args
+  let argsSize = sum $ uTypeSize . TA.getTypeExpr <$> args
+  let retSize = uTypeSize retType
+  let loadProgram = case retSize of
+        1 -> []
+        _ -> [LoadHeapMulti 0 retSize]
   pure $ argsProgram ++
     case funName of
-      Name name -> BranchSubr name : [Adjust $ negate argsSize, LoadReg RetReg] -- Subroutine
-      _ -> funName2Program funName (TypeAST.getTypeExpr <$> args) -- Primitive operation
+      Name name -> BranchSubr name : -- Subroutine
+        [Adjust $ negate argsSize, LoadReg RetReg] ++ loadProgram
+      _ -> funName2Program funName (TA.getTypeExpr <$> args) -- Primitive operation
 
-codegenExpr (TypeAST.Tuple e1 e2 (TI.Prod _ _)) = do
+codegenExpr (TA.Tuple e1 e2 (TI.Prod _ _)) = do
   e1Program <- codegenExpr e1
   e2Program <- codegenExpr e2
   pure $ e1Program ++ e2Program
 
 codegenExpr expr = error $ "TODO: codegenExpr: " <> show expr
 
+
+--------------------------
+-- Primitive operations
 
 funName2Program :: FunName -> [UType] -> Program
 funName2Program (Name name) _ =
