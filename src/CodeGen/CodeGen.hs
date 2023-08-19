@@ -30,7 +30,7 @@ lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
 loadIdent :: T.Text -> UType -> Codegen Program
 loadIdent ident ty = let size = uTypeSize ty in
   lookupOffset ident >>= \case
-    Offset offset -> pure [LoadLocalMulti (offset - size + 1) size]
+    Offset offset -> pure [LoadLocalMulti offset size]
     HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeapMulti 0 size]
 
 storeIdent :: T.Text -> UType -> Codegen Program
@@ -69,7 +69,8 @@ codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenLocalVarDecl (i, VarDecl _ ident e ty) = do
   let size = uTypeSize ty
   program <- codegenExpr e
-  modifyOffsets (M.insert ident $ i + size - 1)
+  modifyOffsets (M.insert ident i)
+  -- Store immediately, since subsequent local vars may refer to this decl
   pure $ program ++ [StoreLocalMulti i size]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
@@ -79,15 +80,17 @@ codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do
         TI.UScheme _ (TI.Fun argTys _) -> argTys
         _ -> error ""
   modifyOffsets (const M.empty)
-  let argSizes = map uTypeSize argTypes
-  let argOffsets = computeOffsets (reverse argSizes) 2
+  let argSizes = reverse $ map uTypeSize argTypes
+  let argOffsets = succ <$> zipWith (-) (negate <$> computeOffsets argSizes 2) argSizes
   -- Arguments at negative offsets from MP, reverse order
-  forM_ (zip (reverse args) (map negate argOffsets))
+  forM_ (zip (reverse args) argOffsets)
     (\(argName, i) -> modifyOffsets (M.insert argName i))
-  let varDeclsSize = sum $ map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
-  varDeclsProgram <- concatMapM codegenLocalVarDecl (zip [1..] varDecls)
+  let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
+  let varOffsets = computeOffsets varSizes 1
+  -- Arguments at positive offsets from MP
+  varDeclsProgram <- concatMapM codegenLocalVarDecl (zip varOffsets varDecls)
   stmtsProgram <- concatMapM codegenStmt stmts
-  pure $ Label funName : Link varDeclsSize : varDeclsProgram ++ stmtsProgram
+  pure $ Label funName : Link (sum varSizes) : varDeclsProgram ++ stmtsProgram
 
 codegenStmt :: Stmt UType -> Codegen Program
 codegenStmt (If condition thenStmts elseStmts) = do
