@@ -120,6 +120,7 @@ codegenStmt (Assign varLookup varType expr) = do
   storeProgram <- storeIdent ident ty offset
   pure $ exprProgram ++ storeProgram
   where
+    -- Traverse field selectors "inside-out", i.e. on recursive ascent
     go :: VarLookup -> UType -> (T.Text, UType, Int)
     go (VarId ident) varTy = (ident,varTy,0)
     go (VarField varLkp field) varTy =
@@ -131,14 +132,6 @@ codegenStmt (Assign varLookup varType expr) = do
           (TA.Snd,  TI.Prod ty1 ty2) -> (ident, ty2, offset + uTypeSize ty1)
           (_,_) -> error $ "Cannot assign to field " <> show field <>
             " of variable " <> show ident <> " with type " <> show ty
-    {-
-    go (VarField vl TA.Head) (TI.List ty) = go vl ty
-    go (VarField vl TA.Tail) (TI.List ty) = go vl (TI.List ty) (o + uTypeSize ty)
-    go (VarField vl TA.Fst)  (TI.Prod ty1 _) = go vl ty1 o
-    go (VarField vl TA.Snd)  (TI.Prod ty1 ty2) = go vl ty2 (o + uTypeSize ty1)
-    go (VarField _ field) ty _ = error $ "Selector " <> show field <>
-      " in assignment incompatible with type " <> show ty <> " of variable!"
-      -}
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args

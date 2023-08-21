@@ -1,0 +1,16 @@
+var p = (2,20);
+
+main() {
+  var q = ((p.fst,0), (p.snd,0));
+  var x = (0,0);
+
+  q.fst.snd = q.fst.snd + 40;
+  q.snd.snd = 22;
+
+  x.fst = q.fst.fst + q.fst.snd;
+  x.snd = q.snd.fst + q.snd.snd;
+
+  // Should print 42 twice
+  print(x.fst);
+  print(x.snd);
+}
