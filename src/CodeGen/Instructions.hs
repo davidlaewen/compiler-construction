@@ -5,7 +5,7 @@ module CodeGen.Instructions (
 import qualified Data.Text as T
 
 data Register = ProgCounter | StackPointer | MarkPointer | HeapPointer
-              | RetReg | Scratch1 | Scratch2 | Scratch3
+              | RetReg | NullReg | Scratch2 | Scratch3
 
 instance Show Register where
   show ProgCounter = "PC"
@@ -13,7 +13,7 @@ instance Show Register where
   show MarkPointer = "MP"
   show HeapPointer = "HP"
   show RetReg = "RR"
-  show Scratch1 = "R5"
+  show NullReg = "R5"
   show Scratch2 = "R6"
   show Scratch3 = "R7"
 

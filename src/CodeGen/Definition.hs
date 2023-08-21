@@ -12,7 +12,8 @@ module CodeGen.Definition (
   modifyOffsets,
   modifyHeapLocs,
   concatMapM,
-  uTypeSize
+  uTypeSize,
+  uTypeSizeHeap
 ) where
 
 import CodeGen.Instructions (Instr(..))
@@ -71,3 +72,7 @@ uTypeSize UType.Char = 1
 uTypeSize (UType.Prod ty1 ty2) = uTypeSize ty1 + uTypeSize ty2
 uTypeSize (UType.List _) = 1
 uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
+
+uTypeSizeHeap :: UType -> Int
+uTypeSizeHeap (UType.List ty) = uTypeSize ty + 1
+uTypeSizeHeap ty = uTypeSize ty

@@ -32,7 +32,8 @@ loadIdent ident ty = let size = uTypeSize ty in
   lookupOffset ident >>= \case
     Offset offset -> pure [LoadLocalMulti offset size]
     -- ldmh extends upwards, offset direction upwards
-    HeapLoc loc -> pure [LoadConst (heapLow + loc), LoadHeapMulti (negate size + 1) size]
+    HeapLoc loc -> pure [ LoadConst (heapLow + loc),
+                          LoadHeapMulti (negate size + 1) size ]
 
 storeIdent :: T.Text -> UType -> Int -> Codegen Program
 storeIdent ident ty o = let size = uTypeSize ty in
@@ -40,6 +41,9 @@ storeIdent ident ty o = let size = uTypeSize ty in
     Offset offset -> pure [StoreLocalMulti (offset + o) size]
     -- stma stores downwards, offset direction downwards
     HeapLoc loc -> pure [LoadConst (heapLow + loc), StoreAddressMulti o size]
+
+loadList :: Int -> Instr
+loadList size = LoadHeapMulti 0 $ size + 1
 
 computeOffsets :: [Int] -> Int -> [Int]
 computeOffsets [] _ = []
@@ -52,10 +56,11 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 codegen :: TA.Program UType UScheme -> Codegen Program
 codegen (TA.Program varDecls funDecls) = do
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
-  let varOffsets = computeOffsets varSizes 0
+  let varOffsets = computeOffsets varSizes 1
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunDecl funDecls
-  pure $
+  pure $ -- Allocate lowest heap address for use as null pointer
+    [LoadConst 0X0F0F0F0F, StoreHeap, StoreReg NullReg] ++
     varDeclsProgram ++ Adjust (negate $ length varDecls) :
       BranchAlways "main" : funDeclsProgram ++ [Halt]
 
@@ -153,10 +158,10 @@ codegenStmt (Return (Just expr)) = do
 
 codegenExpr :: Expr UType -> Codegen Program
 codegenExpr (TA.Ident ident ty) = loadIdent ident ty
-codegenExpr (TA.Int i _) = pure [LoadConst i]
-codegenExpr (TA.Char c _) = pure [LoadConst $ fromEnum c]
-codegenExpr (TA.Bool True _) = pure [LoadConst (-1)]
-codegenExpr (TA.Bool False _) = pure [LoadConst 0]
+codegenExpr (TA.Int i TI.Int) = pure [LoadConst i]
+codegenExpr (TA.Char c TI.Char) = pure [LoadConst $ fromEnum c]
+codegenExpr (TA.Bool True TI.Bool) = pure [LoadConst (-1)]
+codegenExpr (TA.Bool False TI.Bool) = pure [LoadConst 0]
 
 codegenExpr (FunCallE funName args retType) = do
   argsProgram <- concatMapM codegenExpr args
@@ -171,12 +176,15 @@ codegenExpr (FunCallE funName args retType) = do
         [Adjust $ negate argsSize, LoadReg RetReg] ++ loadProgram
       _ -> funName2Program funName (TA.getTypeExpr <$> args) -- Primitive operation
 
+codegenExpr (EmptyList (TI.List _)) = pure [LoadReg NullReg]
+
 codegenExpr (TA.Tuple e1 e2 (TI.Prod _ _)) = do
   e1Program <- codegenExpr e1
   e2Program <- codegenExpr e2
   pure $ e1Program ++ e2Program
 
-codegenExpr expr = error $ "TODO: codegenExpr: " <> show expr
+codegenExpr e = error $ "Found expression " <> show e <>
+  " with invalid type " <> show (TA.getTypeExpr e)
 
 
 --------------------------
@@ -201,12 +209,18 @@ funName2Program Gte _ = [GtOp]
 funName2Program And _ = [AndOp]
 funName2Program Or  _ = [OrOp]
 -- TODO: List operators
-funName2Program Cons _ = undefined
-funName2Program IsEmpty _ = undefined
-funName2Program HeadFun _ = undefined
+funName2Program Cons [ty, TI.List _] = [StoreHeapMulti $ uTypeSize ty + 1]
+funName2Program Cons _ = error "Called `cons` with invalid arg types"
+funName2Program IsEmpty _ = [LoadReg NullReg, EqOp]
+funName2Program HeadFun [TI.List ty] = loadList size : [Adjust $ negate size]
+  where size = uTypeSize ty
+funName2Program HeadFun _ = error "Called `hd` with invalid arg type"
+funName2Program TailFun [TI.List ty] =
+  loadList size : [ StoreStack $ negate size, Adjust $ 1 - size ]
+  where size = uTypeSize ty
 funName2Program TailFun _ = undefined
 -- Move SP to end of first component
-funName2Program FstFun [TI.Prod _ ty2] = [Adjust $ negate $ uTypeSize ty2 ]
+funName2Program FstFun [TI.Prod _ ty2] = [Adjust $ negate $ uTypeSize ty2]
 funName2Program FstFun _ = error "Called `fst` on non-tuple"
 funName2Program SndFun [TI.Prod ty1 ty2] =
   let size1 = uTypeSize ty1
