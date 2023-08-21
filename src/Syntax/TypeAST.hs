@@ -24,7 +24,7 @@ data FunDecl a b = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
 
 data Stmt a = If (Expr a) [Stmt a] [Stmt a]
             | While (Expr a) [Stmt a]
-            | Assign VarLookup (Expr a)
+            | Assign VarLookup a (Expr a)
             | FunCall FunName [Expr a]
             | Return (Maybe (Expr a))
   deriving Show

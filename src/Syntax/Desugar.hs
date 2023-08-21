@@ -33,7 +33,7 @@ instance Desugar P.Stmt (T.Stmt ()) where
   desugar (P.If expr thenStmts elseStmts) =
     T.If (desugar expr) (desugar <$> thenStmts) (desugar <$> elseStmts)
   desugar (P.While e stmts) = T.While (desugar e) (desugar <$> stmts)
-  desugar (P.Assign varLookup e) = T.Assign (desugar varLookup) (desugar e)
+  desugar (P.Assign varLookup e) = T.Assign (desugar varLookup) () (desugar e)
   desugar (P.FunCall "print" args) = T.FunCall T.Print (desugar <$> args)
   desugar (P.FunCall "isEmpty" args) = T.FunCall T.IsEmpty (desugar <$> args)
   desugar (P.FunCall name args) = T.FunCall (T.Name name) (desugar <$> args)

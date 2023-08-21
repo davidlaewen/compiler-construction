@@ -1,0 +1,33 @@
+var p = (2,20);
+
+foo(p,q) {
+  var res = (0,0);
+  var bar = (p.fst,q.snd);
+  res = (res.fst + bar.fst, res.snd + p.snd);
+  return (res.fst + q.fst, res.snd + bar.snd);
+}
+
+addFieldwise(p) {
+  var res = (0,0);
+  var bar = (p.fst.fst, p.fst.snd);
+
+  res = (bar.fst + p.snd.fst, res.snd);
+
+  return (res.fst, p.fst.snd + p.snd.snd);
+}
+
+main() {
+  var q = (40,22);
+  var x = foo(p,q);
+  var r = (p, (40,22));
+
+  // Should print 42 twice
+  print(x.fst);
+  print(x.snd);
+
+  x = addFieldwise(r);
+
+  // Should print 42 twice
+  print(x.fst);
+  print(x.snd);
+}

@@ -20,8 +20,8 @@ annotateStmt s (T.If condExpr thenStmts elseStmts) =
   T.If (annotateExpr s condExpr) (annotateStmt s <$> thenStmts) (annotateStmt s <$> elseStmts)
 annotateStmt s (T.While condExpr loopStmts) =
   T.While (annotateExpr s condExpr) (annotateStmt s <$> loopStmts)
-annotateStmt s (T.Assign varLookup expr) =
-  T.Assign varLookup (annotateExpr s expr)
+annotateStmt s (T.Assign varLookup varTy expr) =
+  T.Assign varLookup (subst s varTy) (annotateExpr s expr)
 annotateStmt s (T.FunCall funName args) =
   T.FunCall funName (annotateExpr s <$> args)
 annotateStmt s (T.Return mExpr) =

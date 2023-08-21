@@ -24,20 +24,22 @@ lookupOffset :: T.Text -> Codegen Loc
 lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
   Nothing -> gets (M.lookup ident . heapLocs) >>= \case
     Nothing -> error $ "Couldn't find offset for identifer " <> T.unpack ident
-    Just offset -> pure $ HeapLoc offset
+    Just loc -> pure $ HeapLoc loc
   Just offset -> pure $ Offset offset
 
 loadIdent :: T.Text -> UType -> Codegen Program
 loadIdent ident ty = let size = uTypeSize ty in
   lookupOffset ident >>= \case
     Offset offset -> pure [LoadLocalMulti offset size]
-    HeapLoc offset -> pure [LoadConst (heapLow + offset), LoadHeapMulti 0 size]
+    -- ldmh extends upwards, offset direction upwards
+    HeapLoc loc -> pure [LoadConst (heapLow + loc), LoadHeapMulti (negate size + 1) size]
 
-storeIdent :: T.Text -> UType -> Codegen Program
-storeIdent ident ty = let size = uTypeSize ty in
+storeIdent :: T.Text -> UType -> Int -> Codegen Program
+storeIdent ident ty o = let size = uTypeSize ty in
   lookupOffset ident >>= \case
-    Offset offset -> pure [StoreLocalMulti offset size]
-    HeapLoc offset -> pure [LoadConst (heapLow + offset), StoreAddressMulti (negate size + 1) size]
+    Offset offset -> pure [StoreLocalMulti (offset + o) size]
+    -- stma stores downwards, offset direction downwards
+    HeapLoc loc -> pure [LoadConst (heapLow + loc), StoreAddressMulti o size]
 
 computeOffsets :: [Int] -> Int -> [Int]
 computeOffsets [] _ = []
@@ -59,19 +61,17 @@ codegen (TA.Program varDecls funDecls) = do
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenGlobalVarDecl (i, VarDecl _ ident e ty) = do
-  let size = uTypeSize ty
   program <- codegenExpr e
-  modifyHeapLocs (M.insert ident $ i + size - 1)
+  modifyHeapLocs (M.insert ident i)
   -- Store immediately, since subsequent global vars may refer to this decl
-  pure $ program ++ [StoreHeapMulti size]
+  pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenLocalVarDecl (i, VarDecl _ ident e ty) = do
-  let size = uTypeSize ty
   program <- codegenExpr e
   modifyOffsets (M.insert ident i)
   -- Store immediately, since subsequent local vars may refer to this decl
-  pure $ program ++ [StoreLocalMulti i size]
+  pure $ program ++ [StoreLocalMulti i $ uTypeSize ty]
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
 codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do
@@ -81,13 +81,13 @@ codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do
         _ -> error ""
   modifyOffsets (const M.empty)
   let argSizes = reverse $ map uTypeSize argTypes
+  -- Offsets should point to top. Negative offsets from MP, reverse order
   let argOffsets = succ <$> zipWith (-) (negate <$> computeOffsets argSizes 2) argSizes
-  -- Arguments at negative offsets from MP, reverse order
   forM_ (zip (reverse args) argOffsets)
     (\(argName, i) -> modifyOffsets (M.insert argName i))
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
   let varOffsets = computeOffsets varSizes 1
-  -- Arguments at positive offsets from MP
+  -- Arguments at positive offsets from MP, pointing to top
   varDeclsProgram <- concatMapM codegenLocalVarDecl (zip varOffsets varDecls)
   stmtsProgram <- concatMapM codegenStmt stmts
   pure $ Label funName : Link (sum varSizes) : varDeclsProgram ++ stmtsProgram
@@ -114,18 +114,31 @@ codegenStmt (While cond loopStmts) = do
     ++ loopProgram ++ [BranchAlways topLabel]
     ++ [Label endLabel]
 
-codegenStmt (Assign (VarId ident) expr) = do
+codegenStmt (Assign varLookup varType expr) = do
   exprProgram <- codegenExpr expr
-  let exprTy = TA.getTypeExpr expr
-  storeProgram <- storeIdent ident exprTy
+  let (ident,ty,offset) = go varLookup varType
+  storeProgram <- storeIdent ident ty offset
   pure $ exprProgram ++ storeProgram
-
-codegenStmt (Assign (VarField _ field) _) =
-  case field of
-    TA.Head -> undefined
-    TA.Tail -> undefined
-    TA.Fst -> undefined
-    TA.Snd -> undefined
+  where
+    go :: VarLookup -> UType -> (T.Text, UType, Int)
+    go (VarId ident) varTy = (ident,varTy,0)
+    go (VarField varLkp field) varTy =
+      let (ident,ty,offset) = go varLkp varTy in
+        case (field,ty) of
+          (TA.Head, TI.List elemTy)  -> (ident, elemTy, offset)
+          (TA.Tail, TI.List elemTy)  -> (ident, ty, offset + uTypeSize elemTy)
+          (TA.Fst,  TI.Prod ty1 _)   -> (ident, ty1, offset)
+          (TA.Snd,  TI.Prod ty1 ty2) -> (ident, ty2, offset + uTypeSize ty1)
+          (_,_) -> error $ "Cannot assign to field " <> show field <>
+            " of variable " <> show ident <> " with type " <> show ty
+    {-
+    go (VarField vl TA.Head) (TI.List ty) = go vl ty
+    go (VarField vl TA.Tail) (TI.List ty) = go vl (TI.List ty) (o + uTypeSize ty)
+    go (VarField vl TA.Fst)  (TI.Prod ty1 _) = go vl ty1 o
+    go (VarField vl TA.Snd)  (TI.Prod ty1 ty2) = go vl ty2 (o + uTypeSize ty1)
+    go (VarField _ field) ty _ = error $ "Selector " <> show field <>
+      " in assignment incompatible with type " <> show ty <> " of variable!"
+      -}
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args

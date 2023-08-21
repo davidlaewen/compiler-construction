@@ -84,12 +84,12 @@ checkStmt (T.While condExpr loopStmts) = do
   (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
   pure (T.While condExpr' loopStmts', loopStmtsSubst <> s <> condExprSubst)
 
-checkStmt (T.Assign varLookup expr) = do
+checkStmt (T.Assign varLookup _ expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
-  s <- foo varLookup exprType
-  pure (T.Assign varLookup expr', s <> exprSubst)
+  (varTy,s) <- foo varLookup exprType
+  pure (T.Assign varLookup varTy expr', s <> exprSubst)
   where
-    foo :: T.VarLookup -> UType -> CGen Subst
+    foo :: T.VarLookup -> UType -> CGen (UType, Subst)
     foo (T.VarId name) exprType = do
       mVarType <- envLookupVar name
       case mVarType of
@@ -97,7 +97,7 @@ checkStmt (T.Assign varLookup expr) = do
         Just varType -> do
           s <- unify exprType varType
           applySubst s
-          pure s
+          pure (varType,s)
     foo (T.VarField varLkp field) exprType = do
       case field of
         T.Head -> foo varLkp (List exprType)
