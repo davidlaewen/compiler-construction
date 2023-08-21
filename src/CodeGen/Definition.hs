@@ -4,7 +4,7 @@ module CodeGen.Definition (
   LocMap,
   Program,
   Loc(..),
-  heapLow,
+  nullPtr,
   CodegenState(..),
   Codegen,
   runCodegen,
@@ -30,8 +30,8 @@ type Program = [Instr]
 
 data Loc = Offset Int | HeapLoc Int
 
-heapLow :: Int
-heapLow = 0x0007D0
+nullPtr :: Int
+nullPtr = 0xF0F0F0F0
 
 data CodegenState = CodegenState {
   labelCounter :: Int,

@@ -32,7 +32,7 @@ loadIdent ident ty = let size = uTypeSize ty in
   lookupOffset ident >>= \case
     Offset offset -> pure [LoadLocalMulti offset size]
     -- ldmh extends upwards, offset direction upwards
-    HeapLoc loc -> pure [ LoadConst (heapLow + loc),
+    HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
                           LoadHeapMulti (negate size + 1) size ]
 
 storeIdent :: T.Text -> UType -> Int -> Codegen Program
@@ -40,7 +40,8 @@ storeIdent ident ty o = let size = uTypeSize ty in
   lookupOffset ident >>= \case
     Offset offset -> pure [StoreLocalMulti (offset + o) size]
     -- stma stores downwards, offset direction downwards
-    HeapLoc loc -> pure [LoadConst (heapLow + loc), StoreAddressMulti o size]
+    HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
+                          StoreAddressMulti o size]
 
 loadList :: Int -> Instr
 loadList size = LoadHeapMulti 0 $ size + 1
@@ -56,20 +57,23 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 codegen :: TA.Program UType UScheme -> Codegen Program
 codegen (TA.Program varDecls funDecls) = do
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
-  let varOffsets = computeOffsets varSizes 1
+  let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunDecl funDecls
-  pure $ -- Allocate lowest heap address for use as null pointer
-    [LoadConst 0X0F0F0F0F, StoreHeap, StoreReg NullReg] ++
-    varDeclsProgram ++ Adjust (negate $ length varDecls) :
+  pure $ varDeclsProgram ++
+    -- HP now at start of global vars, copy to R5
+    [LoadReg HeapPointer, StoreReg HeapLowReg] ++
+    -- Store all global vars to heap, adjust SP
+    StoreHeapMulti (sum varSizes) : Adjust (-1) :
       BranchAlways "main" : funDeclsProgram ++ [Halt]
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
-codegenGlobalVarDecl (i, VarDecl _ ident e ty) = do
+codegenGlobalVarDecl (i, VarDecl _ ident e _) = do
   program <- codegenExpr e
+  modifyOffsets (M.insert ident i) -- Local offset for use in subsequent decls
   modifyHeapLocs (M.insert ident i)
-  -- Store immediately, since subsequent global vars may refer to this decl
-  pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
+  pure program
+  -- pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
 codegenLocalVarDecl (i, VarDecl _ ident e ty) = do
@@ -176,7 +180,7 @@ codegenExpr (FunCallE funName args retType) = do
         [Adjust $ negate argsSize, LoadReg RetReg] ++ loadProgram
       _ -> funName2Program funName (TA.getTypeExpr <$> args) -- Primitive operation
 
-codegenExpr (EmptyList (TI.List _)) = pure [LoadReg NullReg]
+codegenExpr (EmptyList (TI.List _)) = pure [LoadConst nullPtr]
 
 codegenExpr (TA.Tuple e1 e2 (TI.Prod _ _)) = do
   e1Program <- codegenExpr e1
@@ -208,10 +212,10 @@ funName2Program Lte _ = [LtOp]
 funName2Program Gte _ = [GtOp]
 funName2Program And _ = [AndOp]
 funName2Program Or  _ = [OrOp]
--- TODO: List operators
+-- List operators
 funName2Program Cons [ty, TI.List _] = [StoreHeapMulti $ uTypeSize ty + 1]
 funName2Program Cons _ = error "Called `cons` with invalid arg types"
-funName2Program IsEmpty _ = [LoadReg NullReg, EqOp]
+funName2Program IsEmpty _ = [LoadConst nullPtr, EqOp]
 funName2Program HeadFun [TI.List ty] = loadList size : [Adjust $ negate size]
   where size = uTypeSize ty
 funName2Program HeadFun _ = error "Called `hd` with invalid arg type"

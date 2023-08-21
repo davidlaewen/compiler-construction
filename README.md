@@ -3,11 +3,14 @@
 ## To Do
 Code gen:
 - [x] Global variables
-- [ ] Tuples
+- [x] Tuples
 - [ ] Lists
 - [ ] Polymorphism
+- [ ] Equality and printing
+- [ ] Support for mutual recursion
 - [ ] Compute `heapLow` dynamically
 - [ ] Strip output of no-op instructions (e.g. `ajs 0`)
+- [ ] Prelude with printing and comparison implementations
 
 Extension:
 - [ ] Lambdas
@@ -19,7 +22,7 @@ Pretty printing:
 
 QoL:
 - [ ] Tarjan's algorithm for fun decl ordering and grouping for mutual recursion
-- [ ] Automatic insertion of `return` statements
+- [ ] Automatic insertion of `return` statements for Void functions
 - [ ] Improve parser errors
 - [ ] Locations for all type checking errors
 - [ ] Better type checking errors
@@ -33,8 +36,6 @@ Testing & Debugging:
 
 ## Useful docs & tutorials
 [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/GUIDE/)
-
-[SPL test files](https://docs.haskellstack.org/en/stable/GUIDE/)
 
 [Megaparsec tutorial blogpost](https://markkarpov.com/tutorial/megaparsec.html)
 
