@@ -196,11 +196,11 @@ listP = try (formP >>= opFormP) <|> formP
   where
     opP :: TokenParser BinaryOp
     opP = symbolP SymColon >> pure Cons
+    -- Cons operator `:` associates to the right
     opFormP :: Expr -> TokenParser Expr
     opFormP form = try (do
       op <- opP
-      form' <- formP
-      opFormP (BinOp op form form')) <|> pure form
+      BinOp op form <$> listP) <|> pure form
 
 propP :: TokenParser Expr
 propP = try (listP >>= opListP) <|> listP
