@@ -20,8 +20,8 @@ import qualified Data.Map as M
 ---------------------------------
 -- Variable loading & storing
 
-lookupOffset :: T.Text -> Codegen Loc
-lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
+lookupLoc :: T.Text -> Codegen Loc
+lookupLoc ident = gets (M.lookup ident . offsets) >>= \case
   Nothing -> gets (M.lookup ident . heapLocs) >>= \case
     Nothing -> error $ "Couldn't find offset for identifer " <> T.unpack ident
     Just loc -> pure $ HeapLoc loc
@@ -29,15 +29,18 @@ lookupOffset ident = gets (M.lookup ident . offsets) >>= \case
 
 loadIdent :: T.Text -> UType -> Codegen Program
 loadIdent ident ty = let size = uTypeSize ty in
-  lookupOffset ident >>= \case
+  lookupLoc ident >>= \case
     Offset offset -> pure [LoadLocalMulti offset size]
     -- ldmh extends upwards, offset direction upwards
-    HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
+    HeapLoc loc -> pure [ LoadReg HeapLowReg, AddOffset loc,
                           LoadHeapMulti (negate size + 1) size ]
+
+storeToAddress :: UType -> Program
+storeToAddress ty = [StoreAddressMulti 0 $ uTypeSize ty]
 
 storeIdent :: T.Text -> UType -> Int -> Codegen Program
 storeIdent ident ty o = let size = uTypeSize ty in
-  lookupOffset ident >>= \case
+  lookupLoc ident >>= \case
     Offset offset -> pure [StoreLocalMulti (offset + o) size]
     -- stma stores downwards, offset direction downwards
     HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
@@ -125,22 +128,28 @@ codegenStmt (While cond loopStmts) = do
 
 codegenStmt (Assign varLookup varType expr) = do
   exprProgram <- codegenExpr expr
-  let (ident,ty,offset) = go varLookup varType
-  storeProgram <- storeIdent ident ty offset
-  pure $ exprProgram ++ storeProgram
+  (addrProgram,ty,_) <- go varLookup varType
+  pure $ exprProgram ++ addrProgram ++ storeToAddress ty
   where
     -- Traverse field selectors "inside-out", i.e. on recursive ascent
-    go :: VarLookup -> UType -> (T.Text, UType, Int)
-    go (VarId ident) varTy = (ident,varTy,0)
-    go (VarField varLkp field) varTy =
-      let (ident,ty,offset) = go varLkp varTy in
-        case (field,ty) of
-          (TA.Head, TI.List elemTy)  -> (ident, elemTy, offset)
-          (TA.Tail, TI.List elemTy)  -> (ident, ty, offset + uTypeSize elemTy)
-          (TA.Fst,  TI.Prod ty1 _)   -> (ident, ty1, offset)
-          (TA.Snd,  TI.Prod ty1 ty2) -> (ident, ty2, offset + uTypeSize ty1)
-          (_,_) -> error $ "Cannot assign to field " <> show field <>
-            " of variable " <> show ident <> " with type " <> show ty
+    go :: VarLookup -> UType -> Codegen (Program, UType, T.Text)
+    go (VarId ident) varTy = do
+      location <- lookupLoc ident
+      case location of
+        Offset offset -> pure ([LoadReg MarkPointer, AddOffset offset], varTy, ident)
+        HeapLoc loc -> pure ([LoadConst loc], varTy, ident)
+    go (VarField varLkp field) varTy = do
+      (program,ty,ident) <- go varLkp varTy
+      case (field,ty) of
+        (TA.Head, TI.List elemTy) -> -- Load segment address, move pointer to start of head
+          pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize elemTy)],
+                elemTy, ident)
+        (TA.Tail, TI.List _) -> -- Load segment address, pointer already at tail
+          pure (program ++ [LoadAddress 0], ty, ident)
+        (TA.Fst, TI.Prod ty1 _)   -> pure (program, ty1, ident)
+        (TA.Snd, TI.Prod ty1 ty2) -> pure (program ++ [AddOffset $ uTypeSize ty1], ty2, ident)
+        (_,_) -> error $ "Cannot assign to field " <> show field <>
+          " of variable " <> show ident <> " with type " <> show ty
 
 codegenStmt (FunCall funName args) = do
   argsProgram <- concatMapM codegenExpr args
@@ -214,18 +223,21 @@ funName2Program And _ = [AndOp]
 funName2Program Or  _ = [OrOp]
 -- List operators
 funName2Program Cons [ty, TI.List _] = [StoreHeapMulti $ uTypeSize ty + 1]
-funName2Program Cons _ = error "Called `cons` with invalid arg types"
+funName2Program Cons _ = error "Called `:` with non-list"
 funName2Program IsEmpty _ = [LoadConst nullPtr, EqOp]
-funName2Program HeadFun [TI.List ty] = loadList size : [Adjust $ negate size]
+-- Move SP to end of head
+funName2Program HeadFun [TI.List ty] = loadList size : [Adjust $ -1]
   where size = uTypeSize ty
-funName2Program HeadFun _ = error "Called `hd` with invalid arg type"
+funName2Program HeadFun _ = error "Called `hd` on non-list"
+-- Shift tail upwards by size of head
 funName2Program TailFun [TI.List ty] =
   loadList size : [ StoreStack $ negate size, Adjust $ 1 - size ]
   where size = uTypeSize ty
-funName2Program TailFun _ = undefined
+funName2Program TailFun _ = error "Called `tl` on non-list"
 -- Move SP to end of first component
 funName2Program FstFun [TI.Prod _ ty2] = [Adjust $ negate $ uTypeSize ty2]
 funName2Program FstFun _ = error "Called `fst` on non-tuple"
+-- Shift second component upwards by size of first component
 funName2Program SndFun [TI.Prod ty1 ty2] =
   let size1 = uTypeSize ty1
       size2 = uTypeSize ty2

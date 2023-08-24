@@ -1,0 +1,31 @@
+var l2 = 16:17:18:[];
+var l1 = 1:2:3:[];
+
+printIntList(l) {
+  var x = 0;
+
+  if (isEmpty(l)) {
+    print('[');
+    print(']');
+  } else {
+    x = l.hd; // Constrain element type to Int
+    print(x);
+    print(':');
+    printIntList(l.tl);
+  }
+  return;
+}
+
+main() {
+  var t = (True, 10:20:30:[]);
+  var l3 = [];
+
+  l3 = t.snd;
+  t.snd.hd = l1.hd + l3.hd;
+  t.snd.tl.hd = l1.tl.hd + l3.tl.hd;
+  t.snd.tl.tl.hd = l1.tl.tl.hd + l3.tl.tl.hd;
+
+  // Should print `11:22:33:[]` twice
+  printIntList(l3);
+  printIntList(t.snd);
+}

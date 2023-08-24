@@ -22,8 +22,9 @@ data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
            | LoadStack Int | StoreStack Int | LoadStackMulti Int Int | StoreStackMulti Int Int
            | LoadLocal Int | StoreLocal Int | LoadLocalMulti Int Int | StoreLocalMulti Int Int
            | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
+           | LoadAddress Int | LoadAddressMulti Int Int
            | StoreAddress Int | StoreAddressMulti Int Int
-           | LoadConst Int
+           | LoadConst Int | AddOffset Int
            | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
            | NotOp | AndOp | OrOp | XorOp
            | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
@@ -60,10 +61,13 @@ instance Show Instr where
   show (LoadHeapMulti o s) = tab <> "ldmh" <+> show o <+> show s
   show (StoreHeapMulti s) = tab <> "stmh" <+> show s
 
+  show (LoadAddress o) = tab <> "lda" <+> show o
+  show (LoadAddressMulti o s) = tab <> "ldma" <+> show o <+> show s
   show (StoreAddress o) = tab <> "sta" <+> show o
   show (StoreAddressMulti o s) = tab <> "stma" <+> show o <+> show s
 
   show (LoadConst c) = tab <> "ldc" <+> show c
+  show (AddOffset o) = tab <> "ldaa" <+> show o
 
   show (BranchSubr t) = tab <> "bsr" <+> T.unpack t
   show (BranchAlways t) = tab <> "bra" <+> T.unpack t
