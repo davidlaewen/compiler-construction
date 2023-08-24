@@ -4,16 +4,17 @@
 Code gen:
 - [x] Global variables
 - [x] Tuples
-- [ ] Lists
+- [x] Lists
 - [ ] Polymorphism
 - [ ] Equality and printing
 - [ ] Support for mutual recursion
 - [ ] Compute `heapLow` dynamically
-- [ ] Strip output of no-op instructions (e.g. `ajs 0`)
+- [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 - [ ] Prelude with printing and comparison implementations
 
 Extension:
 - [ ] Lambdas
+- [ ] Custom data types?
 - [ ] Further idea
 
 Pretty printing:
