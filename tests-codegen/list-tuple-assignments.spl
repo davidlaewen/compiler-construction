@@ -1,0 +1,39 @@
+var l1 = 1:2:3:[];
+
+printTup(t) {
+  var x = (0,0);
+  x = t; // Constrain type
+
+  print('(');
+  print(t.fst);
+  print(',');
+  print(x.snd);
+  print(')');
+  return;
+}
+
+printList(l) {
+  var x = (0,0);
+
+  if (isEmpty(l)) {
+    print('[');
+    print(']');
+  } else {
+    x = l.hd; // Constrain type
+    printTup(x);
+    print(':');
+    printList(l.tl);
+  }
+  return;
+}
+
+main() {
+  var l2 = l1.tl.tl.hd : l1.tl.hd : l1.hd : l1.tl.tl.tl;
+  var tuples = (1,2) : (2,3) : (3,4) : [];
+
+  tuples.hd.snd = tuples.hd.fst;
+  tuples.tl.hd.snd = tuples.tl.hd.fst;
+  tuples.tl.tl.hd.snd = tuples.tl.tl.hd.fst;
+
+  printList(tuples);
+}
