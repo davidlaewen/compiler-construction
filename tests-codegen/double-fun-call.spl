@@ -3,10 +3,10 @@ foo(x) {
 }
 
 bar(x,y) {
-  var z = 4;
+  var z = 3;
   return x + foo(y) + z;
 }
 
 main() {
-  bar(30,8);
+  print( bar(30,8) );
 }

@@ -46,8 +46,8 @@ storeIdent ident ty o = let size = uTypeSize ty in
     HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
                           StoreAddressMulti o size]
 
-loadList :: Int -> Instr
-loadList size = LoadHeapMulti 0 $ size + 1
+loadComposite :: Int -> Instr
+loadComposite = LoadHeapMulti 0
 
 computeOffsets :: [Int] -> Int -> [Int]
 computeOffsets [] _ = []
@@ -142,12 +142,13 @@ codegenStmt (Assign varLookup varType expr) = do
       (program,ty,ident) <- go varLkp varTy
       case (field,ty) of
         (TA.Head, TI.List elemTy) -> -- Load segment address, move pointer to start of head
-          pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize elemTy)],
-                elemTy, ident)
+          pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize elemTy)], elemTy, ident)
         (TA.Tail, TI.List _) -> -- Load segment address, pointer already at tail
           pure (program ++ [LoadAddress 0], ty, ident)
-        (TA.Fst, TI.Prod ty1 _)   -> pure (program, ty1, ident)
-        (TA.Snd, TI.Prod ty1 ty2) -> pure (program ++ [AddOffset $ uTypeSize ty1], ty2, ident)
+        (TA.Fst, TI.Prod ty1 _) -> -- Load tuple address, move to start of fst component
+          pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize ty1)], ty1, ident)
+        (TA.Snd, TI.Prod _ ty2) -> -- Load tuple address, yields start of snd component
+          pure (program ++ [LoadAddress 0], ty2, ident)
         (_,_) -> error $ "Cannot assign to field " <> show field <>
           " of variable " <> show ident <> " with type " <> show ty
 
@@ -176,25 +177,29 @@ codegenExpr (TA.Char c TI.Char) = pure [LoadConst $ fromEnum c]
 codegenExpr (TA.Bool True TI.Bool) = pure [LoadConst (-1)]
 codegenExpr (TA.Bool False TI.Bool) = pure [LoadConst 0]
 
-codegenExpr (FunCallE funName args retType) = do
-  argsProgram <- concatMapM codegenExpr args
+-- Call to subroutine
+codegenExpr (FunCallE (Name name) args retType) = do
   let argsSize = sum $ uTypeSize . TA.getTypeExpr <$> args
   let retSize = uTypeSize retType
-  let loadProgram = case retSize of
-        1 -> []
-        _ -> [LoadHeapMulti 0 retSize]
-  pure $ argsProgram ++
-    case funName of
-      Name name -> BranchSubr name : -- Subroutine
-        [Adjust $ negate argsSize, LoadReg RetReg] ++ loadProgram
-      _ -> funName2Program funName (TA.getTypeExpr <$> args) -- Primitive operation
+  argsProgram <- concatMapM codegenExpr args
+  let unboxProgram = [LoadHeapMulti 0 retSize | retSize > 1]
+  pure $ argsProgram ++ BranchSubr name :
+    [Adjust $ negate argsSize, LoadReg RetReg] ++ unboxProgram
 
+-- Call to primitive operation
+codegenExpr (FunCallE funName args _) = do
+  argsProgram <- concatMapM codegenExpr args
+  pure $ argsProgram ++ funName2Program funName (TA.getTypeExpr <$> args)
+
+-- Empty list is represented by address 0xF0F0F0F0
 codegenExpr (EmptyList (TI.List _)) = pure [LoadConst nullPtr]
 
-codegenExpr (TA.Tuple e1 e2 (TI.Prod _ _)) = do
+-- Compute tuple entries, store to heap
+codegenExpr (TA.Tuple e1 e2 (TI.Prod ty1 ty2)) = do
   e1Program <- codegenExpr e1
   e2Program <- codegenExpr e2
-  pure $ e1Program ++ e2Program
+  pure $ e1Program ++ e2Program ++
+    [StoreHeapMulti $ uTypeSize ty1 + uTypeSize ty2]
 
 codegenExpr e = error $ "Found expression " <> show e <>
   " with invalid type " <> show (TA.getTypeExpr e)
@@ -226,29 +231,32 @@ funName2Program Cons [ty, TI.List _] = [StoreHeapMulti $ uTypeSize ty + 1]
 funName2Program Cons _ = error "Called `:` with non-list"
 funName2Program IsEmpty _ = [LoadConst nullPtr, EqOp]
 -- Move SP to end of head
-funName2Program HeadFun [TI.List ty] = loadList size : [Adjust $ -1]
-  where size = uTypeSize ty
+funName2Program HeadFun [TI.List ty] = loadComposite size : [Adjust $ -1]
+  where size = uTypeSize ty + 1
 funName2Program HeadFun _ = error "Called `hd` on non-list"
 -- Shift tail upwards by size of head
 funName2Program TailFun [TI.List ty] =
-  loadList size : [ StoreStack $ negate size, Adjust $ 1 - size ]
+  loadComposite (size + 1) : [ StoreStack $ negate size, Adjust $ 1 - size ]
   where size = uTypeSize ty
 funName2Program TailFun _ = error "Called `tl` on non-list"
 -- Move SP to end of first component
-funName2Program FstFun [TI.Prod _ ty2] = [Adjust $ negate $ uTypeSize ty2]
+funName2Program FstFun [TI.Prod ty1 ty2] =
+  loadComposite size : [Adjust $ negate $ uTypeSize ty2]
+  where size = uTypeSize ty1 + uTypeSize ty2
 funName2Program FstFun _ = error "Called `fst` on non-tuple"
 -- Shift second component upwards by size of first component
 funName2Program SndFun [TI.Prod ty1 ty2] =
   let size1 = uTypeSize ty1
       size2 = uTypeSize ty2
       offset = negate $ size1 + size2 - 1 in
-  [ StoreStackMulti offset size2, Adjust $ size2 - size1 ]
+  loadComposite (size1 + size2) :
+    [ StoreStackMulti offset size2, Adjust $ size2 - size1 ]
 funName2Program SndFun _ = error "Called `snd` on non-tuple"
 
 funName2Program Print [ty] = case ty of
   TI.Int -> [TrapInt]
   TI.Char -> [TrapChar]
   -- TI.Bool -> [BranchSubr "printBool", Adjust (-1)]
-  _ -> error $ "Printing for type " <> show ty <> "not yet implemented!"
+  _ -> error $ "Printing for type " <> show ty <> " not yet implemented!"
 
 funName2Program Print _ = error "Function `print` called with multiple args!"

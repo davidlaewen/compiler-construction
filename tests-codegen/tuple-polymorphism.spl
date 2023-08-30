@@ -1,0 +1,26 @@
+id(x) {
+  return x;
+}
+
+swap(t) {
+  return (t.snd,t.fst);
+}
+
+renest(t) :: ((a,b),c) -> (a,(b,c)) {
+  var t1 = t.fst;
+  return (t1.fst, (t1.snd, t.snd));
+}
+
+rotate(t) :: ((a,b),c) -> ((b,c),a) {
+  var t1 = t.fst;
+  return ((t1.snd, t.snd), t1.fst);
+}
+
+
+main() {
+  // Should print 42 four times
+  print( id((True,42)).snd );
+  print( swap( (42,'a') ).snd );
+  print( renest( (('a',42),True) ).snd.fst );
+  print( rotate( ((1,True), (42,'a')) ).fst.snd.fst );
+}

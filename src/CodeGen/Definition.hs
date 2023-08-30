@@ -12,13 +12,14 @@ module CodeGen.Definition (
   modifyOffsets,
   modifyHeapLocs,
   concatMapM,
+  uSchemeSize,
   uTypeSize,
   uTypeSizeHeap
 ) where
 
 import CodeGen.Instructions (Instr(..))
-import TypeInference.Definition (UType)
-import qualified TypeInference.Definition as UType
+import TypeInference.Definition (UScheme,UType)
+import qualified TypeInference.Definition as TI
 
 import Control.Monad.State (State, evalState, modify, gets)
 import qualified Data.Map as M
@@ -65,14 +66,19 @@ concatMapM f (x : xs) = do
   ys <- concatMapM f xs
   pure $ y ++ ys
 
+uSchemeSize :: UScheme -> Int
+uSchemeSize (TI.UScheme _ ty) = uTypeSize ty
+
 uTypeSize :: UType -> Int
-uTypeSize UType.Int = 1
-uTypeSize UType.Bool = 1
-uTypeSize UType.Char = 1
-uTypeSize (UType.Prod ty1 ty2) = uTypeSize ty1 + uTypeSize ty2
-uTypeSize (UType.List _) = 1
+uTypeSize TI.Int = 1
+uTypeSize TI.Bool = 1
+uTypeSize TI.Char = 1
+uTypeSize (TI.Prod _ _) = 1
+uTypeSize (TI.List _) = 1
+uTypeSize (TI.UVar _) = 1
 uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
 
 uTypeSizeHeap :: UType -> Int
-uTypeSizeHeap (UType.List ty) = uTypeSize ty + 1
+uTypeSizeHeap (TI.List ty) = uTypeSize ty + 1
+uTypeSizeHeap (TI.Prod ty1 ty2) = uTypeSize ty1 + uTypeSize ty2
 uTypeSizeHeap ty = uTypeSize ty
