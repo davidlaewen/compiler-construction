@@ -1,0 +1,58 @@
+id(x) {
+  return x;
+}
+
+head(l) {
+  return l.hd;
+}
+
+tail(l) {
+  return l.tl;
+}
+
+reverse(l,acc) {
+  if (isEmpty(l)) {
+    return acc;
+  } else {
+    return reverse(l.tl, l.hd : acc);
+  }
+}
+
+concat(l1,l2) {
+  if (isEmpty(l1)) {
+    return l2;
+  } else {
+    return l1.hd : concat(l1.tl, l2);
+  }
+}
+
+repeat(x,n) {
+  if (n == 0) {
+    return [];
+  } else {
+    return x : repeat(x,n-1);
+  }
+}
+
+insertSorted(x,l) {
+  if (isEmpty(l)) {
+    return x:[];
+  } else {
+    if (x <= l.hd) {
+      return x:l;
+    } else {
+      return l.hd : insertSorted(x,l.tl);
+    }
+  }
+}
+
+main() {
+  // Should print 42 seven times
+  print( id( 1:42:[] ).tl.hd );
+  print( head( 42:0:[] ) );
+  print( tail( 1:42:[] ).hd );
+  print( reverse( 1:2:3:42:[], [] ).hd );
+  print( concat( 1:2:[], 3:42:[] ).tl.tl.tl.hd );
+  print( repeat(42,3).tl.tl.hd );
+  print( insertSorted(42,1:2:100:[]).tl.tl.hd );
+}
