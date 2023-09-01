@@ -2,6 +2,7 @@ module Syntax.TypeAST (
   Program(..),
   VarDecl(..),
   FunDecl(..),
+  FunMutDecl(..),
   Stmt(..),
   VarLookup(..),
   Field(..),
@@ -13,13 +14,16 @@ module Syntax.TypeAST (
 import qualified Data.Text as T
 import TypeInference.Definition ( UType )
 
-data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunDecl varAnnot funAnnot]
+data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show
 
 data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
   deriving Show
 
 data FunDecl a b = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
+  deriving Show
+
+data FunMutDecl a b = MutualDecls [FunDecl a b] | SingleDecl (FunDecl a b)
   deriving Show
 
 data Stmt a = If (Expr a) [Stmt a] [Stmt a]

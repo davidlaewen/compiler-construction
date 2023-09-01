@@ -11,11 +11,12 @@ import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.Text as Text
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program varDecls funDecls) = do
   (vds,s1) <- checkVarDecls GlobalLevel varDecls
-  (fds,s2) <- checkFunDecls funDecls
+  (fds,s2) <- checkList checkFunMutDecl funDecls
   pure (T.Program vds fds, s1 <> s2)
 
 checkList :: (a -> CGen (b, Subst)) -> [a] -> CGen ([b], Subst)
@@ -39,16 +40,33 @@ checkVarDecl envLevel (T.VarDecl mTy name expr _) = do
   applySubst s
   pure (T.VarDecl mTy name expr' uTy, s <> exprSubst)
 
-checkFunDecls :: [T.FunDecl () ()] -> CGen ([T.FunDecl UType UScheme], Subst)
-checkFunDecls = checkList checkFunDecl
+checkFunMutDecl :: T.FunMutDecl () () -> CGen (T.FunMutDecl UType UScheme, Subst)
+checkFunMutDecl (T.SingleDecl funDecl) =
+  checkFunDecl funDecl >>= \(fd,s) -> pure (T.SingleDecl fd, s)
+checkFunMutDecl (T.MutualDecls funDecls) = do
+  forM_ funDecls $ \(T.FunDecl name params _ _ _ _) -> do
+    (paramUVars,retUVar) <- genFunDeclTypes name params
+    envGlobalInsertFun name $ UScheme S.empty $ Fun paramUVars retUVar
+  checkList checkFunDecl funDecls >>= \(fds,ss) -> pure (T.MutualDecls fds, ss)
+
+genFunDeclTypes :: Text.Text -> [a] -> CGen ([UType],UType)
+genFunDeclTypes name params = do
+  mFunScheme <- envLookupFun name
+  case mFunScheme of -- Check for existing entry
+    Just (UScheme _ (Fun argTys retTy)) -> pure (argTys,retTy)
+    Just _ -> error $
+      "Found invalid scheme for function " <> Text.unpack name <> " in global env"
+    Nothing -> do -- Generate fresh uvars
+      uVarsParams <- forM params (const $ UVar <$> freshVar)
+      retTy <- UVar <$> freshVar
+      pure (uVarsParams,retTy)
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   -- Generate uvars for params and return type, add to environment
-  uVarsParams <- forM params (const $ UVar <$> freshVar)
+  (uVarsParams,retTy) <- genFunDeclTypes name params
   forM_ (zip params uVarsParams) $
     uncurry (envInsertVar LocalLevel)
-  retTy <- UVar <$> freshVar
   envInsertRetType retTy
   envLocalInsertFun name (Fun uVarsParams retTy)
   -- Check var decls and statements

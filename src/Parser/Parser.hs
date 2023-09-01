@@ -49,6 +49,15 @@ funDeclP = do
     handleNoStatements _ stmts = pure stmts
 
 
+mutualDeclP :: TokenParser FunMutDecl
+mutualDeclP = do
+  keywordP KwMutual
+  funDecls <- bracesP $ many funDeclP
+  pure $ MutualDecls funDecls
+
+funOrMutualDeclP :: TokenParser FunMutDecl
+funOrMutualDeclP = mutualDeclP <|> SingleDecl <$> funDeclP
+
 
 ----------------------
 -- Types
@@ -105,7 +114,7 @@ funCallEP = do
 
 parenOrTupleP :: TokenParser Expr
 parenOrTupleP = do
-  _ <- symbolP SymParenLeft
+  symbolP SymParenLeft
   e <- exprP
   closeExpr e <|> closeTuple e
   where
@@ -324,19 +333,27 @@ stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 
 programP :: TokenParser Program
 programP = do
-  (funDecls, varDecls) <- partitionEithers <$> many ((Left <$> (lookAhead isFunDeclLookAhead >> funDeclP)) <|> (Right <$> varDeclP))
+  -- This permits mixed order of funDecls and varDecls. The reordering may cause
+  -- odd behaviour and should be caught somewhere with an error
+  (funDecls, varDecls) <- partitionEithers <$> many ((Left <$> (lookAhead isFunDeclLookAhead >> funOrMutualDeclP)) <|> (Right <$> varDeclP))
   Program varDecls funDecls <$ eof
   where
     isFunDeclLookAhead :: TokenParser ()
-    isFunDeclLookAhead = void $ satisfy isIdent >> satisfy isOpenParen
+    isFunDeclLookAhead = void $
+      (satisfy (isKeyword KwMutual) >> satisfy (isSymbol SymBraceLeft)) <|>
+      (satisfy isIdent >> satisfy (isSymbol SymParenLeft))
+
+    isKeyword :: Keyword -> Positioned Parser.Tokens.Token -> Bool
+    isKeyword kw (Positioned _ _ _ _ (Keyword kw')) = kw == kw'
+    isKeyword _ _ = False
+
+    isSymbol :: Symbol -> Positioned Parser.Tokens.Token -> Bool
+    isSymbol sym (Positioned _ _ _ _ (Symbol sym')) = sym == sym'
+    isSymbol _ _ = False
 
     isIdent :: Positioned Parser.Tokens.Token -> Bool
     isIdent (Positioned _ _ _ _ (IdToken _)) = True
     isIdent _ = False
-
-    isOpenParen :: Positioned Parser.Tokens.Token -> Bool
-    isOpenParen (Positioned _ _ _ _ (Symbol SymParenLeft)) = True
-    isOpenParen _ = False
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream ParserError) Program

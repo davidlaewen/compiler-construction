@@ -27,6 +27,11 @@ instance Desugar P.FunDecl (T.FunDecl () ()) where
   desugar (P.FunDecl name args rt varDecls stmts) =
     T.FunDecl name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
 
+instance Desugar P.FunMutDecl (T.FunMutDecl () ()) where
+  desugar :: P.FunMutDecl -> T.FunMutDecl () ()
+  desugar (P.MutualDecls funDecls) = T.MutualDecls $ desugar <$> funDecls
+  desugar (P.SingleDecl funDecl) = T.SingleDecl $ desugar funDecl
+
 
 instance Desugar P.Stmt (T.Stmt ()) where
   desugar :: P.Stmt -> T.Stmt ()

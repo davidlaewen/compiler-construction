@@ -25,7 +25,7 @@ QoL:
 - [ ] Tarjan's algorithm for fun decl ordering and grouping for mutual recursion
 - [ ] Automatic insertion of `return` statements for Void functions
 - [ ] Improve parser errors
-- [ ] Locations for all type checking errors
+- [ ] Location data in AST for use in errors
 - [ ] Better type checking errors
 - [ ] Constant folding
 - [ ] Parsing of non-ANSI Unicode characters

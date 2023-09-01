@@ -39,6 +39,8 @@ data Keyword where
   KwWhile   :: Keyword
   KwReturn  :: Keyword
 
+  KwMutual  :: Keyword
+
   KwInt     :: Keyword
   KwBool    :: Keyword
   KwChar    :: Keyword
@@ -58,6 +60,8 @@ instance Show Keyword where
   show KwElse    = "else"
   show KwWhile   = "while"
   show KwReturn  = "return"
+
+  show KwMutual  = "mutual"
 
   show KwInt     = "Int"
   show KwBool    = "Bool"

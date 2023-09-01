@@ -23,7 +23,7 @@ prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
-  sepBy "\n\n" prettyPrintFunDecl funDecls
+  sepBy "\n\n" prettyPrintFunMutDecl funDecls
   putStrLn ""
 
 prettyPrintVarDecl :: Indentation -> VarDecl -> IO ()
@@ -130,8 +130,17 @@ prettyPrintExpr = go 0
     unOpPrecedence :: Int
     unOpPrecedence = 6
 
-prettyPrintFunDecl :: FunDecl -> IO ()
-prettyPrintFunDecl (FunDecl funName argNames retTypeM varDecls stmts) = do
+prettyPrintFunMutDecl :: FunMutDecl -> IO ()
+prettyPrintFunMutDecl (SingleDecl funDecl) = prettyPrintFunDecl 0 funDecl
+prettyPrintFunMutDecl (MutualDecls funDecls) = do
+  putStrLn "mutual {"
+  sepBy "\n" (prettyPrintFunDecl 4) funDecls
+  putChar '\n'
+  putChar '}'
+
+prettyPrintFunDecl :: Indentation -> FunDecl -> IO ()
+prettyPrintFunDecl i (FunDecl funName argNames retTypeM varDecls stmts) = do
+  printIndentation i
   T.putStr funName
   putChar '('
   sepBy ", " T.putStr argNames
@@ -142,10 +151,11 @@ prettyPrintFunDecl (FunDecl funName argNames retTypeM varDecls stmts) = do
       putStr " :: "
       prettyPrintType retType
   putStrLn " {"
-  sepBy "\n" (prettyPrintVarDecl 4) varDecls
+  sepBy "\n" (prettyPrintVarDecl $ i + tabWidth) varDecls
   unless (null varDecls || null stmts) $ putStrLn ""
-  sepBy "\n" (prettyPrintStmt 4) stmts
+  sepBy "\n" (prettyPrintStmt $ i + tabWidth) stmts
   putStrLn ""
+  printIndentation i
   putChar '}'
 
 prettyPrintStmt :: Indentation -> Stmt -> IO ()

@@ -10,7 +10,7 @@ module CodeGen.CodeGen(
 import qualified Data.Text as T
 import CodeGen.Definition
 import CodeGen.Instructions (Register(..), Instr(..))
-import Syntax.TypeAST (FunDecl(..), Expr(..), Stmt(..), VarDecl(..), FunName(..), VarLookup(..))
+import Syntax.TypeAST (VarDecl(..), FunMutDecl(..), FunDecl(..), Expr(..), Stmt(..), FunName(..), VarLookup(..))
 import qualified Syntax.TypeAST as TA
 import TypeInference.Definition (UScheme, UType)
 import qualified TypeInference.Definition as TI
@@ -62,7 +62,7 @@ codegen (TA.Program varDecls funDecls) = do
   let varSizes = map (\(VarDecl _ _ _ ty) -> uTypeSize ty) varDecls
   let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
-  funDeclsProgram <- concatMapM codegenFunDecl funDecls
+  funDeclsProgram <- concatMapM codegenFunMutDecl funDecls
   pure $ varDeclsProgram ++
     -- HP now at start of global vars, copy to R5
     [LoadReg HeapPointer, StoreReg HeapLowReg] ++
@@ -84,6 +84,10 @@ codegenLocalVarDecl (i, VarDecl _ ident e ty) = do
   modifyOffsets (M.insert ident i)
   -- Store immediately, since subsequent local vars may refer to this decl
   pure $ program ++ [StoreLocalMulti i $ uTypeSize ty]
+
+codegenFunMutDecl :: FunMutDecl UType UScheme -> Codegen Program
+codegenFunMutDecl (SingleDecl funDecl) = codegenFunDecl funDecl
+codegenFunMutDecl (MutualDecls funDecls) = concatMapM codegenFunDecl funDecls
 
 codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
 codegenFunDecl (FunDecl funName args _ varDecls stmts uScheme) = do

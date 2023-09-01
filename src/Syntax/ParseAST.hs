@@ -2,6 +2,7 @@ module Syntax.ParseAST (
   Program(..),
   VarDecl(..),
   FunDecl(..),
+  FunMutDecl(..),
   Stmt(..),
   Type(..),
   VarLookup(..),
@@ -14,13 +15,16 @@ module Syntax.ParseAST (
 
 import qualified Data.Text as T
 
-data Program = Program [VarDecl] [FunDecl]
+data Program = Program [VarDecl] [FunMutDecl]
   deriving Show
 
 data VarDecl = VarDecl (Maybe Type) T.Text Expr
   deriving Show
 
 data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+  deriving Show
+
+data FunMutDecl = MutualDecls [FunDecl] | SingleDecl FunDecl
   deriving Show
 
 data Stmt = If Expr [Stmt] [Stmt]
