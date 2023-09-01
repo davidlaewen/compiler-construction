@@ -1,0 +1,61 @@
+// Integer rose trees
+// Type of nodes: Node ~ (Int,[Node])
+
+var exTree123 = (1, (2,[]) : (3,[]) : []);
+/*  1
+   / \
+  2   3 */
+var exTree2468 = (2, (4, (6,[]):[]):(8,[]):[] );
+/*    2
+     / \
+    4   8
+   /
+  6       */
+
+mutual {
+
+  sumNodeList(l) {
+    if (isEmpty(l)) {
+      return 0;
+    } else {
+      return sumNode(l.hd) + sumNodeList(l.tl);
+    }
+  }
+
+  sumNode(t) {
+    return t.fst + sumNodeList(t.snd);
+  }
+
+}
+
+max(n,m) {
+  if (n > m) { return n; } else { return m; }
+}
+
+mutual {
+
+  depthNodeList(l) {
+    if (isEmpty(l)) {
+      return 0;
+    } else {
+      return max( depthNode(l.hd), depthNodeList(l.tl) );
+    }
+  }
+
+  depthNode(t) {
+    return 1 + depthNodeList(t.snd);
+  }
+
+}
+
+
+main() {
+  // Should print 6 and 20
+  print( sumNode(exTree123) ); print(' ');
+  print( sumNode(exTree2468) ); print(' ');
+
+  // Should print 1, 2 and 3
+  print( depthNode( (1,[]) ) ); print(' ');
+  print( depthNode(exTree123) ); print(' ');
+  print( depthNode(exTree2468) );
+}
