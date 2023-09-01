@@ -42,12 +42,31 @@ checkVarDecl envLevel (T.VarDecl mTy name expr _) = do
 
 checkFunMutDecl :: T.FunMutDecl () () -> CGen (T.FunMutDecl UType UScheme, Subst)
 checkFunMutDecl (T.SingleDecl funDecl) =
-  checkFunDecl funDecl >>= \(fd,s) -> pure (T.SingleDecl fd, s)
+  checkFunDecl funDecl >>= \(fd, s) -> do
+    fd' <- generaliseFunScheme fd
+    pure (T.SingleDecl fd',s)
+
 checkFunMutDecl (T.MutualDecls funDecls) = do
+  -- Generate schemes with placeholder uvars for all functions in block
   forM_ funDecls $ \(T.FunDecl name params _ _ _ _) -> do
     (paramUVars,retUVar) <- genFunDeclTypes name params
     envGlobalInsertFun name $ UScheme S.empty $ Fun paramUVars retUVar
-  checkList checkFunDecl funDecls >>= \(fds,ss) -> pure (T.MutualDecls fds, ss)
+  -- Check fun decls in order without generalising
+  (fds,ss) <- checkList checkFunDecl funDecls
+  -- Substitute and generalise all function schemes
+  let fds' = map (\(T.FunDecl name params mTy varDecls stmts uScheme) ->
+        T.FunDecl name params mTy varDecls stmts (subst ss uScheme)) fds
+  fds'' <- forM fds' generaliseFunScheme
+  pure (T.MutualDecls fds'', ss)
+
+generaliseFunScheme :: T.FunDecl UType UScheme -> CGen (T.FunDecl UType UScheme)
+generaliseFunScheme (T.FunDecl name params mTy varDecls stmts (UScheme _ funTy)) = do
+  -- Generalise over free uvars
+  let binders = freeUVars funTy
+  let funScheme = UScheme binders funTy
+  -- Update function scheme in environment
+  envGlobalInsertFun name funScheme
+  pure $ T.FunDecl name params mTy varDecls stmts funScheme
 
 genFunDeclTypes :: Text.Text -> [a] -> CGen ([UType],UType)
 genFunDeclTypes name params = do
@@ -74,11 +93,9 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- TODO: Check user-specified type against inferred type
-  -- TODO: Generalize over TyVars
   let s = stmtsSubst <> varDeclsSubst
   let funTy = subst s $ Fun uVarsParams retTy
-  let binders = freeUVars funTy
-  let funScheme = UScheme binders funTy
+  let funScheme = UScheme S.empty funTy
   envGlobalInsertFun name funScheme
   pure (T.FunDecl name params mTy varDecls' stmts' funScheme, s)
 

@@ -7,7 +7,7 @@ Code gen:
 - [x] Lists
 - [ ] Polymorphism
 - [ ] Equality and printing
-- [ ] Support for mutual recursion
+- [x] Support for mutual recursion
 - [x] Compute `heapLow` dynamically
 - [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 - [ ] Prelude with printing and comparison implementations

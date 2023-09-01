@@ -1,10 +1,13 @@
 // Integer rose trees
 // Type of nodes: Node ~ (Int,[Node])
 
+// This shouldn't typecheck in the absence of infinite types
+
 var exTree123 = (1, (2,[]) : (3,[]) : []);
 /*  1
    / \
   2   3 */
+
 var exTree2468 = (2, (4, (6,[]):[]):(8,[]):[] );
 /*    2
      / \
@@ -14,6 +17,7 @@ var exTree2468 = (2, (4, (6,[]):[]):(8,[]):[] );
 
 mutual {
 
+  // [a] -> Int
   sumNodeList(l) {
     if (isEmpty(l)) {
       return 0;
@@ -22,6 +26,7 @@ mutual {
     }
   }
 
+  // (Int,b) -> Int
   sumNode(t) {
     return t.fst + sumNodeList(t.snd);
   }
@@ -55,7 +60,7 @@ main() {
   print( sumNode(exTree2468) ); print(' ');
 
   // Should print 1, 2 and 3
-  print( depthNode( (1,[]) ) ); print(' ');
+  print( depthNode( ((True,42),[]) ) ); print(' ');
   print( depthNode(exTree123) ); print(' ');
   print( depthNode(exTree2468) );
 }

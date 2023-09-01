@@ -25,8 +25,8 @@ unify (UVar i) t =
   else pure $ Subst $ M.singleton i t
 unify t (UVar i) =
   if occurs i t
-    then throwError "Occurs check failed!"
-    else pure $ Subst $ M.singleton i t
+  then throwError "Occurs check failed!"
+  else pure $ Subst $ M.singleton i t
 unify (List t1) (List t2) = unify t1 t2
 unify (Prod s1 s2) (Prod t1 t2) = do
   subst1 <- unify s1 t1
