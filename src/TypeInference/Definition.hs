@@ -27,19 +27,9 @@ import qualified Data.Set as S
 import Control.Monad.State
 import Control.Monad.Except
 import Data.Set ((\\))
+import TypeInference.Types
+import Syntax.TypeAST (FunDecl(..))
 
-type UVar = Int
-type TVar = T.Text
-
-data UType = Int | Bool | Char | Void
-           | Prod UType UType | List UType
-           | Fun [UType] UType
-           | UVar UVar
-           | TVar TVar
-  deriving (Show, Eq)
-
-data UScheme = UScheme (S.Set UVar) UType
-  deriving (Show)
 
 class Types a where
   subst :: Subst -> a -> a
@@ -155,6 +145,15 @@ instance Types UScheme where
 
   freeUVars :: UScheme -> S.Set UVar
   freeUVars (UScheme binders ty) = freeUVars ty \\ binders
+
+instance (Types b) => Types (FunDecl a b) where
+  subst :: Subst -> FunDecl a b -> FunDecl a b
+  subst s (FunDecl name params mTy varDecls stmts uScheme) =
+    FunDecl name params mTy varDecls stmts (subst s uScheme)
+
+  freeUVars :: FunDecl a b -> S.Set UVar
+  freeUVars (FunDecl _ _ _ _ _ uScheme) = freeUVars uScheme
+
 
 instance Semigroup Subst where
   Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1

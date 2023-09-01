@@ -54,8 +54,7 @@ checkFunMutDecl (T.MutualDecls funDecls) = do
   -- Check fun decls in order without generalising
   (fds,ss) <- checkList checkFunDecl funDecls
   -- Substitute and generalise all function schemes
-  let fds' = map (\(T.FunDecl name params mTy varDecls stmts uScheme) ->
-        T.FunDecl name params mTy varDecls stmts (subst ss uScheme)) fds
+  let fds' = map (subst ss) fds
   fds'' <- forM fds' generaliseFunScheme
   pure (T.MutualDecls fds'', ss)
 

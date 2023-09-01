@@ -38,14 +38,6 @@ loadIdent ident ty = let size = uTypeSize ty in
 storeToAddress :: UType -> Program
 storeToAddress ty = [StoreAddressMulti 0 $ uTypeSize ty]
 
-storeIdent :: T.Text -> UType -> Int -> Codegen Program
-storeIdent ident ty o = let size = uTypeSize ty in
-  lookupLoc ident >>= \case
-    Offset offset -> pure [StoreLocalMulti (offset + o) size]
-    -- stma stores downwards, offset direction downwards
-    HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadConst loc, AddOp,
-                          StoreAddressMulti o size]
-
 loadComposite :: Int -> Instr
 loadComposite = LoadHeapMulti 0
 

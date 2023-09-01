@@ -12,7 +12,7 @@ module Syntax.TypeAST (
 ) where
 
 import qualified Data.Text as T
-import TypeInference.Definition ( UType )
+import TypeInference.Types ( UType )
 
 data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show

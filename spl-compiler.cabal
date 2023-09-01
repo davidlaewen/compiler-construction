@@ -39,6 +39,7 @@ library
       TypeInference.Annotate
       TypeInference.ConstraintGen
       TypeInference.Definition
+      TypeInference.Types
       TypeInference.Unify
   other-modules:
       Paths_spl_compiler
