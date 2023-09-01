@@ -1,7 +1,7 @@
 // Integer rose trees
 // Type of nodes: Node ~ (Int,[Node])
 
-// This shouldn't typecheck in the absence of infinite types
+// This doesn't typecheck in the absence of infinite types
 
 var exTree123 = (1, (2,[]) : (3,[]) : []);
 /*  1

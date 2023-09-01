@@ -5,7 +5,7 @@ Code gen:
 - [x] Global variables
 - [x] Tuples
 - [x] Lists
-- [ ] Polymorphism
+- [x] Polymorphism
 - [ ] Equality and printing
 - [x] Support for mutual recursion
 - [x] Compute `heapLow` dynamically
@@ -28,7 +28,8 @@ QoL:
 - [ ] Location data in AST for use in errors
 - [ ] Better type checking errors
 - [ ] Constant folding
-- [ ] Parsing of non-ANSI Unicode characters
+- [ ] Parsing of escaped characters
+- [ ] Built-in `printLn` function
 
 Testing & Debugging:
 - [ ] Implement test suite
