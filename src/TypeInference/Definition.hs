@@ -148,11 +148,11 @@ instance Types UScheme where
 
 instance (Types b) => Types (FunDecl a b) where
   subst :: Subst -> FunDecl a b -> FunDecl a b
-  subst s (FunDecl name params mTy varDecls stmts uScheme) =
-    FunDecl name params mTy varDecls stmts (subst s uScheme)
+  subst s (FunDecl loc name params mTy varDecls stmts uScheme) =
+    FunDecl loc name params mTy varDecls stmts (subst s uScheme)
 
   freeUVars :: FunDecl a b -> S.Set UVar
-  freeUVars (FunDecl _ _ _ _ _ uScheme) = freeUVars uScheme
+  freeUVars (FunDecl _ _ _ _ _ _ uScheme) = freeUVars uScheme
 
 
 instance Semigroup Subst where

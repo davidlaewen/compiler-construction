@@ -1,3 +1,5 @@
+// SPL Prelude
+
 printBool(b) :: Bool -> Void {
   if (b) {
     print('T');
@@ -12,4 +14,12 @@ printBool(b) :: Bool -> Void {
     print('e');
   }
   return;
+}
+
+printTuple(t) :: (a,b) -> Void {
+  print('(');
+  print(t.fst);
+  print(',');
+  print(t.snd);
+  print(')');
 }

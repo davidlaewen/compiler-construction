@@ -30,7 +30,7 @@ checkVarDecls :: EnvLevel -> [T.VarDecl ()] -> CGen ([T.VarDecl UType], Subst)
 checkVarDecls envLevel = checkList $ checkVarDecl envLevel
 
 checkVarDecl :: EnvLevel -> T.VarDecl () -> CGen (T.VarDecl UType, Subst)
-checkVarDecl envLevel (T.VarDecl mTy name expr _) = do
+checkVarDecl envLevel (T.VarDecl loc mTy name expr _) = do
   uTy <- case mTy of
     Nothing -> UVar <$> freshVar
     Just ty -> pure ty
@@ -38,7 +38,7 @@ checkVarDecl envLevel (T.VarDecl mTy name expr _) = do
   envInsertVar envLevel name uTy
   s <- unify exprType uTy
   applySubst s
-  pure (T.VarDecl mTy name expr' uTy, s <> exprSubst)
+  pure (T.VarDecl loc mTy name expr' uTy, s <> exprSubst)
 
 checkFunMutDecl :: T.FunMutDecl () () -> CGen (T.FunMutDecl UType UScheme, Subst)
 checkFunMutDecl (T.SingleDecl funDecl) =
@@ -46,9 +46,9 @@ checkFunMutDecl (T.SingleDecl funDecl) =
     fd' <- generaliseFunScheme fd
     pure (T.SingleDecl fd',s)
 
-checkFunMutDecl (T.MutualDecls funDecls) = do
+checkFunMutDecl (T.MutualDecls loc funDecls) = do
   -- Generate schemes with placeholder uvars for all functions in block
-  forM_ funDecls $ \(T.FunDecl name params _ _ _ _) -> do
+  forM_ funDecls $ \(T.FunDecl _ name params _ _ _ _) -> do
     (paramUVars,retUVar) <- genFunDeclTypes name params
     envGlobalInsertFun name $ UScheme S.empty $ Fun paramUVars retUVar
   -- Check fun decls in order without generalising
@@ -56,16 +56,16 @@ checkFunMutDecl (T.MutualDecls funDecls) = do
   -- Substitute and generalise all function schemes
   let fds' = map (subst ss) fds
   fds'' <- forM fds' generaliseFunScheme
-  pure (T.MutualDecls fds'', ss)
+  pure (T.MutualDecls loc fds'', ss)
 
 generaliseFunScheme :: T.FunDecl UType UScheme -> CGen (T.FunDecl UType UScheme)
-generaliseFunScheme (T.FunDecl name params mTy varDecls stmts (UScheme _ funTy)) = do
+generaliseFunScheme (T.FunDecl loc name params mTy varDecls stmts (UScheme _ funTy)) = do
   -- Generalise over free uvars
   let binders = freeUVars funTy
   let funScheme = UScheme binders funTy
   -- Update function scheme in environment
   envGlobalInsertFun name funScheme
-  pure $ T.FunDecl name params mTy varDecls stmts funScheme
+  pure $ T.FunDecl loc name params mTy varDecls stmts funScheme
 
 genFunDeclTypes :: Text.Text -> [a] -> CGen ([UType],UType)
 genFunDeclTypes name params = do
@@ -80,7 +80,7 @@ genFunDeclTypes name params = do
       pure (uVarsParams,retTy)
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
-checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
+checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
   -- Generate uvars for params and return type, add to environment
   (uVarsParams,retTy) <- genFunDeclTypes name params
   forM_ (zip params uVarsParams) $
@@ -96,35 +96,35 @@ checkFunDecl (T.FunDecl name params mTy varDecls stmts _) = do
   let funTy = subst s $ Fun uVarsParams retTy
   let funScheme = UScheme S.empty funTy
   envGlobalInsertFun name funScheme
-  pure (T.FunDecl name params mTy varDecls' stmts' funScheme, s)
+  pure (T.FunDecl loc name params mTy varDecls' stmts' funScheme, s)
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
 checkStmts = checkList checkStmt
 
 checkStmt :: T.Stmt () -> CGen (T.Stmt UType, Subst)
-checkStmt (T.If condExpr thenStmts elseStmts) = do
+checkStmt (T.If loc condExpr thenStmts elseStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
   s <- unify condExprType Bool
   applySubst s
   (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
   (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
-  pure (T.If condExpr' thenStmts' elseStmts',
+  pure (T.If loc condExpr' thenStmts' elseStmts',
     elseStmtsSubst <> thenStmtsSubst <> s <> condExprSubst)
 
-checkStmt (T.While condExpr loopStmts) = do
+checkStmt (T.While loc condExpr loopStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
   s <- unify condExprType Bool
   applySubst s
   (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
-  pure (T.While condExpr' loopStmts', loopStmtsSubst <> s <> condExprSubst)
+  pure (T.While loc condExpr' loopStmts', loopStmtsSubst <> s <> condExprSubst)
 
-checkStmt (T.Assign varLookup _ expr) = do
+checkStmt (T.Assign loc varLookup _ expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
   (varTy,s) <- foo varLookup exprType
-  pure (T.Assign varLookup varTy expr', s <> exprSubst)
+  pure (T.Assign loc varLookup varTy expr', s <> exprSubst)
   where
     foo :: T.VarLookup -> UType -> CGen (UType, Subst)
-    foo (T.VarId name) exprType = do
+    foo (T.VarId _ name) exprType = do
       mVarType <- envLookupVar name
       case mVarType of
         Nothing -> throwError $ "No variable declaration matching " <> name
@@ -132,7 +132,7 @@ checkStmt (T.Assign varLookup _ expr) = do
           s <- unify exprType varType
           applySubst s
           pure (varType,s)
-    foo (T.VarField varLkp field) exprType = do
+    foo (T.VarField _ varLkp field) exprType = do
       case field of
         T.Head -> foo varLkp (List exprType)
         T.Tail -> foo varLkp exprType
@@ -143,11 +143,11 @@ checkStmt (T.Assign varLookup _ expr) = do
           uVarFst <- UVar <$> freshVar
           foo varLkp (Prod uVarFst exprType)
 
-checkStmt (T.FunCall funName args) = do
+checkStmt (T.FunCall loc funName args) = do
   (args',_,s) <- checkFunCall funName args
-  pure (T.FunCall funName args', s)
+  pure (T.FunCall loc funName args', s)
 
-checkStmt (T.Return mExpr) = do
+checkStmt (T.Return loc mExpr) = do
   mRetType <- envLookupRetType
   case mRetType of
     Nothing -> error "RetType not found in environment!"
@@ -156,35 +156,34 @@ checkStmt (T.Return mExpr) = do
         Nothing -> do
           s <- unify retType Void
           applySubst s
-          pure (T.Return Nothing, s)
+          pure (T.Return loc Nothing, s)
         Just expr -> do
           (expr', exprType, exprSubst) <- checkExpr expr
           s <- unify retType exprType
           applySubst s
-          pure (T.Return (Just expr'), s <> exprSubst)
+          pure (T.Return loc (Just expr'), s <> exprSubst)
 
 
 checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
-checkExpr (T.Ident name _) = do
+checkExpr (T.Ident loc name _) = do
   -- TODO: We need a way to check whether this a local or global variable
-  envLookupVar name >>=
-    \case
+  envLookupVar name >>= \case
       Nothing -> throwError $ "Could not find variable `" <> name <> "`"
-      Just ut -> pure (T.Ident name ut, ut, mempty)
-checkExpr (T.Int n _) = pure (T.Int n Int, Int, mempty)
-checkExpr (T.Char c _) = pure (T.Char c Char, Char, mempty)
-checkExpr (T.Bool b _) = pure (T.Bool b Bool, Bool, mempty)
-checkExpr (T.FunCallE funName args _) = do
+      Just ut -> pure (T.Ident loc name ut, ut, mempty)
+checkExpr (T.Int loc n _) = pure (T.Int loc n Int, Int, mempty)
+checkExpr (T.Char loc c _) = pure (T.Char loc c Char, Char, mempty)
+checkExpr (T.Bool loc b _) = pure (T.Bool loc b Bool, Bool, mempty)
+checkExpr (T.FunCallE loc funName args _) = do
   (args', retType, s) <- checkFunCall funName args
-  pure (T.FunCallE funName args' retType, retType, s)
-checkExpr (T.EmptyList _) = do
+  pure (T.FunCallE loc funName args' retType, retType, s)
+checkExpr (T.EmptyList loc _) = do
   ty <- List . UVar <$> freshVar
-  pure (T.EmptyList ty, ty, mempty)
-checkExpr (T.Tuple e1 e2 _) = do
+  pure (T.EmptyList loc ty, ty, mempty)
+checkExpr (T.Tuple loc e1 e2 _) = do
   (e1',t1,s1) <- checkExpr e1
   (e2',t2,s2) <- checkExpr e2
   let ty = Prod t1 t2
-  pure (T.Tuple e1' e2' ty, ty, s2 <> s1)
+  pure (T.Tuple loc e1' e2' ty, ty, s2 <> s1)
 
 checkExprs :: [T.Expr ()] -> CGen ([T.Expr UType], [UType], Subst)
 checkExprs [] = pure ([],[],mempty)

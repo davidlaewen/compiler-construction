@@ -7,6 +7,7 @@ module Syntax.Desugar (
 import qualified Syntax.ParseAST as P
 import qualified Syntax.TypeAST as T
 import qualified TypeInference.Definition as U
+import Utils.Loc (Loc)
 
 class Desugar a b where
   desugar :: a -> b
@@ -19,38 +20,38 @@ instance Desugar P.Program (T.Program () ()) where
 
 instance Desugar P.VarDecl (T.VarDecl ()) where
   desugar :: P.VarDecl -> T.VarDecl ()
-  desugar (P.VarDecl _ mt name e) = T.VarDecl (desugar <$> mt) name (desugar e) ()
+  desugar (P.VarDecl loc mt name e) = T.VarDecl loc (desugar <$> mt) name (desugar e) ()
 
 
 instance Desugar P.FunDecl (T.FunDecl () ()) where
   desugar :: P.FunDecl -> T.FunDecl () ()
-  desugar (P.FunDecl _ name args rt varDecls stmts) =
-    T.FunDecl name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
+  desugar (P.FunDecl loc name args rt varDecls stmts) =
+    T.FunDecl loc name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
 
 instance Desugar P.FunMutDecl (T.FunMutDecl () ()) where
   desugar :: P.FunMutDecl -> T.FunMutDecl () ()
-  desugar (P.MutualDecls _ funDecls) = T.MutualDecls $ desugar <$> funDecls
+  desugar (P.MutualDecls loc funDecls) = T.MutualDecls loc $ desugar <$> funDecls
   desugar (P.SingleDecl funDecl) = T.SingleDecl $ desugar funDecl
 
 
 instance Desugar P.Stmt (T.Stmt ()) where
   desugar :: P.Stmt -> T.Stmt ()
-  desugar (P.If _ expr thenStmts elseStmts) =
-    T.If (desugar expr) (desugar <$> thenStmts) (desugar <$> elseStmts)
-  desugar (P.While _ e stmts) = T.While (desugar e) (desugar <$> stmts)
-  desugar (P.Assign _ varLookup e) = T.Assign (desugar varLookup) () (desugar e)
-  desugar (P.FunCall _ "print" args) = T.FunCall T.Print (desugar <$> args)
-  desugar (P.FunCall _ "isEmpty" args) = T.FunCall T.IsEmpty (desugar <$> args)
-  desugar (P.FunCall _ name args) = T.FunCall (T.Name name) (desugar <$> args)
-  desugar (P.Return _ me) = T.Return (desugar <$> me)
+  desugar (P.If loc expr thenStmts elseStmts) =
+    T.If loc (desugar expr) (desugar <$> thenStmts) (desugar <$> elseStmts)
+  desugar (P.While loc e stmts) = T.While loc (desugar e) (desugar <$> stmts)
+  desugar (P.Assign loc varLookup e) = T.Assign loc (desugar varLookup) () (desugar e)
+  desugar (P.FunCall loc "print" args) = T.FunCall loc T.Print (desugar <$> args)
+  desugar (P.FunCall loc "isEmpty" args) = T.FunCall loc T.IsEmpty (desugar <$> args)
+  desugar (P.FunCall loc name args) = T.FunCall loc (T.Name name) (desugar <$> args)
+  desugar (P.Return loc me) = T.Return loc (desugar <$> me)
   desugar P.GarbageS = error "Attempted to desugar GarbageS node from ParseAST!"
 
 
 instance Desugar P.VarLookup T.VarLookup where
   desugar :: P.VarLookup -> T.VarLookup
-  desugar (P.VarId _ name) = T.VarId name
-  desugar (P.VarField _ varLookup field) =
-    T.VarField (desugar varLookup) (desugar field)
+  desugar (P.VarId loc name) = T.VarId loc name
+  desugar (P.VarField loc varLookup field) =
+    T.VarField loc (desugar varLookup) (desugar field)
 
 
 instance Desugar P.Field T.Field where
@@ -63,46 +64,46 @@ instance Desugar P.Field T.Field where
 
 instance Desugar P.Expr (T.Expr ()) where
   desugar :: P.Expr -> T.Expr ()
-  desugar (P.Ident _ name) = T.Ident name ()
-  desugar (P.ExprLookup _ exprLookup) = desugar exprLookup
-  desugar (P.Int _ i) = T.Int i ()
-  desugar (P.Char _ c) = T.Char c ()
-  desugar (P.Bool _ b) = T.Bool b ()
-  desugar (P.FunCallE _ "print" args) = T.FunCallE T.Print (desugar <$> args) ()
-  desugar (P.FunCallE _ "isEmpty" args) = T.FunCallE T.IsEmpty (desugar <$> args) ()
-  desugar (P.FunCallE _ name args) = T.FunCallE (T.Name name) (desugar <$> args) ()
-  desugar (P.EmptyList _) = T.EmptyList ()
-  desugar (P.Tuple _ e1 e2) = T.Tuple (desugar e1) (desugar e2) ()
+  desugar (P.Ident loc name) = T.Ident loc name ()
+  desugar (P.ExprLookup loc exprLookup) = desugar (exprLookup, loc)
+  desugar (P.Int loc i) = T.Int loc i ()
+  desugar (P.Char loc c) = T.Char loc c ()
+  desugar (P.Bool loc b) = T.Bool loc b ()
+  desugar (P.FunCallE loc "print" args) = T.FunCallE loc T.Print (desugar <$> args) ()
+  desugar (P.FunCallE loc "isEmpty" args) = T.FunCallE loc T.IsEmpty (desugar <$> args) ()
+  desugar (P.FunCallE loc name args) = T.FunCallE loc (T.Name name) (desugar <$> args) ()
+  desugar (P.EmptyList loc) = T.EmptyList loc ()
+  desugar (P.Tuple loc e1 e2) = T.Tuple loc (desugar e1) (desugar e2) ()
 
   -- Unary operations
-  desugar (P.UnOp _ P.Not e) = T.FunCallE T.Not [desugar e] ()
-  desugar (P.UnOp _ P.Neg e) = T.FunCallE T.Neg [desugar e] ()
+  desugar (P.UnOp loc P.Not e) = T.FunCallE loc T.Not [desugar e] ()
+  desugar (P.UnOp loc P.Neg e) = T.FunCallE loc T.Neg [desugar e] ()
 
   -- Binary operations
-  desugar (P.BinOp _ P.Add e1 e2) = T.FunCallE T.Add [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Sub e1 e2) = T.FunCallE T.Sub [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Mul e1 e2) = T.FunCallE T.Mul [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Div e1 e2) = T.FunCallE T.Div [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Mod e1 e2) = T.FunCallE T.Mod [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Add e1 e2) = T.FunCallE loc T.Add [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Sub e1 e2) = T.FunCallE loc T.Sub [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Mul e1 e2) = T.FunCallE loc T.Mul [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Div e1 e2) = T.FunCallE loc T.Div [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Mod e1 e2) = T.FunCallE loc T.Mod [desugar e1, desugar e2] ()
 
-  desugar (P.BinOp _ P.Eq  e1 e2) = T.FunCallE T.Eq  [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Neq e1 e2) = T.FunCallE T.Neq [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Lt  e1 e2) = T.FunCallE T.Lt  [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Gt  e1 e2) = T.FunCallE T.Gt  [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Lte e1 e2) = T.FunCallE T.Lte [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Gte e1 e2) = T.FunCallE T.Gte [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Eq  e1 e2) = T.FunCallE loc T.Eq  [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Neq e1 e2) = T.FunCallE loc T.Neq [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Lt  e1 e2) = T.FunCallE loc T.Lt  [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Gt  e1 e2) = T.FunCallE loc T.Gt  [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Lte e1 e2) = T.FunCallE loc T.Lte [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Gte e1 e2) = T.FunCallE loc T.Gte [desugar e1, desugar e2] ()
 
-  desugar (P.BinOp _ P.And e1 e2) = T.FunCallE T.And [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Or e1 e2)  = T.FunCallE T.Or  [desugar e1, desugar e2] ()
-  desugar (P.BinOp _ P.Cons e1 e2) = T.FunCallE T.Cons [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.And e1 e2)  = T.FunCallE loc T.And [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Or e1 e2)   = T.FunCallE loc T.Or  [desugar e1, desugar e2] ()
+  desugar (P.BinOp loc P.Cons e1 e2) = T.FunCallE loc T.Cons [desugar e1, desugar e2] ()
 
 
-instance Desugar P.ExprLookup (T.Expr ()) where
-  desugar :: P.ExprLookup -> T.Expr ()
-  desugar (P.ExprField expr P.Head) = T.FunCallE T.HeadFun [desugar expr] ()
-  desugar (P.ExprField expr P.Tail) = T.FunCallE T.TailFun [desugar expr] ()
-  desugar (P.ExprField expr P.Fst)  = T.FunCallE T.FstFun  [desugar expr] ()
-  desugar (P.ExprField expr P.Snd)  = T.FunCallE T.SndFun  [desugar expr] ()
+instance Desugar (P.ExprLookup, Loc) (T.Expr ()) where
+  desugar :: (P.ExprLookup, Loc) -> T.Expr ()
+  desugar (P.ExprField expr P.Head, loc) = T.FunCallE loc T.HeadFun [desugar expr] ()
+  desugar (P.ExprField expr P.Tail, loc) = T.FunCallE loc T.TailFun [desugar expr] ()
+  desugar (P.ExprField expr P.Fst, loc)  = T.FunCallE loc T.FstFun  [desugar expr] ()
+  desugar (P.ExprField expr P.Snd, loc)  = T.FunCallE loc T.SndFun  [desugar expr] ()
 
 
 instance Desugar P.Type U.UType where
