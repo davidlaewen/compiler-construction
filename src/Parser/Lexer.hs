@@ -88,7 +88,7 @@ identL = do
   name <- T.cons <$> letterChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
   pure $ IdToken name
 
-
+-- | Parses a keyword followed by whitespace
 keywordL :: Lexer Token
 keywordL = choice $ keyword <$> keywords
   where
@@ -96,7 +96,7 @@ keywordL = choice $ keyword <$> keywords
       _ <- string (T.pack $ show kw) <* notFollowedBy alphaNumChar
       pure $ Keyword kw
 
-
+-- | Parses a symbol
 symbolL :: Lexer Token
 symbolL = choice $ (\sym -> string (T.pack (show sym)) >> pure (Symbol sym)) <$> symbols
 
@@ -109,6 +109,7 @@ lex1 = try intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRec
       _ <- lexeme anySingle
       lex1
 
+-- | Lexes with lexer l and attaches position data to the result
 withPosition :: Lexer a -> Lexer (Positioned a)
 withPosition l = do
   startOffset <- getOffset

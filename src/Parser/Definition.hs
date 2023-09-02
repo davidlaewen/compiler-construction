@@ -8,6 +8,7 @@
 module Parser.Definition
   ( Lexer,
     Positioned (..),
+    WithPos,
     TokenParser,
     ParserError(..),
     TokenStream (..),
@@ -26,7 +27,8 @@ import Data.Maybe (listToMaybe)
 
 type Lexer = Parsec Void Text
 
-type TokenParser = Parsec ParserError TokenStream
+type WithPos a = (a, SourcePos, SourcePos)
+type TokenParser a = Parsec ParserError TokenStream a
 
 data ParserError where
   FunctionMissingStatements :: ParserError

@@ -8,39 +8,42 @@ import Syntax.ParseAST
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
-import Data.Maybe (fromMaybe)
 import Data.Either (partitionEithers)
 import Control.Monad
 import qualified Data.Text as T
+import Utils.Loc (Loc(..), HasLoc(..))
+import Utils.Utils (fst3)
 
 ----------------------
 -- Declarations
 
 varDeclP :: TokenParser VarDecl
 varDeclP = do
-  var <- optional $ keywordP KwVar
-  mty <-
-    case var of
-      Nothing -> Just <$> typeP
-      Just () -> pure Nothing
-  name <- idP
+  mVar <- optional $ keywordP KwVar
+  (mty,startPos) <- case mVar of
+    Nothing -> do
+      ty <- typeP
+      pure (Just ty, getStart ty)
+    Just ((),start,_) -> pure (Nothing,start)
+  (name,_,_) <- idP
   _ <- symbolP SymEq
   expr <- exprP
-  _ <- symbolP SymSemicolon
-  pure $ VarDecl mty name expr
+  (_,_,endPos) <- symbolP SymSemicolon
+  pure $ VarDecl (Loc startPos endPos) mty name expr
 
 
 funDeclP :: TokenParser FunDecl
 funDeclP = do
   funIdOffset <- getOffset
-  name <- idP
-  params <- parensP (idP `sepBy` symbolP SymComma)
+  (name,startPos,_) <- idP
+  (params,_,_) <- parensP ((idP `sepBy` symbolP SymComma) >>=
+    \t -> pure (fst3 <$> t))
   retType <- optional (symbolP SymColonColon >> funTypeP)
-  (decls, stmts) <- bracesP $ do
+  ((decls, stmts),_,endPos) <- bracesP $ do
     decls <- many (try varDeclP)
     stmts <- many stmtP >>= handleNoStatements funIdOffset
     pure (decls, stmts)
-  pure $ FunDecl name params retType decls stmts
+  pure $ FunDecl (Loc startPos endPos) name params retType decls stmts
   where
     handleNoStatements :: Int -> [Stmt] -> TokenParser [Stmt]
     handleNoStatements o [] = region (setErrorOffset o) $
@@ -51,9 +54,9 @@ funDeclP = do
 
 mutualDeclP :: TokenParser FunMutDecl
 mutualDeclP = do
-  keywordP KwMutual
-  funDecls <- bracesP $ many funDeclP
-  pure $ MutualDecls funDecls
+  (_,start,_) <- keywordP KwMutual
+  (funDecls,_,end) <- bracesP $ many funDeclP
+  pure $ MutualDecls (Loc start end) funDecls
 
 funOrMutualDeclP :: TokenParser FunMutDecl
 funOrMutualDeclP = mutualDeclP <|> SingleDecl <$> funDeclP
@@ -65,69 +68,75 @@ funOrMutualDeclP = mutualDeclP <|> SingleDecl <$> funDeclP
 baseTypeP :: TokenParser Type
 baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
   where
-    intTypeP = keywordP KwInt >> pure IntT
-    boolTypeP = keywordP KwBool >> pure BoolT
-    charTypeP = keywordP KwChar >> pure CharT
+    intTypeP = keywordP KwInt >>= (\(_,start,end) -> pure $ IntT (Loc start end))
+    boolTypeP = keywordP KwBool >>= (\(_,start,end) -> pure $ BoolT (Loc start end))
+    charTypeP = keywordP KwChar >>= (\(_,start,end) -> pure $ CharT (Loc start end))
 
 typeP :: TokenParser Type
 typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
   where
-    tyVarP = TyVar <$> idP
+    tyVarP = idP >>= \(ident,start,end) ->
+      pure $ TyVar (Loc start end) ident
     prodTypeP = do
-      (ty1,ty2) <- parensP $ do
+      ((ty1,ty2),start,end) <- parensP $ do
         ty1 <- typeP
         _ <- symbolP SymComma <|> customFailure ProdTypeMissingComma
         ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
         pure (ty1,ty2)
-      pure (Prod ty1 ty2)
-    listTypeP = List <$> bracketsP typeP
+      pure $ Prod (Loc start end) ty1 ty2
+    listTypeP = bracketsP typeP >>= \(ty,start,end) ->
+      pure $ List (Loc start end) ty
 
 funTypeP :: TokenParser Type
 funTypeP = do
   argTys <- many typeP
-  _ <- symbolP SymRightArrow
+  (_,start,_) <- symbolP SymRightArrow
   offset <- getOffset
-  Fun argTys <$> (retTypeP <|> registerError offset GarbageT NoRetType)
+  retTy <- retTypeP <|> registerError offset GarbageT NoRetType
+  let startPos = case argTys of
+        [] -> start
+        (ty:_) -> getStart ty
+  pure $ Fun (Loc startPos (getEnd retTy)) argTys retTy
   where
     retTypeP :: TokenParser Type
-    retTypeP = typeP <|> (keywordP KwVoid >> pure Void)
+    retTypeP = typeP <|> (keywordP KwVoid >>= \(_,start,end) -> pure $ Void (Loc start end))
 
 
 ------------------------
 -- Fields & Identifiers
 
-fieldP :: TokenParser Field
+fieldP :: TokenParser (WithPos Field)
 fieldP = headP <|> tailP <|> fstP <|> sndP
   where
-    headP = keywordP KwHead >> pure Head
-    tailP = keywordP KwTail >> pure Tail
-    fstP = keywordP KwFst >> pure Fst
-    sndP = keywordP KwSnd >> pure Snd
+    headP = keywordP KwHead >>= \(_,s,e) -> pure (Head,s,e)
+    tailP = keywordP KwTail >>= \(_,s,e) -> pure (Tail,s,e)
+    fstP = keywordP KwFst >>= \(_,s,e) -> pure (Fst,s,e)
+    sndP = keywordP KwSnd >>= \(_,s,e) -> pure (Snd,s,e)
 
 -------------------------
 -- Expressions
 
 funCallEP :: TokenParser Expr
 funCallEP = do
-  (funId,args) <- funCallP
-  pure $ FunCallE funId args
+  ((funId,args),start,end) <- funCallP
+  pure $ FunCallE (Loc start end) funId args
 
 parenOrTupleP :: TokenParser Expr
 parenOrTupleP = do
-  symbolP SymParenLeft
+  (_,start,_) <- symbolP SymParenLeft
   e <- exprP
-  closeExpr e <|> closeTuple e
+  closeExpr e <|> closeTuple e start
   where
     closeExpr :: Expr -> TokenParser Expr
     closeExpr e = do
       _  <- symbolP SymParenRight
       pure e
-    closeTuple :: Expr -> TokenParser Expr
-    closeTuple e1 = do
+    closeTuple :: Expr -> SourcePos -> TokenParser Expr
+    closeTuple e1 start = do
       _ <- symbolP SymComma
       e2 <- exprP
-      _ <- symbolP SymParenRight
-      pure $ Tuple e1 e2
+      (_,_,end) <- symbolP SymParenRight
+      pure $ Tuple (Loc start end) e1 e2
 
 -- atomP :: TokenParser Expr
 -- <Val> (. <Field)*
@@ -156,24 +165,26 @@ atomP :: TokenParser Expr
 atomP = parenOrTupleP <|>
         intP <|> boolP <|> charP <|>
         emptyListP <|>
-        try funCallEP <|> (Ident <$> idP)
+        try funCallEP <|> identP
   where
-    emptyListP = symbolP SymBracketLR >> pure EmptyList
+    emptyListP = symbolP SymBracketLR >>= \(_,start,end) ->
+      pure $ EmptyList (Loc start end)
+    identP = idP >>= \(ident,s,e) -> pure $ Ident (Loc s e) ident
 
 fieldLookupP :: TokenParser Expr
 fieldLookupP = atomP >>= opFieldLookupP
   where
     opFieldLookupP :: Expr -> TokenParser Expr
     opFieldLookupP e = try (do
-      _ <- symbolP SymDot
-      field <- fieldP
-      opFieldLookupP (ExprLookup (ExprField e field))) <|> pure e
+      (_,start,_) <- symbolP SymDot
+      (field,_,end) <- fieldP
+      opFieldLookupP (ExprLookup (Loc start end) (ExprField e field))) <|> pure e
 
 unOpP :: TokenParser Expr
 unOpP = bangExprP <|> negExprP <|> fieldLookupP
   where
-    bangExprP = symbolP SymBang *> (UnOp Not <$> unOpP)
-    negExprP = symbolP SymMinus *> (UnOp Neg <$> unOpP)
+    bangExprP = symbolP SymBang >>= \(_,s,e) -> UnOp (Loc s e) Not <$> unOpP
+    negExprP = symbolP SymMinus >>= \(_,s,e) -> UnOp (Loc s e) Neg <$> unOpP
 
 termP :: TokenParser Expr
 termP = try (unOpP >>= opValP) <|> unOpP
@@ -186,7 +197,7 @@ termP = try (unOpP >>= opValP) <|> unOpP
     opValP val = try (do
       op <- opP
       val' <- unOpP
-      opValP (BinOp op val val')) <|> pure val
+      opValP (BinOp (Loc (getStart val) (getEnd val')) op val val')) <|> pure val
 
 formP :: TokenParser Expr
 formP = try (termP >>= opTermP) <|> termP
@@ -198,7 +209,7 @@ formP = try (termP >>= opTermP) <|> termP
     opTermP term = try (do
       op <- opP
       term' <- termP
-      opTermP (BinOp op term term')) <|> pure term
+      opTermP (BinOp (Loc (getStart term) (getEnd term)) op term term')) <|> pure term
 
 listP :: TokenParser Expr
 listP = try (formP >>= opFormP) <|> formP
@@ -209,7 +220,8 @@ listP = try (formP >>= opFormP) <|> formP
     opFormP :: Expr -> TokenParser Expr
     opFormP form = try (do
       op <- opP
-      BinOp op form <$> listP) <|> pure form
+      list <- listP -- Recurse first to get end pos
+      pure $ BinOp (Loc (getStart form) (getEnd list)) op form list) <|> pure form
 
 propP :: TokenParser Expr
 propP = try (listP >>= opListP) <|> listP
@@ -225,7 +237,7 @@ propP = try (listP >>= opListP) <|> listP
     opListP list = try (do
       op <- opP
       list' <- listP
-      opListP (BinOp op list list')) <|> pure list
+      opListP (BinOp (Loc (getStart list) (getEnd list')) op list list')) <|> pure list
 
 {- Refactored expression grammar:
 
@@ -257,7 +269,7 @@ exprP = try (propP >>= opPropP) <|> propP
     opPropP prop = try (do
       op <- opP
       prop' <- propP
-      opPropP (BinOp op prop prop')) <|> pure prop
+      opPropP (BinOp (Loc (getStart prop) (getEnd prop')) op prop prop')) <|> pure prop
 
 {- Original grammar:
 
@@ -279,49 +291,53 @@ exprP = try (propP >>= opPropP) <|> propP
 
 ifP :: TokenParser Stmt
 ifP = do
-  _ <- keywordP KwIf
-  cond <- parensP exprP
-  thenStmts <- bracesP (many stmtP)
-  elseStmts <- optional $ do
+  (_,startPos,_) <- keywordP KwIf
+  (cond,_,_) <- parensP exprP
+  (thenStmts,_,end) <- bracesP (many stmtP)
+  mElseStmts <- optional $ do
     _ <- keywordP KwElse
     bracesP $ many stmtP
-  pure $ If cond thenStmts (fromMaybe [] elseStmts)
+  let (elseStmts,endPos) = case mElseStmts of
+        Nothing -> ([],end)
+        Just (stmts,_,end') -> (stmts,end')
+  pure $ If (Loc startPos endPos) cond thenStmts elseStmts
+
 
 whileP :: TokenParser Stmt
 whileP = do
-  _ <- keywordP KwWhile
-  cond <- parensP exprP
-  stmts <- bracesP $ many stmtP
-  pure $ While cond stmts
+  (_,start,_) <- keywordP KwWhile
+  (cond,_,_) <- parensP exprP
+  (stmts,_,end) <- bracesP $ many stmtP
+  pure $ While (Loc start end) cond stmts
 
 assignP :: TokenParser Stmt
 assignP = do
-  name <- idP
-  var <- varFieldsP (VarId name)
+  (name,start,end) <- idP
+  var <- varFieldsP (VarId (Loc start end) name)
   _ <- symbolP SymEq
   expr <- exprP
-  _ <- symbolP SymSemicolon
-  pure $ Assign var expr
+  (_,_,endPos) <- symbolP SymSemicolon
+  pure $ Assign (Loc start endPos) var expr
   where
     varFieldsP :: VarLookup -> TokenParser VarLookup
-    varFieldsP e = try (do
+    varFieldsP vl = try (do
       _ <- symbolP SymDot
-      field <- fieldP
-      varFieldsP (VarField e field)) <|> pure e
+      (field,_,end) <- fieldP
+      varFieldsP (VarField (Loc (getStart vl) end) vl field)) <|> pure vl
 
 
 funCallSP :: TokenParser Stmt
 funCallSP = do
-  (funId,args) <- funCallP
-  _ <- symbolP SymSemicolon
-  pure $ FunCall funId args
+  ((funId,args),start,_) <- funCallP
+  (_,_,end) <- symbolP SymSemicolon
+  pure $ FunCall (Loc start end) funId args
 
 returnP :: TokenParser Stmt
 returnP = do
-  _ <- keywordP KwReturn
+  (_,start,_) <- keywordP KwReturn
   mExpr <- optional exprP
-  _ <- symbolP SymSemicolon
-  pure $ Return mExpr
+  (_,_,end) <- symbolP SymSemicolon
+  pure $ Return (Loc start end) mExpr
 
 
 stmtP :: TokenParser Stmt
@@ -393,60 +409,67 @@ registerError o x e = region (setErrorOffset o) $
   registerFancyFailure (S.singleton $ ErrorCustom e)
     >> pure x
 
--- FIXME: Refactor these to make them less cluncky
-symbolP :: Symbol -> TokenParser ()
+-- FIXME: Refactor these to make them less clunky
+symbolP :: Symbol -> TokenParser (WithPos ())
 symbolP s = token test S.empty
   where
-    test t | tokenVal t == Symbol s = Just ()
+    test t | tokenVal t == Symbol s = Just ((), startPos t, endPos t)
     test _ = Nothing
 
-keywordP :: Keyword -> TokenParser ()
+keywordP :: Keyword -> TokenParser (WithPos ())
 keywordP k = token test S.empty
   where
-    test t | tokenVal t == Keyword k = Just ()
+    test t | tokenVal t == Keyword k = Just ((), startPos t, endPos t)
     test _ = Nothing
 
-idP :: TokenParser T.Text
+idP :: TokenParser (WithPos T.Text)
 idP = token test S.empty
   where
-    test (Positioned _ _ _ _ (IdToken i)) = Just i
+    test (Positioned start end _ _ (IdToken i)) = Just (i,start,end)
     test _ = Nothing
 
 intP :: TokenParser Expr
 intP = token test S.empty
   where
-    test (Positioned _ _ _ _ (IntLit n)) = Just $ Int n
+    test (Positioned start end _ _ (IntLit n)) = Just $ Int (Loc start end) n
     test _ = Nothing
 
 boolP :: TokenParser Expr
 boolP = token test S.empty
   where
-    test (Positioned _ _ _ _ (BoolLit b)) = Just $ Bool b
+    test (Positioned start end _ _ (BoolLit b)) = Just $ Bool (Loc start end) b
     test _ = Nothing
 
 charP :: TokenParser Expr
 charP = token test S.empty
   where
-    test (Positioned _ _ _ _ (CharLit c)) = Just $ Char c
+    test (Positioned start end _ _ (CharLit c)) = Just $ Char (Loc start end) c
     test _ = Nothing
 
-funCallP :: TokenParser (T.Text, [Expr])
+funCallP :: TokenParser (WithPos (T.Text, [Expr]))
 funCallP = do
-  funId <- idP
-  args <- parensP $ exprP `sepBy` symbolP SymComma
-  pure (funId, args)
+  (funId,start,_) <- idP
+  (args,_,end) <- parensP $ exprP `sepBy` symbolP SymComma
+  pure ((funId, args), start, end)
 
--- | Parses expression of form (e), where e is parsed by the parser provided
---   in the argument.
-parensP :: TokenParser a -> TokenParser a
-parensP = between (symbolP SymParenLeft) (symbolP SymParenRight)
+betweenP :: TokenParser (WithPos open) -> TokenParser (WithPos close) -> TokenParser a -> TokenParser (WithPos a)
+betweenP openP closeP p = do
+  (_,start,_) <- openP
+  x <- p
+  (_,_,end) <- closeP
+  pure (x,start,end)
 
--- | Parses expression of form [e], where e is parsed by the parser provided
+-- | Parses expression of form `(e)`, where e is parsed by the parser provided
 --   in the argument.
-bracketsP :: TokenParser a -> TokenParser a
-bracketsP = between (symbolP SymBracketLeft) (symbolP SymBracketRight)
+parensP :: TokenParser a -> TokenParser (WithPos a)
+parensP = betweenP (symbolP SymParenLeft) (symbolP SymParenRight)
 
--- | Parses expression of form {e}, where e is parsed by the parser provided
+-- | Parses expression of form `[e]`, where e is parsed by the parser provided
 --   in the argument.
-bracesP :: TokenParser a -> TokenParser a
-bracesP = between (symbolP SymBraceLeft) (symbolP SymBraceRight)
+bracketsP :: TokenParser a -> TokenParser (WithPos a)
+bracketsP = betweenP (symbolP SymBracketLeft) (symbolP SymBracketRight)
+
+-- | Parses expression of form `{e}`, where e is parsed by the parser provided
+--   in the argument.
+bracesP :: TokenParser a -> TokenParser (WithPos a)
+bracesP = betweenP (symbolP SymBraceLeft) (symbolP SymBraceRight)

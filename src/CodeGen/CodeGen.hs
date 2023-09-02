@@ -20,7 +20,7 @@ import qualified Data.Map as M
 ---------------------------------
 -- Variable loading & storing
 
-lookupLoc :: T.Text -> Codegen Loc
+lookupLoc :: T.Text -> Codegen Location
 lookupLoc ident = gets (M.lookup ident . offsets) >>= \case
   Nothing -> gets (M.lookup ident . heapLocs) >>= \case
     Nothing -> error $ "Couldn't find offset for identifer " <> T.unpack ident

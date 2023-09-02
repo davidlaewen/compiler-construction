@@ -41,6 +41,8 @@ library
       TypeInference.Definition
       TypeInference.Types
       TypeInference.Unify
+      Utils.Loc
+      Utils.Utils
   other-modules:
       Paths_spl_compiler
   hs-source-dirs:

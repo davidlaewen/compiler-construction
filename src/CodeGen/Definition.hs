@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module CodeGen.Definition (
-  LocMap,
+  LocationMap,
   Program,
-  Loc(..),
+  Location(..),
   nullPtr,
   CodegenState(..),
   Codegen,
@@ -26,18 +26,18 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 
 
-type LocMap = M.Map T.Text Int
+type LocationMap = M.Map T.Text Int
 type Program = [Instr]
 
-data Loc = Offset Int | HeapLoc Int
+data Location = Offset Int | HeapLoc Int
 
 nullPtr :: Int
 nullPtr = 0xF0F0F0F0
 
 data CodegenState = CodegenState {
   labelCounter :: Int,
-  offsets :: LocMap,
-  heapLocs :: LocMap
+  offsets :: LocationMap,
+  heapLocs :: LocationMap
 }
 
 type Codegen = State CodegenState
@@ -53,7 +53,7 @@ freshLabel t = do
   modify (\s -> s { labelCounter = i + 1 })
   pure $ t <> "_" <> T.pack (show i)
 
-modifyOffsets :: (LocMap -> LocMap) -> Codegen ()
+modifyOffsets :: (LocationMap -> LocationMap) -> Codegen ()
 modifyOffsets f = modify (\s -> s { offsets = f (offsets s) })
 
 modifyHeapLocs :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
