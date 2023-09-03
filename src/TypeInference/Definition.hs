@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, OverloadedRecordDot, InstanceSigs #-}
+{-# LANGUAGE LambdaCase, OverloadedRecordDot, InstanceSigs, OverloadedStrings #-}
 
 module TypeInference.Definition (
   UVar,
@@ -8,6 +8,7 @@ module TypeInference.Definition (
   CGen,
   EnvLevel(..),
   Types(..),
+  throwLocError,
   applySubst,
   runCgen,
   freshVar,
@@ -29,6 +30,7 @@ import Control.Monad.Except
 import Data.Set ((\\))
 import TypeInference.Types
 import Syntax.TypeAST (FunDecl(..))
+import Utils.Loc (Loc)
 
 
 class Types a where
@@ -53,6 +55,9 @@ newtype Subst = Subst (M.Map UVar UType)
 data CGenState = CGenState{ globalEnv :: GlobalEnv, localEnv :: LocalEnv, varState :: VarState }
 
 type CGen = StateT CGenState (Except T.Text)
+
+throwLocError :: Loc -> T.Text -> CGen a2
+throwLocError loc msg = throwError $ T.pack (show loc) <> ":\n" <> msg
 
 applySubst :: Subst -> CGen ()
 applySubst s = do

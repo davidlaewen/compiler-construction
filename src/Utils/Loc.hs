@@ -4,7 +4,7 @@ module Utils.Loc (
   HasLoc(..)
 ) where
 
-import Text.Megaparsec.Pos (SourcePos(..), mkPos)
+import Text.Megaparsec.Pos (SourcePos(..), sourcePosPretty, pos1, unPos)
 
 
 -- | Source code locations with start and end position
@@ -12,11 +12,17 @@ data Loc = Loc !SourcePos !SourcePos
   deriving (Eq,Ord)
 
 instance Show Loc where
-  show (Loc _ _) = "<loc>"
+  show (Loc start end) = sourcePosPretty start <> "-" <>
+    (if startLine == endLine then "" else show endLine <> ":") <> show endCol
+    where
+      startLine = unPos $ sourceLine start
+      endLine = unPos $ sourceLine end
+      endCol = unPos $ sourceColumn end
+
 
 defaultLoc :: Loc
-defaultLoc = Loc (SourcePos "DEFAULT" (mkPos 1) (mkPos 1))
-                 (SourcePos "DEFAULT" (mkPos 1) (mkPos 1))
+defaultLoc = Loc defaultPos defaultPos
+  where defaultPos = SourcePos "DEFAULT" pos1 pos1
 
 -- | Typeclass for data featuring a source code location
 class HasLoc a where

@@ -7,11 +7,11 @@ import TypeInference.Definition
 import TypeInference.Unify
 import qualified Syntax.TypeAST as T
 import Control.Monad.State
-import Control.Monad.Except ( MonadError(throwError) )
 import Data.Text (pack)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as Text
+import Utils.Loc (Loc)
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program varDecls funDecls) = do
@@ -72,7 +72,7 @@ genFunDeclTypes name params = do
   mFunScheme <- envLookupFun name
   case mFunScheme of -- Check for existing entry
     Just (UScheme _ (Fun argTys retTy)) -> pure (argTys,retTy)
-    Just _ -> error $
+    Just _ -> error $ -- Invalid env entry, internal error
       "Found invalid scheme for function " <> Text.unpack name <> " in global env"
     Nothing -> do -- Generate fresh uvars
       uVarsParams <- forM params (const $ UVar <$> freshVar)
@@ -124,10 +124,10 @@ checkStmt (T.Assign loc varLookup _ expr) = do
   pure (T.Assign loc varLookup varTy expr', s <> exprSubst)
   where
     foo :: T.VarLookup -> UType -> CGen (UType, Subst)
-    foo (T.VarId _ name) exprType = do
+    foo (T.VarId loc' name) exprType = do
       mVarType <- envLookupVar name
       case mVarType of
-        Nothing -> throwError $ "No variable declaration matching " <> name
+        Nothing -> throwLocError loc' $ "No variable declaration matching `" <> name <> "`"
         Just varType -> do
           s <- unify exprType varType
           applySubst s
@@ -144,7 +144,7 @@ checkStmt (T.Assign loc varLookup _ expr) = do
           foo varLkp (Prod uVarFst exprType)
 
 checkStmt (T.FunCall loc funName args) = do
-  (args',_,s) <- checkFunCall funName args
+  (args',_,s) <- checkFunCall funName args loc
   pure (T.FunCall loc funName args', s)
 
 checkStmt (T.Return loc mExpr) = do
@@ -168,13 +168,13 @@ checkExpr :: T.Expr () -> CGen (T.Expr UType, UType, Subst)
 checkExpr (T.Ident loc name _) = do
   -- TODO: We need a way to check whether this a local or global variable
   envLookupVar name >>= \case
-      Nothing -> throwError $ "Could not find variable `" <> name <> "`"
+      Nothing -> throwLocError loc $ "Could not find variable `" <> name <> "`"
       Just ut -> pure (T.Ident loc name ut, ut, mempty)
 checkExpr (T.Int loc n _) = pure (T.Int loc n Int, Int, mempty)
 checkExpr (T.Char loc c _) = pure (T.Char loc c Char, Char, mempty)
 checkExpr (T.Bool loc b _) = pure (T.Bool loc b Bool, Bool, mempty)
 checkExpr (T.FunCallE loc funName args _) = do
-  (args', retType, s) <- checkFunCall funName args
+  (args', retType, s) <- checkFunCall funName args loc
   pure (T.FunCallE loc funName args' retType, retType, s)
 checkExpr (T.EmptyList loc _) = do
   ty <- List . UVar <$> freshVar
@@ -192,16 +192,17 @@ checkExprs (expr:exprs) = do
   (exprs', exprsTypes, exprsSubst) <- checkExprs exprs
   pure (expr':exprs', exprType:exprsTypes, exprSubst <> exprsSubst)
 
-checkFunCall :: T.FunName -> [T.Expr ()] -> CGen ([T.Expr UType], UType, Subst)
-checkFunCall funName args = do
-  funType <- getFunType funName >>= instantiateScheme
+checkFunCall :: T.FunName -> [T.Expr ()] -> Loc -> CGen ([T.Expr UType], UType, Subst)
+checkFunCall funName args loc = do
+  funType <- getFunType funName loc >>= instantiateScheme
   case funType of
     Fun paramTypes retType -> do
       (args', argsTypes, argsSubst) <- checkExprs args
       s <- unifyLists paramTypes argsTypes
       applySubst s
       pure (args', subst s retType, s <> argsSubst)
-    _ -> throwError $ "Function " <> pack (show funName) <> " does not have a function type"
+    _ -> error $ -- Invalid global env entry, internal error
+      "Function " <> show funName <> " does not have function type"
   where
     unifyLists :: [UType] -> [UType] -> CGen Subst
     unifyLists [] [] = pure mempty
@@ -210,20 +211,20 @@ checkFunCall funName args = do
       ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
       pure $ ss <> s
     unifyLists _ _ =
-      throwError $ "Incorrect number of arguments in call to " <> pack (show funName)
+      throwLocError loc $ "Incorrect number of arguments in call to " <> pack (show funName)
 
 instantiateScheme :: UScheme -> CGen UType
 instantiateScheme (UScheme tVars ty) = do
   s <- sequence $ M.fromSet (const $ UVar <$> freshVar) tVars
   pure $ subst (Subst s) ty
 
-getFunType :: T.FunName -> CGen UScheme
-getFunType funName = do
+getFunType :: T.FunName -> Loc -> CGen UScheme
+getFunType funName loc = do
   case funName of
     T.Name name -> do
       mFunType <- envLookupFun name
       case mFunType of
-        Nothing -> throwError $ "No declaration for function " <> name
+        Nothing -> throwLocError loc $ "No declaration for function `" <> name <> "`"
         Just funType -> pure funType
     T.Not -> pure $ UScheme S.empty (Fun [Bool] Bool)
     T.Neg -> pure $ UScheme S.empty (Fun [Int] Int)
