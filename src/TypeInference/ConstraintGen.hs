@@ -36,7 +36,7 @@ checkVarDecl envLevel (T.VarDecl loc mTy name expr _) = do
     Just ty -> pure ty
   (expr', exprType, exprSubst) <- checkExpr expr
   envInsertVar envLevel name uTy
-  s <- unify exprType uTy
+  s <- unify exprType uTy loc
   applySubst s
   pure (T.VarDecl loc mTy name expr' uTy, s <> exprSubst)
 
@@ -104,7 +104,7 @@ checkStmts = checkList checkStmt
 checkStmt :: T.Stmt () -> CGen (T.Stmt UType, Subst)
 checkStmt (T.If loc condExpr thenStmts elseStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
-  s <- unify condExprType Bool
+  s <- unify condExprType Bool loc
   applySubst s
   (thenStmts', thenStmtsSubst) <- checkStmts thenStmts
   (elseStmts', elseStmtsSubst) <- checkStmts elseStmts
@@ -113,7 +113,7 @@ checkStmt (T.If loc condExpr thenStmts elseStmts) = do
 
 checkStmt (T.While loc condExpr loopStmts) = do
   (condExpr', condExprType, condExprSubst) <- checkExpr condExpr
-  s <- unify condExprType Bool
+  s <- unify condExprType Bool loc
   applySubst s
   (loopStmts', loopStmtsSubst) <- checkStmts loopStmts
   pure (T.While loc condExpr' loopStmts', loopStmtsSubst <> s <> condExprSubst)
@@ -129,7 +129,7 @@ checkStmt (T.Assign loc varLookup _ expr) = do
       case mVarType of
         Nothing -> throwLocError loc' $ "No variable declaration matching `" <> name <> "`"
         Just varType -> do
-          s <- unify exprType varType
+          s <- unify exprType varType loc
           applySubst s
           pure (varType,s)
     foo (T.VarField _ varLkp field) exprType = do
@@ -154,12 +154,12 @@ checkStmt (T.Return loc mExpr) = do
     Just retType -> do
       case mExpr of
         Nothing -> do
-          s <- unify retType Void
+          s <- unify retType Void loc
           applySubst s
           pure (T.Return loc Nothing, s)
         Just expr -> do
           (expr', exprType, exprSubst) <- checkExpr expr
-          s <- unify retType exprType
+          s <- unify retType exprType loc
           applySubst s
           pure (T.Return loc (Just expr'), s <> exprSubst)
 
@@ -207,7 +207,7 @@ checkFunCall funName args loc = do
     unifyLists :: [UType] -> [UType] -> CGen Subst
     unifyLists [] [] = pure mempty
     unifyLists (ty1:tys1) (ty2:tys2) = do
-      s <- unify ty1 ty2
+      s <- unify ty1 ty2 loc
       ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
       pure $ ss <> s
     unifyLists _ _ =

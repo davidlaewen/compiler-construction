@@ -4,6 +4,8 @@ module TypeInference.Types (
 
 import qualified Data.Text as T
 import qualified Data.Set as S
+import Parser.Tokens (Keyword(..))
+import Control.Applicative.Combinators (sepBy)
 
 type UVar = Int
 type TVar = T.Text
@@ -13,7 +15,19 @@ data UType = Int | Bool | Char | Void
            | Fun [UType] UType
            | UVar UVar
            | TVar TVar
-  deriving (Show, Eq)
+  deriving Eq
+
+-- TODO: Write a pretty printer
+instance Show UType where
+  show Int = show KwInt
+  show Bool = show KwBool
+  show Char = show KwChar
+  show Void = show KwVoid
+  show (Prod ty1 ty2) = "(" <> show ty1 <> "," <> show ty2 <> ")"
+  show (List ty) = "[" <> show ty <> "]"
+  show (Fun argTys retTy) = concat (sepBy " " (show <$> argTys)) <> " -> " <> show retTy
+  show (UVar i) = "u" <> show i
+  show (TVar t) = T.unpack t
 
 data UScheme = UScheme (S.Set UVar) UType
   deriving (Show)
