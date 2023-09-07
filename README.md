@@ -20,13 +20,14 @@ Extension:
 Pretty printing:
 - [ ] Printer helpers for parentheses, brackets and braces
 - [ ] Possibly refactor with `Prettyprinter` library
+- [ ] Add pretty printer for `TypeAST`
 
 QoL:
 - [ ] Tarjan's algorithm for fun decl ordering and grouping for mutual recursion
 - [ ] Automatic insertion of `return` statements for Void functions
 - [ ] Improve parser errors
-- [ ] Location data in AST for use in errors
-- [ ] Better type checking errors
+- [x] Location data in AST for use in errors
+- [ ] Print code snippets with underlining in error messages
 - [ ] Constant folding
 - [ ] Parsing of escaped characters
 - [ ] Built-in `printLn` function

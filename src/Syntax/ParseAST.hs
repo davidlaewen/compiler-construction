@@ -17,6 +17,7 @@ module Syntax.ParseAST (
 
 import qualified Data.Text as T
 import Utils.Loc ( Loc(..), HasLoc(..), defaultLoc )
+import Parser.Tokens (Symbol(..))
 
 
 data Program = Program [VarDecl] [FunMutDecl]
@@ -36,7 +37,7 @@ data Stmt = If Loc Expr [Stmt] [Stmt]
           | Assign Loc VarLookup Expr
           | FunCall Loc T.Text [Expr]
           | Return Loc (Maybe Expr)
-          | GarbageS
+          | GarbageStmt
   deriving Show
 
 data Type = IntT Loc
@@ -47,7 +48,7 @@ data Type = IntT Loc
           | Void Loc
           | Fun Loc [Type] Type
           | TyVar Loc T.Text
-          | GarbageT
+          | GarbageType
   deriving (Show, Eq)
 
 data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
@@ -56,7 +57,7 @@ data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
 data ExprLookup = ExprField Expr Field
   deriving Show
 
-data Field = Head | Tail | Fst | Snd
+data Field = Head | Tail | Fst | Snd | GarbageField
   deriving Show
 
 data Expr = Ident Loc T.Text
@@ -69,14 +70,34 @@ data Expr = Ident Loc T.Text
           | FunCallE Loc T.Text [Expr]
           | EmptyList Loc
           | Tuple Loc Expr Expr
+          | GarbageExpr
   deriving Show
 
 data UnaryOp = Not | Neg
-  deriving Show
+  deriving (Eq,Ord)
+
+instance Show UnaryOp where
+  show Not = show SymBang
+  show Neg = show SymMinus
 
 data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte | And | Or | Cons
-  deriving Show
+  deriving (Eq,Ord)
 
+instance Show BinaryOp where
+  show Add = show SymPlus
+  show Sub = show SymMinus
+  show Mul = show SymAst
+  show Div = show SymSlash
+  show Mod = show SymPercent
+  show Eq = show SymEqEq
+  show Neq = show SymBangEq
+  show Lt = show SymLessThan
+  show Gt = show SymGreaterThan
+  show Lte = show SymLessThanEq
+  show Gte = show SymGreaterThanEq
+  show And = show SymAndAnd
+  show Or = show SymPipePipe
+  show Cons = show SymColon
 
 -------------------------------------------
 -- HasLoc instance declarations
@@ -96,7 +117,7 @@ instance HasLoc Stmt where
   getLoc (Assign loc _ _) = loc
   getLoc (FunCall loc _ _) = loc
   getLoc (Return loc _) = loc
-  getLoc GarbageS = defaultLoc
+  getLoc GarbageStmt = defaultLoc
 
 instance HasLoc Type where
   getLoc :: Type -> Loc
@@ -108,7 +129,7 @@ instance HasLoc Type where
   getLoc (Void loc) = loc
   getLoc (Fun loc _ _) = loc
   getLoc (TyVar loc _) = loc
-  getLoc GarbageT = defaultLoc
+  getLoc GarbageType = defaultLoc
 
 instance HasLoc VarLookup where
   getLoc :: VarLookup -> Loc
@@ -127,3 +148,4 @@ instance HasLoc Expr where
   getLoc (FunCallE loc _ _) = loc
   getLoc (EmptyList loc) = loc
   getLoc (Tuple loc _ _) = loc
+  getLoc GarbageExpr = defaultLoc

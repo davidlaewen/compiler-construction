@@ -1,17 +1,16 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, OverloadedRecordDot #-}
 
 module Parser.Parser (parser) where
 
-import Control.Applicative hiding (many,some)
+import Control.Applicative hiding (many)
 import Parser.Definition
 import Syntax.ParseAST
 import Text.Megaparsec
 import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
 import qualified Data.Set as S
-import Data.Either (partitionEithers)
 import Control.Monad
 import qualified Data.Text as T
-import Utils.Loc (Loc(..), HasLoc(..))
+import Utils.Loc (Loc(..), HasLoc(..), defaultPos)
 import Utils.Utils (fst3)
 
 ----------------------
@@ -25,10 +24,12 @@ varDeclP = do
       ty <- typeP
       pure (Just ty, getStart ty)
     Just ((),start,_) -> pure (Nothing,start)
-  (name,_,_) <- idP
-  _ <- symbolP SymEq
-  expr <- exprP
-  (_,_,endPos) <- symbolP SymSemicolon
+  (name,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
+  _ <- symbolP SymEq <|> registerError (withDummyPos ()) VarDeclNoEquals
+  -- TODO: In certain cases exprP inserts a garbage expr and doesn't fail, so parsing
+  -- continues here even after an invalid expression, leading to confusing errors
+  expr <- exprP <|> customFailure VarDeclNoExpression
+  (_,_,endPos) <- symbolP SymSemicolon <|> registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
   pure $ VarDecl (Loc startPos endPos) mty name expr
 
 
@@ -39,23 +40,30 @@ funDeclP = do
   (params,_,_) <- parensP ((idP `sepBy` symbolP SymComma) >>=
     \t -> pure (fst3 <$> t))
   retType <- optional (symbolP SymColonColon >> funTypeP)
-  ((decls, stmts),_,endPos) <- bracesP $ do
-    decls <- many (try varDeclP)
-    stmts <- many stmtP >>= handleNoStatements funIdOffset
+  ((decls,stmts),_,endPos) <- bracesP $ do
+    decls <- many (try isVarDeclLookahead >> varDeclP)
+    stmts <- many stmtP
     pure (decls, stmts)
+  handleNoStatements funIdOffset stmts
   pure $ FunDecl (Loc startPos endPos) name params retType decls stmts
   where
-    handleNoStatements :: Int -> [Stmt] -> TokenParser [Stmt]
-    handleNoStatements o [] = region (setErrorOffset o) $
-      registerFancyFailure (S.singleton $
-        ErrorCustom FunctionMissingStatements) >> pure [GarbageS]
-    handleNoStatements _ stmts = pure stmts
+    handleNoStatements :: Int -> [Stmt] -> TokenParser ()
+    handleNoStatements offset [] = registerErrorOffset () FunctionMissingStatements offset
+    handleNoStatements _ _ = pure ()
+
+    isVarDeclLookahead :: TokenParser ()
+    isVarDeclLookahead = lookAhead $
+      void (keywordP KwVar) <|>
+      void (symbolP SymParenLeft) <|> void (symbolP SymBracketLeft) <|>
+      void (typeP >> idP)
 
 
 mutualDeclP :: TokenParser FunMutDecl
 mutualDeclP = do
   (_,start,_) <- keywordP KwMutual
-  (funDecls,_,end) <- bracesP $ many funDeclP
+  _ <- symbolP SymBraceLeft <|> registerError (withDummyPos ()) MutualNoOpenBrace
+  funDecls <- many funDeclP
+  (_,_,end) <- symbolP SymBraceRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBraceRight)
   pure $ MutualDecls (Loc start end) funDecls
 
 funOrMutualDeclP :: TokenParser FunMutDecl
@@ -78,25 +86,28 @@ typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
     tyVarP = idP >>= \(ident,start,end) ->
       pure $ TyVar (Loc start end) ident
     prodTypeP = do
-      ((ty1,ty2),start,end) <- parensP $ do
-        ty1 <- typeP
-        _ <- symbolP SymComma <|> customFailure ProdTypeMissingComma
-        ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
-        pure (ty1,ty2)
+      (_,start,_) <- symbolP SymParenLeft
+      ty1 <- typeP <|> customFailure ProdTypeMissingEntry
+      _ <- symbolP SymComma <|> registerError (withDummyPos ()) ProdTypeMissingComma
+      ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
+      (_,_,end) <- symbolP SymParenRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymParenRight)
       pure $ Prod (Loc start end) ty1 ty2
-    listTypeP = bracketsP typeP >>= \(ty,start,end) ->
+    listTypeP = do
+      (_,start,_) <- symbolP SymBracketLeft
+      ty <- typeP <|> customFailure ListTypeMissingEntry
+      (_,_,end) <- symbolP SymBracketRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
       pure $ List (Loc start end) ty
 
 funTypeP :: TokenParser Type
 funTypeP = do
   argTys <- many typeP
-  (_,start,_) <- symbolP SymRightArrow
-  offset <- getOffset
-  retTy <- retTypeP <|> registerError offset GarbageT NoRetType
-  let startPos = case argTys of
-        [] -> start
-        (ty:_) -> getStart ty
-  pure $ Fun (Loc startPos (getEnd retTy)) argTys retTy
+  (_,start,_) <- symbolP SymRightArrow <|> registerError (withDummyPos ()) FunctionNoArrow
+  if start == defaultPos then pure GarbageType else do
+    retTy <- retTypeP <|> registerError GarbageType FunctionNoRetType
+    let startPos = case argTys of
+          [] -> start
+          (ty:_) -> getStart ty
+    pure $ Fun (Loc startPos (getEnd retTy)) argTys retTy
   where
     retTypeP :: TokenParser Type
     retTypeP = typeP <|> (keywordP KwVoid >>= \(_,start,end) -> pure $ Void (Loc start end))
@@ -124,7 +135,7 @@ funCallEP = do
 parenOrTupleP :: TokenParser Expr
 parenOrTupleP = do
   (_,start,_) <- symbolP SymParenLeft
-  e <- exprP
+  e <- exprP <|> registerError GarbageExpr ParenOpenNoExpression
   closeExpr e <|> closeTuple e start
   where
     closeExpr :: Expr -> TokenParser Expr
@@ -133,9 +144,10 @@ parenOrTupleP = do
       pure e
     closeTuple :: Expr -> SourcePos -> TokenParser Expr
     closeTuple e1 start = do
-      _ <- symbolP SymComma
+      _ <- symbolP SymComma <|> customFailure TupleNoComma
       e2 <- exprP
-      (_,_,end) <- symbolP SymParenRight
+      (_,_,end) <- symbolP SymParenRight <|>
+        registerError ((),defaultPos,getEnd e2) ParenOpenNotClosed
       pure $ Tuple (Loc start end) e1 e2
 
 -- atomP :: TokenParser Expr
@@ -177,54 +189,54 @@ fieldLookupP = atomP >>= opFieldLookupP
     opFieldLookupP :: Expr -> TokenParser Expr
     opFieldLookupP e = try (do
       (_,start,_) <- symbolP SymDot
-      (field,_,end) <- fieldP
+      (field,_,end) <- fieldP <|> registerError (withDummyPos GarbageField) FieldLookupNoField
       opFieldLookupP (ExprLookup (Loc start end) (ExprField e field))) <|> pure e
 
 unOpP :: TokenParser Expr
 unOpP = bangExprP <|> negExprP <|> fieldLookupP
   where
-    bangExprP = symbolP SymBang >>= \(_,s,e) -> UnOp (Loc s e) Not <$> unOpP
-    negExprP = symbolP SymMinus >>= \(_,s,e) -> UnOp (Loc s e) Neg <$> unOpP
+    bangExprP = symbolP SymBang >>= nextUnOpP Not
+    negExprP = symbolP SymMinus >>= nextUnOpP Neg
+    nextUnOpP op (_,s,e) =
+      UnOp (Loc s e) op <$> unOpP <|> registerError GarbageExpr (UnaryOpNoExpression op)
 
 termP :: TokenParser Expr
-termP = try (unOpP >>= opValP) <|> unOpP
+termP = unOpP >>= opValP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymAst >> pure Mul) <|>
           (symbolP SymSlash >> pure Div) <|>
           (symbolP SymPercent >> pure Mod)
     opValP :: Expr -> TokenParser Expr
-    opValP val = try (do
-      op <- opP
-      val' <- unOpP
+    opValP val = (try opP >>= \op -> do
+      val' <- unOpP <|> registerError GarbageExpr (BinaryOpNoExpression op)
       opValP (BinOp (Loc (getStart val) (getEnd val')) op val val')) <|> pure val
 
 formP :: TokenParser Expr
-formP = try (termP >>= opTermP) <|> termP
+formP = termP >>= opTermP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymPlus >> pure Add) <|>
           (symbolP SymMinus >> pure Sub)
     opTermP :: Expr -> TokenParser Expr
-    opTermP term = try (do
-      op <- opP
-      term' <- termP
+    opTermP term = (try opP >>= \op -> do
+      term' <- termP <|> registerError GarbageExpr (BinaryOpNoExpression op)
       opTermP (BinOp (Loc (getStart term) (getEnd term)) op term term')) <|> pure term
 
 listP :: TokenParser Expr
-listP = try (formP >>= opFormP) <|> formP
+listP = formP >>= opFormP
   where
     opP :: TokenParser BinaryOp
     opP = symbolP SymColon >> pure Cons
     -- Cons operator `:` associates to the right
     opFormP :: Expr -> TokenParser Expr
-    opFormP form = try (do
-      op <- opP
-      list <- listP -- Recurse first to get end pos
+    opFormP form = (try opP >>= \op -> do
+      list <- listP -- Recurse first to determine end pos
+        <|> registerError GarbageExpr ConsNoExpression
       pure $ BinOp (Loc (getStart form) (getEnd list)) op form list) <|> pure form
 
 propP :: TokenParser Expr
-propP = try (listP >>= opListP) <|> listP
+propP = listP >>= opListP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymEqEq >> pure Eq) <|>
@@ -234,9 +246,8 @@ propP = try (listP >>= opListP) <|> listP
           (symbolP SymLessThanEq >> pure Lte) <|>
           (symbolP SymGreaterThanEq >> pure Gte)
     opListP :: Expr -> TokenParser Expr
-    opListP list = try (do
-      op <- opP
-      list' <- listP
+    opListP list = (try opP >>= \op -> do
+      list' <- listP <|> registerError GarbageExpr (BinaryOpNoExpression op)
       opListP (BinOp (Loc (getStart list) (getEnd list')) op list list')) <|> pure list
 
 {- Refactored expression grammar:
@@ -260,15 +271,14 @@ propP = try (listP >>= opListP) <|> listP
 -}
 
 exprP :: TokenParser Expr
-exprP = try (propP >>= opPropP) <|> propP
+exprP = propP >>= opPropP
   where
     opP :: TokenParser BinaryOp
     opP = (symbolP SymAndAnd >> pure And) <|>
           (symbolP SymPipePipe >> pure Or)
     opPropP :: Expr -> TokenParser Expr
-    opPropP prop = try (do
-      op <- opP
-      prop' <- propP
+    opPropP prop = (try opP >>= \op -> do
+      prop' <- propP <|> registerError GarbageExpr (BinaryOpNoExpression op)
       opPropP (BinOp (Loc (getStart prop) (getEnd prop')) op prop prop')) <|> pure prop
 
 {- Original grammar:
@@ -292,7 +302,7 @@ exprP = try (propP >>= opPropP) <|> propP
 ifP :: TokenParser Stmt
 ifP = do
   (_,startPos,_) <- keywordP KwIf
-  (cond,_,_) <- parensP exprP
+  (cond,_,_) <- parensP exprP <|> registerError (withDummyPos GarbageExpr) IfNoCondition
   (thenStmts,_,end) <- bracesP (many stmtP)
   mElseStmts <- optional $ do
     _ <- keywordP KwElse
@@ -349,27 +359,19 @@ stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 
 programP :: TokenParser Program
 programP = do
-  -- This permits mixed order of funDecls and varDecls. The reordering may cause
-  -- odd behaviour and should be caught somewhere with an error
-  (funDecls, varDecls) <- partitionEithers <$> many ((Left <$> (lookAhead isFunDeclLookAhead >> funOrMutualDeclP)) <|> (Right <$> varDeclP))
+  -- This permits mixed order of funDecls and varDecls, which would result in
+  -- reordering of the declarations. This could cause unexpected behaviour and
+  -- should be caught somewhere with an error
+  varDecls <- many (try isVarDeclLookAhead >> varDeclP)
+  funDecls <- many funOrMutualDeclP
   Program varDecls funDecls <$ eof
   where
-    isFunDeclLookAhead :: TokenParser ()
-    isFunDeclLookAhead = void $
-      (satisfy (isKeyword KwMutual) >> satisfy (isSymbol SymBraceLeft)) <|>
-      (satisfy isIdent >> satisfy (isSymbol SymParenLeft))
-
-    isKeyword :: Keyword -> Positioned Parser.Tokens.Token -> Bool
-    isKeyword kw (Positioned _ _ _ _ (Keyword kw')) = kw == kw'
-    isKeyword _ _ = False
-
-    isSymbol :: Symbol -> Positioned Parser.Tokens.Token -> Bool
-    isSymbol sym (Positioned _ _ _ _ (Symbol sym')) = sym == sym'
-    isSymbol _ _ = False
-
-    isIdent :: Positioned Parser.Tokens.Token -> Bool
-    isIdent (Positioned _ _ _ _ (IdToken _)) = True
-    isIdent _ = False
+    -- Disallow generic variables on top level
+    isVarDeclLookAhead :: TokenParser ()
+    isVarDeclLookAhead = lookAhead $ void baseTypeP <|>
+      void (satisfy $ isSymbol SymParenLeft) <|>
+      void (satisfy $ isSymbol SymBracketLeft) <|>
+      void (satisfy $ isKeyword KwVar)
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream ParserError) Program
@@ -404,22 +406,27 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
 -- Parser helpers
 ----------------------------
 
-registerError :: Int -> a -> ParserError -> TokenParser a
-registerError o x e = region (setErrorOffset o) $
-  registerFancyFailure (S.singleton $ ErrorCustom e)
-    >> pure x
+registerErrorOffset :: a -> ParserError -> Int -> TokenParser a
+registerErrorOffset x e o = region (setErrorOffset o) $
+  registerFancyFailure (S.singleton $ ErrorCustom e) >> pure x
+
+registerError :: a -> ParserError -> TokenParser a
+registerError x e = getOffset >>= registerErrorOffset x e
+
+withDummyPos :: a -> WithPos a
+withDummyPos x = (x,defaultPos,defaultPos)
 
 -- FIXME: Refactor these to make them less clunky
 symbolP :: Symbol -> TokenParser (WithPos ())
 symbolP s = token test S.empty
   where
-    test t | tokenVal t == Symbol s = Just ((), startPos t, endPos t)
+    test t | tokenVal t == Symbol s = Just ((), t.startPosition, t.endPosition)
     test _ = Nothing
 
 keywordP :: Keyword -> TokenParser (WithPos ())
 keywordP k = token test S.empty
   where
-    test t | tokenVal t == Keyword k = Just ((), startPos t, endPos t)
+    test t | tokenVal t == Keyword k = Just ((), t.startPosition, t.endPosition)
     test _ = Nothing
 
 idP :: TokenParser (WithPos T.Text)
@@ -427,6 +434,12 @@ idP = token test S.empty
   where
     test (Positioned start end _ _ (IdToken i)) = Just (i,start,end)
     test _ = Nothing
+
+isKeyword :: Keyword -> Positioned Parser.Tokens.Token -> Bool
+isKeyword kw (Positioned _ _ _ _ t) = t == Keyword kw
+
+isSymbol :: Symbol -> Positioned Parser.Tokens.Token -> Bool
+isSymbol sym (Positioned _ _ _ _ t) = t == Symbol sym
 
 intP :: TokenParser Expr
 intP = token test S.empty
@@ -463,11 +476,6 @@ betweenP openP closeP p = do
 --   in the argument.
 parensP :: TokenParser a -> TokenParser (WithPos a)
 parensP = betweenP (symbolP SymParenLeft) (symbolP SymParenRight)
-
--- | Parses expression of form `[e]`, where e is parsed by the parser provided
---   in the argument.
-bracketsP :: TokenParser a -> TokenParser (WithPos a)
-bracketsP = betweenP (symbolP SymBracketLeft) (symbolP SymBracketRight)
 
 -- | Parses expression of form `{e}`, where e is parsed by the parser provided
 --   in the argument.

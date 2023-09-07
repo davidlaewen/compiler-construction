@@ -1,6 +1,8 @@
 module Utils.Loc (
   Loc(..),
+  defaultPos,
   defaultLoc,
+  locPretty,
   HasLoc(..)
 ) where
 
@@ -12,17 +14,21 @@ data Loc = Loc !SourcePos !SourcePos
   deriving (Eq,Ord)
 
 instance Show Loc where
-  show (Loc start end) = sourcePosPretty start <> "-" <>
+  show _ = "<loc>"
+
+locPretty :: Loc -> String
+locPretty (Loc start end) = sourcePosPretty start <> "-" <>
     (if startLine == endLine then "" else show endLine <> ":") <> show endCol
     where
       startLine = unPos $ sourceLine start
       endLine = unPos $ sourceLine end
       endCol = unPos $ sourceColumn end
 
+defaultPos :: SourcePos
+defaultPos = SourcePos "DEFAULT" pos1 pos1
 
 defaultLoc :: Loc
 defaultLoc = Loc defaultPos defaultPos
-  where defaultPos = SourcePos "DEFAULT" pos1 pos1
 
 -- | Typeclass for data featuring a source code location
 class HasLoc a where

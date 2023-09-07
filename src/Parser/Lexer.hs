@@ -55,7 +55,7 @@ intL = IntLit <$> decimal <* withRecovery recovery (notFollowedBy letterChar)
   where
     recovery e = do
       -- FIXME: Possibly provide better error message here
-      -- _ <- fail . T.unpack $ "Misformed integer"
+      _ <- fail "Malformed integer"
       registerParseError e
       void $ some alphaNumChar
 
@@ -102,7 +102,7 @@ symbolL = choice $ (\sym -> string (T.pack (show sym)) >> pure (Symbol sym)) <$>
 
 
 lex1 :: Lexer Token
-lex1 = try intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRecovery recover (hidden identL)
+lex1 = intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRecovery recover (hidden identL)
   where
     recover e = do
       registerParseError e
@@ -112,12 +112,12 @@ lex1 = try intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRec
 -- | Lexes with lexer l and attaches position data to the result
 withPosition :: Lexer a -> Lexer (Positioned a)
 withPosition l = do
-  startOffset <- getOffset
-  beginPos <- getSourcePos
+  offset <- getOffset
+  startPos <- getSourcePos
   x <- l
   endOffset <- getOffset
   endPos <- getSourcePos
-  return $ Positioned beginPos endPos startOffset (endOffset - startOffset) x
+  return $ Positioned startPos endPos offset (endOffset - offset) x
 
 lexProgram :: Lexer [Positioned PT.Token]
 lexProgram = do

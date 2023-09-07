@@ -44,7 +44,7 @@ instance Desugar P.Stmt (T.Stmt ()) where
   desugar (P.FunCall loc "isEmpty" args) = T.FunCall loc T.IsEmpty (desugar <$> args)
   desugar (P.FunCall loc name args) = T.FunCall loc (T.Name name) (desugar <$> args)
   desugar (P.Return loc me) = T.Return loc (desugar <$> me)
-  desugar P.GarbageS = error "Attempted to desugar GarbageS node from ParseAST!"
+  desugar P.GarbageStmt = error "Attempted to desugar garbage Stmt node!"
 
 
 instance Desugar P.VarLookup T.VarLookup where
@@ -60,7 +60,7 @@ instance Desugar P.Field T.Field where
   desugar P.Tail = T.Tail
   desugar P.Fst = T.Fst
   desugar P.Snd = T.Snd
-
+  desugar P.GarbageField = error "Attempted to desugar garbage Field node!"
 
 instance Desugar P.Expr (T.Expr ()) where
   desugar :: P.Expr -> T.Expr ()
@@ -74,6 +74,7 @@ instance Desugar P.Expr (T.Expr ()) where
   desugar (P.FunCallE loc name args) = T.FunCallE loc (T.Name name) (desugar <$> args) ()
   desugar (P.EmptyList loc) = T.EmptyList loc ()
   desugar (P.Tuple loc e1 e2) = T.Tuple loc (desugar e1) (desugar e2) ()
+  desugar P.GarbageExpr = error "Attempted to desugar garbage Expr node!"
 
   -- Unary operations
   desugar (P.UnOp loc P.Not e) = T.FunCallE loc T.Not [desugar e] ()
@@ -104,6 +105,7 @@ instance Desugar (P.ExprLookup, Loc) (T.Expr ()) where
   desugar (P.ExprField expr P.Tail, loc) = T.FunCallE loc T.TailFun [desugar expr] ()
   desugar (P.ExprField expr P.Fst, loc)  = T.FunCallE loc T.FstFun  [desugar expr] ()
   desugar (P.ExprField expr P.Snd, loc)  = T.FunCallE loc T.SndFun  [desugar expr] ()
+  desugar (P.ExprField _ P.GarbageField, _) = error "Attempted to desugar garbage Field lookup!"
 
 
 instance Desugar P.Type U.UType where
@@ -118,4 +120,4 @@ instance Desugar P.Type U.UType where
   -- TODO: We probably want to replace named type variables with
   -- de Bruijn indices here
   desugar (P.TyVar _ name) = U.TVar name
-  desugar P.GarbageT = error "Attempted to desugar GarbageT node from ParseAST!"
+  desugar P.GarbageType = error "Attempted to desugar garbage Type node!"

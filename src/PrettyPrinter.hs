@@ -58,7 +58,7 @@ prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   putStr " -> "
   prettyPrintType retType
-prettyPrintType GarbageT = putStr "Garbage"
+prettyPrintType GarbageType = putStr "Garbage"
 
 prettyPrintExpr :: Expr -> IO ()
 prettyPrintExpr = go 0
@@ -90,6 +90,7 @@ prettyPrintExpr = go 0
       if currentPrecedence > precedence op
         then putChar '(' >> go (precedence op) e1 >> prettyPrintBinOp op >> go (precedence op) e2 >> putChar ')'
         else go currentPrecedence e1 >> prettyPrintBinOp op >> go currentPrecedence e2
+    go _ GarbageExpr = putStr "GarbageExpr"
 
     prettyPrintBinOp :: BinaryOp -> IO ()
     prettyPrintBinOp And  = putStr " && "
@@ -202,7 +203,7 @@ prettyPrintStmt i (Return _ eM) = do
     Nothing -> pure ()
     Just e -> putChar ' ' >> prettyPrintExpr e
   putChar ';'
-prettyPrintStmt i GarbageS = do
+prettyPrintStmt i GarbageStmt = do
   printIndentation i
   putStr "Garbage;"
 
@@ -216,12 +217,13 @@ prettyPrintExprLookup (ExprField expr field) =
   prettyPrintExpr expr >> prettyPrintField field
 
 prettyPrintField :: Field -> IO ()
-prettyPrintField f = putStr $ show SymDot ++ show (field2Kw f)
+prettyPrintField f = putStr $ show SymDot ++ field2Kw f
   where
-    field2Kw Head = KwHead
-    field2Kw Tail = KwTail
-    field2Kw Fst = KwFst
-    field2Kw Snd = KwSnd
+    field2Kw Head = show KwHead
+    field2Kw Tail = show KwTail
+    field2Kw Fst = show KwFst
+    field2Kw Snd = show KwSnd
+    field2Kw GarbageField = "GarbageField"
 
 
 prettyPrinter :: Program -> IO ()

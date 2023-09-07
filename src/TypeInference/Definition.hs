@@ -30,7 +30,7 @@ import Control.Monad.Except
 import Data.Set ((\\))
 import TypeInference.Types
 import Syntax.TypeAST (FunDecl(..))
-import Utils.Loc (Loc)
+import Utils.Loc (Loc, locPretty)
 
 
 class Types a where
@@ -57,7 +57,7 @@ data CGenState = CGenState{ globalEnv :: GlobalEnv, localEnv :: LocalEnv, varSta
 type CGen = StateT CGenState (Except T.Text)
 
 throwLocError :: Loc -> T.Text -> CGen a2
-throwLocError loc msg = throwError $ T.pack (show loc) <> ":\n" <> msg
+throwLocError loc msg = throwError $ T.pack (locPretty loc) <> ":\n" <> msg
 
 applySubst :: Subst -> CGen ()
 applySubst s = do

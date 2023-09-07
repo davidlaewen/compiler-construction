@@ -1,9 +1,5 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DerivingStrategies, FlexibleInstances, RecordWildCards,
+TypeFamilies, InstanceSigs, GADTs, OverloadedRecordDot #-}
 
 module Parser.Definition
   ( Lexer,
@@ -24,6 +20,7 @@ import Data.Void (Void)
 import qualified Parser.Tokens as PT
 import Text.Megaparsec
 import Data.Maybe (listToMaybe)
+import Syntax.ParseAST (UnaryOp, BinaryOp)
 
 type Lexer = Parsec Void Text
 
@@ -31,33 +28,71 @@ type WithPos a = (a, SourcePos, SourcePos)
 type TokenParser a = Parsec ParserError TokenStream a
 
 data ParserError where
+  NoClosingDelimiter        :: PT.Symbol -> ParserError
+  MutualNoOpenBrace         :: ParserError
   FunctionMissingStatements :: ParserError
-  NoRetType                 :: ParserError
+  FunctionNoArrow           :: ParserError
+  FunctionNoRetType         :: ParserError
+
+  ProdTypeMissingEntry      :: ParserError
   ProdTypeMissingComma      :: ParserError
   ProdTypeNoSecondEntry     :: ParserError
-    deriving (Eq, Ord)
+  ListTypeMissingEntry      :: ParserError
+
+  ParenOpenNotClosed        :: ParserError
+  ParenOpenNoExpression     :: ParserError
+  TupleNoComma              :: ParserError
+
+  VarDeclNoIdentifier       :: ParserError
+  VarDeclNoEquals           :: ParserError
+  VarDeclNoExpression       :: ParserError
+  FieldLookupNoField        :: ParserError
+
+  UnaryOpNoExpression       :: UnaryOp -> ParserError
+  BinaryOpNoExpression      :: BinaryOp -> ParserError
+  ConsNoExpression          :: ParserError
+  IfNoCondition             :: ParserError
+    deriving (Eq,Ord)
 
 instance ShowErrorComponent ParserError where
   showErrorComponent :: ParserError -> String
+  showErrorComponent (NoClosingDelimiter sym) = "Expecting closing `" <> show sym <> "`"
+
+  showErrorComponent MutualNoOpenBrace = "Expecting declaration block `{...}` after `mutual`"
   showErrorComponent FunctionMissingStatements = "Function body must end with a statement"
-  showErrorComponent NoRetType = "Missing return type after `->`"
+  showErrorComponent FunctionNoArrow = "Expecting argument type or `->`"
+  showErrorComponent FunctionNoRetType = "Missing return type after `->`"
+  showErrorComponent ProdTypeMissingEntry = "Expecting left type of product"
   showErrorComponent ProdTypeMissingComma = "Product type missing comma"
-  showErrorComponent ProdTypeNoSecondEntry = "Product type has invalid second type"
+  showErrorComponent ProdTypeNoSecondEntry = "Product type missing second type"
+  showErrorComponent ListTypeMissingEntry = "Expecting type of list"
 
-data TokenStream = TokenStream
-  { tokenStreamInput :: T.Text,
+  showErrorComponent ParenOpenNotClosed = "Missing closing parenthesis"
+  showErrorComponent ParenOpenNoExpression = "Expecting expression after `(`"
+  showErrorComponent TupleNoComma = "Missing `)` or second tuple component"
+  showErrorComponent VarDeclNoIdentifier = "Expecting variable identifier"
+  showErrorComponent VarDeclNoEquals = "Expecting `=` after variable name"
+  showErrorComponent VarDeclNoExpression = "Expecting expression on right side of assignment"
+
+
+  showErrorComponent FieldLookupNoField = "Expecting one of `hd`, `tl`, `fst` or `snd`"
+  showErrorComponent (UnaryOpNoExpression op) = "Expecting expression after operand `" <> show op <> "`"
+  showErrorComponent (BinaryOpNoExpression op) = "Expecting expression after operand `" <> show op <> "`"
+  showErrorComponent ConsNoExpression = "Expecting expression after cons `:`"
+  showErrorComponent IfNoCondition = "Expecting if condition between `(` and `)`"
+
+data TokenStream = TokenStream {
+    tokenStreamInput :: T.Text,
     tokenStream :: [Positioned PT.Token]
-  }
-  deriving (Show)
+  } deriving (Show)
 
-data Positioned a = Positioned
-  { startPos :: SourcePos,
-    endPos :: SourcePos,
-    startOffset :: Int,
-    tokenLength :: Int,
-    tokenVal :: a
-  }
-  deriving (Eq, Ord, Show)
+data Positioned a = Positioned {
+    startPosition :: SourcePos,
+    endPosition   :: SourcePos,
+    startOffset   :: Int,
+    tokenLength   :: Int,
+    tokenVal      :: a
+  } deriving (Eq, Ord, Show)
 
 instance Stream TokenStream where
   type Token TokenStream = Positioned PT.Token
@@ -138,7 +173,7 @@ instance TraversableStream TokenStream where
       newSourcePos =
         case post of
           [] -> pstateSourcePos
-          (x : _) -> startPos x
+          (x : _) -> x.startPosition
       (pre, post) = splitAt (o - pstateOffset) (tokenStream pstateInput)
       (preStr, postStr) = T.splitAt (startingWhitespacesConsumed + charsConsumed) (tokenStreamInput pstateInput)
       preLine = T.unpack . T.reverse . T.takeWhile (/= '\n') . T.reverse $ preStr
