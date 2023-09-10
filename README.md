@@ -2,15 +2,9 @@
 
 ## To Do
 Code gen:
-- [x] Global variables
-- [x] Tuples
-- [x] Lists
-- [x] Polymorphism
 - [ ] Equality and printing
-- [x] Support for mutual recursion
-- [x] Compute `heapLow` dynamically
-- [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 - [ ] Prelude with printing and comparison implementations
+- [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 
 Extension:
 - [ ] Lambdas

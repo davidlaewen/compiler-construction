@@ -51,7 +51,9 @@ data ParserError where
   UnaryOpNoExpression       :: UnaryOp -> ParserError
   BinaryOpNoExpression      :: BinaryOp -> ParserError
   ConsNoExpression          :: ParserError
+
   IfNoCondition             :: ParserError
+  IfNoOpenBrace             :: ParserError
     deriving (Eq,Ord)
 
 instance ShowErrorComponent ParserError where
@@ -75,11 +77,13 @@ instance ShowErrorComponent ParserError where
   showErrorComponent VarDeclNoExpression = "Expecting expression on right side of assignment"
 
 
-  showErrorComponent FieldLookupNoField = "Expecting one of `hd`, `tl`, `fst` or `snd`"
+  showErrorComponent FieldLookupNoField = "Expecting field selector: `hd`, `tl`, `fst` or `snd`"
   showErrorComponent (UnaryOpNoExpression op) = "Expecting expression after operand `" <> show op <> "`"
   showErrorComponent (BinaryOpNoExpression op) = "Expecting expression after operand `" <> show op <> "`"
   showErrorComponent ConsNoExpression = "Expecting expression after cons `:`"
+
   showErrorComponent IfNoCondition = "Expecting if condition between `(` and `)`"
+  showErrorComponent IfNoOpenBrace = "Expecting statement block `{...}` after `if` condition"
 
 data TokenStream = TokenStream {
     tokenStreamInput :: T.Text,

@@ -91,7 +91,6 @@ isKeyword s = s `elem` (T.pack . show <$> keywords)
 data Symbol where
   SymColonColon    :: Symbol
   SymRightArrow    :: Symbol
-  SymBracketLR     :: Symbol
 
   -- Operators
   SymPipePipe      :: Symbol
@@ -134,7 +133,6 @@ data Symbol where
 instance Show Symbol where
   show SymColonColon    = "::"
   show SymRightArrow    = "->"
-  show SymBracketLR     = "[]"
 
   -- Operators
   show SymPipePipe      = "||"

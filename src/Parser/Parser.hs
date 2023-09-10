@@ -6,9 +6,9 @@ import Control.Applicative hiding (many)
 import Parser.Definition
 import Syntax.ParseAST
 import Text.Megaparsec
-import Parser.Tokens ( Token(..), Keyword(..), Symbol(..) )
+import Parser.Tokens (Token(..), Keyword(..), Symbol(..))
 import qualified Data.Set as S
-import Control.Monad
+import Control.Monad (void)
 import qualified Data.Text as T
 import Utils.Loc (Loc(..), HasLoc(..), defaultPos)
 import Utils.Utils (fst3)
@@ -42,7 +42,7 @@ funDeclP = do
   retType <- optional (symbolP SymColonColon >> funTypeP)
   ((decls,stmts),_,endPos) <- bracesP $ do
     decls <- many (try isVarDeclLookahead >> varDeclP)
-    stmts <- many stmtP
+    stmts <- many (withRecovery parseToNextStmt stmtP)
     pure (decls, stmts)
   handleNoStatements funIdOffset stmts
   pure $ FunDecl (Loc startPos endPos) name params retType decls stmts
@@ -150,36 +150,15 @@ parenOrTupleP = do
         registerError ((),defaultPos,getEnd e2) ParenOpenNotClosed
       pure $ Tuple (Loc start end) e1 e2
 
--- atomP :: TokenParser Expr
--- <Val> (. <Field)*
-
-{- Refactored expression grammar:
-
-<Expr> :=  <Prop> (( && | || ) <Prop>)*
-
-<Prop> := <List> (( == | != | < | > | <= | >= ) <List> )*
-
-<List> := <Form> ( :  <Form> )*
-
-<Form> := <Term> (( + | - ) <Term>)*
-
-<Term> := <Val> (( * | / | % ) <Val>)*
-
-<UnOp> := !<Sel> | - <Sel> | <Sel>
-
-<Sel> := <Atom> (. <Field>)*
-
-<Atom> := ( <Expr> ) | ( <Expr> , <Expr> ) | <Bool> | <Char> | <Int> | []
-       | <Id> | <FunCall>
--}
-
 atomP :: TokenParser Expr
 atomP = parenOrTupleP <|>
         intP <|> boolP <|> charP <|>
         emptyListP <|>
         try funCallEP <|> identP
   where
-    emptyListP = symbolP SymBracketLR >>= \(_,start,end) ->
+    emptyListP = do
+      (_,start,_) <- symbolP SymBracketLeft
+      (_,_,end) <- symbolP SymBracketRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
       pure $ EmptyList (Loc start end)
     identP = idP >>= \(ident,s,e) -> pure $ Ident (Loc s e) ident
 
@@ -256,7 +235,7 @@ propP = listP >>= opListP
 
 <Prop> := <List> (( == | != | < | > | <= | >= ) <List> )*
 
-<List> := <Form> ( :  <Form> )*
+<List> := <Form> : <List>
 
 <Form> := <Term> (( + | - ) <Term>)*
 
@@ -299,25 +278,37 @@ exprP = propP >>= opPropP
 -------------------------
 -- Statements
 
+-- | Consumes tokens up until either `;` or `}`, then attempts to parse a
+-- statement with recovery by recursing. We do not attempt to recover if the
+-- next token is `}`, that is, when we have reached the end of the current
+-- statement block.
+parseToNextStmt :: ParseError TokenStream ParserError -> TokenParser Stmt
+parseToNextStmt e = (symbolP SymBraceRight >> fail "") <|>
+  (skipManyTill (satisfy $ const True)
+    -- try (keywordP KwIf) <|> try (keywordP KwWhile) <|> try (keywordP KwReturn) <|>
+    (symbolP SymSemicolon <|> symbolP SymBraceRight) >>
+      registerParseError e >> withRecovery parseToNextStmt stmtP)
+
 ifP :: TokenParser Stmt
 ifP = do
   (_,startPos,_) <- keywordP KwIf
   (cond,_,_) <- parensP exprP <|> registerError (withDummyPos GarbageExpr) IfNoCondition
-  (thenStmts,_,end) <- bracesP (many stmtP)
+  -- _ <- symbolP SymBraceLeft <|> registerError (withDummyPos ()) IfNoOpenBrace
+  (thenStmts,_,end) <- bracesP $ many (withRecovery parseToNextStmt stmtP)
+  -- (_,_,end) <- symbolP SymBraceRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBraceRight)
   mElseStmts <- optional $ do
     _ <- keywordP KwElse
-    bracesP $ many stmtP
+    bracesP $ many (withRecovery parseToNextStmt stmtP)
   let (elseStmts,endPos) = case mElseStmts of
         Nothing -> ([],end)
         Just (stmts,_,end') -> (stmts,end')
   pure $ If (Loc startPos endPos) cond thenStmts elseStmts
 
-
 whileP :: TokenParser Stmt
 whileP = do
   (_,start,_) <- keywordP KwWhile
   (cond,_,_) <- parensP exprP
-  (stmts,_,end) <- bracesP $ many stmtP
+  (stmts,_,end) <- bracesP $ many (withRecovery parseToNextStmt stmtP)
   pure $ While (Loc start end) cond stmts
 
 assignP :: TokenParser Stmt
@@ -359,9 +350,7 @@ stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 
 programP :: TokenParser Program
 programP = do
-  -- This permits mixed order of funDecls and varDecls, which would result in
-  -- reordering of the declarations. This could cause unexpected behaviour and
-  -- should be caught somewhere with an error
+  -- All varDecls must appear before all funDecls
   varDecls <- many (try isVarDeclLookAhead >> varDeclP)
   funDecls <- many funOrMutualDeclP
   Program varDecls funDecls <$ eof

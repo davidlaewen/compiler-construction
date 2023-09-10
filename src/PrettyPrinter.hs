@@ -187,7 +187,7 @@ prettyPrintStmt i (While _ e stmts) = do
 prettyPrintStmt i (Assign _ varLookup e) = do
   printIndentation i
   prettyPrintVarLookup varLookup
-  putStr " := "
+  putStr " = "
   prettyPrintExpr e
   putStr ";"
 prettyPrintStmt i (FunCall _ funName args) = do
