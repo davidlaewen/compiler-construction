@@ -7,9 +7,10 @@ Code gen:
 - [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 
 Extension:
-- [ ] Lambdas
-- [ ] Custom data types?
-- [ ] Further idea
+- [ ] Anonymous functions (lambda notation)
+- [ ] Custom algebraic data types?
+- [ ] Custom typeclasses
+- [ ] Further ideas
 
 Pretty printing:
 - [ ] Printer helpers for parentheses, brackets and braces

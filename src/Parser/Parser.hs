@@ -279,15 +279,13 @@ exprP = propP >>= opPropP
 -- Statements
 
 -- | Consumes tokens up until either `;` or `}`, then attempts to parse a
--- statement with recovery by recursing. We do not attempt to recover if the
--- next token is `}`, that is, when we have reached the end of the current
--- statement block.
+-- statement with recovery by recursing. Recovery should fail if the next token
+-- is `}`, that is, when we have reached the end of the current statement block.
 parseToNextStmt :: ParseError TokenStream ParserError -> TokenParser Stmt
 parseToNextStmt e = (symbolP SymBraceRight >> fail "") <|>
   (skipManyTill (satisfy $ const True)
-    -- try (keywordP KwIf) <|> try (keywordP KwWhile) <|> try (keywordP KwReturn) <|>
-    (symbolP SymSemicolon <|> symbolP SymBraceRight) >>
-      registerParseError e >> withRecovery parseToNextStmt stmtP)
+      (symbolP SymSemicolon <|> symbolP SymBraceRight) >>
+    registerParseError e >> withRecovery parseToNextStmt stmtP)
 
 ifP :: TokenParser Stmt
 ifP = do
