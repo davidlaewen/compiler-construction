@@ -1,0 +1,29 @@
+\section{Language Choice}
+
+For my compiler, I chose Haskell as the implementation language. The choice
+of Haskell was motivated in part by my prior experience working with Haskell,
+e.g. through the Bachelor's course Functional Programming, which also covers e.g.
+monadic parser combinators.
+Beyond the Functional Programming course, I also used Haskell previously during
+my Bachelor's thesis, where I worked on extending the type system of the prototype
+programming language Duo\footnote{\url{https://github.com/duo-lang}}, which
+combines dual data and codata with the algebraic subtyping approach of
+\citet{Dolan2017}.
+
+we both took the Bachelor's course ``Functional Programming'', which also covers
+monadic parser combinators as we use in our implementation.
+Beyond the course on Haskell, ...
+
+The approach of writing lexers and parsers using monadic function and
+combinators is elegant and allows one to work at a high level abstraction.
+In particular, the parser functions closely correspond to the rules of the
+parser grammar that they express, which makes the parser and its constituent
+parts easier to reason about.
+
+For representing and manipulating abstract syntax trees, the use of algebraic
+data types are also an obvious choice. The syntax of both terms and types can be
+represented using ADTs, with different flavours for parsing, typing and code
+generation. Operations such as typing and code generation are naturally captured
+by recursive functions over ADTs representing such AST variants.
+In addition, the use of higher-order operations such as \emph{mapping} and
+\emph{folding} allow many operations on ASTs to be expressed concisely.

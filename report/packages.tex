@@ -1,14 +1,63 @@
 \usepackage[a4paper]{geometry}
+
+% Use nicer fonts
 \usepackage[tt=false]{libertine}
 \usepackage[varqu]{zi4}
+
 \usepackage{hyperref}
 \usepackage{xcolor}
+
+% Math stuff
 \usepackage{amsmath}
 \usepackage{stmaryrd}
 \usepackage{mathtools}
 \usepackage{listings}
-\usepackage[nameinlink,noabbrev]{cleveref}
+
+\usepackage[nameinlink,noabbrev,capitalise]{cleveref}
+
+\usepackage[square]{natbib}
+\bibliographystyle{ACM-Reference-Format}
+\setcitestyle{acmauthoryear}
+
+% Syntax highlighting (for Haskell)
 \usepackage[outputdir=build]{minted}
+\usemintedstyle{tango}
+
+\usepackage[most]{tcolorbox} % Colour boxes
+\usepackage[color=orange!40]{todonotes} % To-do notes
+
+% ACM colour definitions
+\definecolor[named]{ACMBlue}{cmyk}{1,0.1,0,0.1}
+\definecolor[named]{ACMYellow}{cmyk}{0,0.16,1,0}
+\definecolor[named]{ACMOrange}{cmyk}{0,0.42,1,0.01}
+\definecolor[named]{ACMRed}{cmyk}{0,0.90,0.86,0}
+\definecolor[named]{ACMLightBlue}{cmyk}{0.49,0.01,0,0}
+\definecolor[named]{ACMGreen}{cmyk}{0.20,0,1,0.19}
+\definecolor[named]{ACMPurple}{cmyk}{0.55,1,0,0.15}
+\definecolor[named]{ACMDarkBlue}{cmyk}{1,0.58,0,0.21}
+
+% Set up the hyperref package
+\hypersetup{
+  pdftitle = {SPL Compiler}, %   - title (PDF meta)
+% pdfsubject={thesis subject},%   - subject (PDF meta)
+  pdfauthor = {David Läwen}, %   - author (PDF meta)
+  pdflang={en},
+  unicode=true,
+  colorlinks=true,           %   - colorize links?
+  linktoc=all,               %   - sections and subsections linked
+  breaklinks=false,          %   - allow line break inside links
+% plainpages=false,
+% pdfborder={0 0 0},
+% bookmarksnumbered=true,
+% bookmarksopen=true
+% Hyperlink colours
+  linkcolor = ACMPurple,
+  citecolor = ACMPurple,
+  urlcolor = ACMDarkBlue,
+  filecolor = ACMDarkBlue
+}
+
+% Syntax highlighting for SPL
 \lstdefinelanguage{SPL}{%
 	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|}
 	morekeywords={while,else,if,print,return,isEmpty,fst,snd,hd,tl,Int,Char,Bool,Void,True,False,var},%

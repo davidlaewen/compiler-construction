@@ -1,10 +1,13 @@
+\chapter{Lexing \& Parsing}
+
 In this chapter we discuss the lexing and parsing phases of our compiler.
-For both these phases we make use of the megaparsec
+For both these phases we make use of Haskell's \texttt{megaparsec}
 library~\footnote{\url{https://hackage.haskell.org/package/megaparsec}}.
 
 \section{Lexing}
 Our compiler has separate lexing and parsing phases.
-This is mainly to make the work of the parser easier.
+This is mainly to make the work of the parser easier, thanks to the preprocessing
+performed by the lexer.
 Firstly, the lexer takes care of skipping whitespace tokens.
 This also includes skipping single and multiline comments.
 Second, it also annotates all tokens with their position in the file.
@@ -25,8 +28,9 @@ data SourcePos = SourcePos
     sourceColumn :: !Pos
   }
 \end{minted}
-This will later make it possible to provide good error message to the user,
-as they will be able to locate the error using the source positions.
+This will later make it possible to provide more informative error messages, as
+we can include the file, line and column range in which the error occurs,
+allowing the user to easily locate the error in their source code.
 
 Our parsing library of choice, Megaparsec, makes dealing with whitespace quite
 straightforward. The library allows one to define a \emph{space consumer}, which

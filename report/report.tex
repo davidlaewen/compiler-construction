@@ -5,12 +5,10 @@
 
 \author{%
 	David~L\"awen\\
-	\small\texttt{s1105105}\and
-	Simcha~van~Collem\\
-	\small\texttt{s1040283}
+	\small\texttt{s1105105}
 }
 \date{\today}
-\title{SPL compiler}
+\title{SPL Compiler}
 
 \begin{document}
 
@@ -19,49 +17,27 @@
 \tableofcontents%
 
 \chapter{Introduction}
-\begin{quote}
-	\it
-	This document is a mandatory skeleton for your report.
-	It gives by no means an exhaustive list of suggestions for content.
-	The report should be readable self-contained and readable without access to the source code.
-\end{quote}
-\begin{itemize}
-	\item Motivate your language choice
-	\item Introduce spl
-	\item Give some nice examples.
-	\item \ldots
-\end{itemize}
+% \begin{quote}
+% 	\it
+% 	This document is a mandatory skeleton for your report.
+% 	It gives by no means an exhaustive list of suggestions for content.
+% 	The report should be readable self-contained and readable without access to the source code.
+% \end{quote}
+% \begin{itemize}
+% 	\item Motivate your language choice
+% 	\item Introduce spl
+% 	\item Give some nice examples.
+% 	\item \ldots
+% \end{itemize}
 
-\section{Language Choice}
-For our compiler, we chose Haskell as our implementation language. Our choice
-of Haskell was motivated in part by our prior experience working with Haskell,
-we both took the Bachelor's course ``Functional Programming'', which also covers
-monadic parser combinators as we use in our implementation.
-Beyond the course on Haskell, ...
+\input{content/lang-choice.tex}
 
-The approach of writing lexers and parsers using monadic function and
-combinators is elegant and allows one to work at a high level abstraction.
-In particular, the parser functions closely correspond to the rules of the
-parser grammar that they express. This makes the parser and its constituent
-parts easier to reason about.
-
-For representing and manipulating abstract syntax trees, the algebraic data
-types are also an obvious choice. Recursive functions over ADTs representing
-AST variants as well as higher-order operations such as \emph{mapping} and
-\emph{folding} allow many operators on ASTs to be expressed concisely.
-
-
-\chapter{Lexing \& Parsing}
 \input{content/lexing-parsing.tex}
 
-\chapter{Analyses \& Typing}
-\begin{itemize}
-	\item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
-	\item Error messages?
-	\item Polymorphism? Inference? Overloading?
-	\item Problems?
-	\item\ldots
-\end{itemize}
+\input{content/semantic-analyses.tex}
+
+
+
 
 \chapter{Code Generation}
 \begin{itemize}
@@ -89,6 +65,11 @@ What does work, what does not etc.
 	\item Pitfalls?
 	\item \ldots
 \end{itemize}
+
+
+% BIBLIOGRAPHY
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliography{references.bib}
 
 \appendix
 \chapter{Grammar}
