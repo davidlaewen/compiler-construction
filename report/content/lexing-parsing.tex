@@ -148,72 +148,95 @@ a parse error for non-numbers occuring in an arithmetic expression.
 
 
 \section{Abstract Syntax Tree}
-\textbf{TODO: Update AST if we update code}
+
 \begin{figure}
 \begin{minted}[breaklines]{haskell}
-data Program = Program [VarDecl] [FunDecl]
-data VarDecl = VarDecl (Maybe Type) T.Text Expr
-data FunDecl = FunDecl T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+data Program = Program [VarDecl] [FunMutDecl]
+data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
+data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
 
-data Stmt = If Expr [Stmt] [Stmt]
-          | While Expr [Stmt]
-          | Assign Field Expr
-          | FunCall T.Text [Expr]
-          | Return (Maybe Expr)
-          | GarbageS
+data Stmt = If Loc Expr [Stmt] [Stmt]
+          | While Loc Expr [Stmt]
+          | Assign Loc VarLookup Expr
+          | FunCall Loc T.Text [Expr]
+          | Return Loc (Maybe Expr)
+          | GarbageStmt
 
-data Type = IntT
-          | BoolT
-          | CharT
-          | Prod Type Type
-          | List Type
-          | Void
-          | Fun [Type] Type
-          | TyVar T.Text
-          | GarbageT
+data Type = IntT Loc
+          | BoolT Loc
+          | CharT Loc
+          | Prod Loc Type Type
+          | List Loc Type
+          | Void Loc
+          | Fun Loc [Type] Type
+          | TyVar Loc T.Text
+          | GarbageType
 
-data Field = Ident T.Text
-           | Head Field
-           | Tail Field
-           | Fst Field
-           | Snd Field
+data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
+data ExprLookup = ExprField Expr Field
+data Field = Head | Tail | Fst | Snd | GarbageField
 
-data Expr = Field Field
-          | Int Integer
-          | Char Char
-          | Bool Bool
-          | UnOp UnaryOp Expr
-          | BinOp BinaryOp Expr Expr
-          | FunCallE T.Text [Expr]
-          | EmptyList
-          | Tuple Expr Expr
+data Expr = Ident Loc T.Text
+          | ExprLookup Loc ExprLookup
+          | Int Loc Int
+          | Bool Loc Bool
+          | Char Loc Char
+          | UnOp Loc UnaryOp Expr
+          | BinOp Loc BinaryOp Expr Expr
+          | FunCallE Loc T.Text [Expr]
+          | EmptyList Loc
+          | Tuple Loc Expr Expr
+          | GarbageExpr
 
 data UnaryOp = Not | Neg
-
-data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lteq | Gteq | And | Or | Cons
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte | And | Or | Cons
 \end{minted}
-	\caption{Abstract syntax tree}\label{fig:ast}
+	\caption{Abstract syntax tree}
+  \label{fig:parse-ast}
 \end{figure}
-Our syntax tree can found in Figure~\ref{fig:ast}.
-Our top level node is \mintinline{haskell}{Program}.
-A \mintinline{haskell}{Program} consists of a list of variable declarations,
-and a list of function declarations.
-One thing to note is that we have some garbage AST nodes, such as \mintinline{haskell}{GarbageS} and \mintinline{haskell}{GarbageT}.
-These are used to support some sort of error recovery.
-Using these garbage nodes we can still produce a valid AST,
-such that the parser can recover and continue parsing.
-It is essential that programs with these nodes will not be type checked.
-After the parsing phase, the compiler should print the errors and stop compilation.
-We can thus threat it as a compiler bug, if we come to a later phase and encounter these garbage tokens.
 
-To model field lookups we use the \mintinline{haskell}{Field} datatype,
-where a field \mintinline{haskell}{Snd (Fst "x")} should be interpreted as \lstinline[language=SPL]|x.fst.snd|.
+Our syntax tree can be found in \cref{fig:parse-ast}. Our top level node is
+\haskell{Program}. A \haskell{Program} consists of a
+list of variable declarations, and a list of function declarations.
 
-We did not create a special data type for built-in functions like \lstinline[language=SPL]|print|, \lstinline[language=SPL]|isEmpty|, etc.
-The main reason for this, is that we suspect that it will be easier to treat these as regular functions,
-where there is already an implementation for them.
-However, it may be the case that in the future we find that it is easier to create a special datatype for built-in functions,
-which means we have to change it later.
+One thing to note is that at each parser level, we include a `garbage' AST node,
+such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
+expressions. In the case of a parse error, these nodes allow us to construct a
+valid AST and continue our parsing pass, while also clearly marking the AST as
+erroneous. When we later translate our parse AST to the AST representation used
+for typing, these nodes prevent us from accidentally entering the typing stage
+when parse errors where present in the source program, which would clearly
+constitute a compiler bug.
+Since the `garbage' nodes allow us to continue parsing after we encounter a
+parse error, they are particularly useful for supporting multiple error messages
+and error recovery.
+
+To model field lookups we use the \haskell{Field} datatype, where a field
+\haskell{Snd (Fst "x")} should be interpreted as \spl{x.fst.snd}.
+Field selectors can appear both on the left side of assignments, e.g.
+\spl{x.fst = 42;}, and in expressions, e.g. \spl{(0,40+2).snd}. In both cases, we
+model the field selectors using \haskell{Field}, which features cases for the
+built-in list and tuple projections.
+In both variable assignments and expressions, field selectors can be chained
+arbitrarily, e.g. \spl{x.tl.tl.hd.fst}, for which we use recursion in the AST
+definition.
+Variables in variable assignments are modelled using \haskell{VarLookup}, an
+instance of which is either an identifier or a field lookup. The latter case is
+self-referential, as it consists of a field lookup on instance of
+\haskell{VarLookup} itself.
+Similarly, \haskell{ExprLookup} is mutually recursive with \haskell{Expr}, so in
+a field lookup of the form $e.s$, $e$ can be an arbitrary expression, so can
+again be of the form $e.s$, and so on.
+
+We did not create a special data type for built-in functions like
+\spl{print} or \spl{isEmpty}, since we currently treat them as regular functions
+of a fixed type and predetermined implementation, which is either hardcoded in
+the code generation, or given in a prelude file that is always loaded by the
+compiler.
+
+
+
 
 We also did not add source position information to the AST yet.
 We will do this whenever we find we need this information in the AST.
