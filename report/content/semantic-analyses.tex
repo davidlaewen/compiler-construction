@@ -1,5 +1,55 @@
 \chapter{Analyses \& Typing}
 
+If the source programme was successfully parsed to a parse AST, we proceed by
+translating the parsed programme to the type AST representation that we use in
+the typing stage.
+\cref{fig:type-ast} shows the new AST that we use during the typing stage.
+As you can see, the definition has shrunk somewhat when compared to that of
+\cref{fig:parse-ast}; this is due to the fact that all field selectors and
+operators on expressions have been converted to regular function calls
+(case \haskell{FunCallE}).
+Field selectors in variable assignments remain unchanged, however.
+
+
+\begin{figure}
+\begin{minted}[breaklines]{haskell}
+data Program varAnn funAnn = Program [VarDecl varAnn] [FunMutDecl varAnn funAnn]
+data VarDecl a = VarDecl Loc (Maybe UType) T.Text (Expr a) a
+data FunDecl a b = FunDecl Loc T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
+data FunMutDecl a b = MutualDecls Loc [FunDecl a b] | SingleDecl (FunDecl a b)
+
+data Stmt a = If Loc (Expr a) [Stmt a] [Stmt a]
+            | While Loc (Expr a) [Stmt a]
+            | Assign Loc VarLookup a (Expr a)
+            | FunCall Loc FunName [Expr a]
+            | Return Loc (Maybe (Expr a))
+
+data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
+data Field = Head | Tail | Fst | Snd
+
+data FunName = Name T.Text
+             | Not | Neg
+             | Add | Sub | Mul | Div | Mod
+             | Eq | Neq | Lt | Gt | Lte | Gte
+             | And | Or
+             | Cons | IsEmpty
+             | HeadFun | TailFun | FstFun | SndFun
+             | Print
+
+data Expr a = Ident Loc T.Text a
+            | Int Loc Int a
+            | Char Loc Char a
+            | Bool Loc Bool a
+            | FunCallE Loc FunName [Expr a] a
+            | EmptyList Loc a
+            | Tuple Loc (Expr a) (Expr a) a
+\end{minted}
+
+\caption{Abstract syntax tree for typing stage}
+\label{fig:type-ast}
+\end{figure}
+
+
 \begin{itemize}
 	\item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
 	\item Error messages?
