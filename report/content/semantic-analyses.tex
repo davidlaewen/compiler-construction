@@ -71,6 +71,9 @@ AST, we annotate the nodes with these unification variables, and simultaneously
 generate a set of constraints between them, expressing how the (currently still
 unknown) types must relate to each other.
 
+\todobox{Which nodes feature type information, and which just `thread through' the
+type parameters?}
+
 To illustrate, let us consider a simple example: say we are typing the
 expression \spl{(1,2).fst}. The field selector \spl{.fst} will be desugared
 to a regular function, meaning we can think of the expression as something
@@ -227,7 +230,11 @@ is typed with $\tau$ under generation of the substitution $S$.
 When considering a list of expressions, such as the arguments to a function, we
 use the overlined notation $\set{e_i}$ for $e_1,\dots,e_n$. Similarly, we
 extend this notation to types, substitutions and the typing judgement, as seen
-in e.g. \ruleref{W-FunCall}.
+in e.g. \ruleref{W-FunCall}, where the judgement
+\[ \set{ \Gamma \vdash_W e_i : \tau_i,\ S_i } \]
+states that in context $\Gamma$, the $i$-th expression $e_i$ has type $\tau_i$,
+generating the substitution $S_i$. We then write $\set{S_i}$ to mean the
+composition of all $S_i$ in order, that is, $S_n \circ \dots \circ S_1$.
 The judgement $\fresh(\alpha)$ states that the unification variable $\alpha$ is
 freshly generated. We write $\inst(\forall \set{\alpha}. \tau)$ for the
 typing scheme $\forall \set{\alpha}. \tau$ where all $\set{\alpha}$ are
@@ -263,13 +270,20 @@ the unification procedure on types $\sigma$ and $\tau$.
     \inferH{W-FunCall}%
       {\set{\sigma_i} \to \sigma = \mathit{inst}(\Gamma(f)) \\
         \set{ \Gamma \vdash_W e_i : \tau_i,\ S_i} \\
-        S = \mathit{unify}(\set{\sigma_i}, \set{\tau_i})}
+        S = \mathit{unify}(\set{\sigma_i, \tau_i})}
       {\Gamma \vdash_W \code{$f$($\set{e_i}$)} : \tau.S,\ S \circ \set{S_i}}
   \end{mathpar}
 
   \caption{Rules for type inference algorithm on expressions}
   \label{fig:typing-rules-expr}
 \end{figure}
+
+\todobox{Figure out how to present type inference procedure on statements and
+declarations, and add the corresponding rules.}
+
+\todobox{Define unification procedure, and how the substitution is generated,
+including lifting the unification to two lists of types, like when unifying
+function arguments.}
 
 
 \begin{todoenv}
