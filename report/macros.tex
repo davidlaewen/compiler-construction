@@ -5,8 +5,40 @@
 % Grammar
 \newcommand{\NT}[1]{\langle \textit{#1}\kern.7pt \rangle}
 \newcommand{\ruleSep}{\quad\mid\quad}
-\newcommand{\code}[1]{\texttt{#1}}
 
-% Syntax
+% Inline syntax environments
 \newcommand{\spl}[1]{\lstinline[language=SPL]|#1|}
 \newcommand{\haskell}[1]{\mintinline{Haskell}|#1|}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+% SPL syntax
+\newcommand{\Int}{\code{Int}}
+\newcommand{\Bool}{\code{Bool}}
+\newcommand{\Char}{\code{Char}}
+\newcommand{\Void}{\code{Void}}
+\newcommand{\TProd}[2]{\code{(}#1\code{,}#2\code{)}}
+\newcommand{\TFun}[2]{#1 \to #2}
+\newcommand{\TList}[1]{\code{[}#1\code{]}}
+
+\newcommand{\Pair}[2]{\code{(}#1\code{,}#2\code{)}}
+\newcommand{\Parens}[1]{\code{(}#1\code{)}}
+
+
+
+% Meta notation
+\newcommand{\set}[1]{\overline{#1}} % Overlined list/set notation
+\newcommand{\fresh}{\mathit{fresh}}
+\newcommand{\inst}{\mathit{inst}}
+\newcommand{\unify}{\mathit{unify}}
+\newcommand{\FV}{\mathit{FV}}
+
+\newcommand{\eqdef}{\triangleq}
+
+
+
+
+% Todo boxes
+\newenvironment{todoenv}
+	{\begin{tcolorbox}[colback=orange!12!white,colframe=orange,coltext=darkorange,boxrule=.4mm]}%
+	{\end{tcolorbox}}

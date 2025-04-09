@@ -1,15 +1,18 @@
 \chapter{Analyses \& Typing}
 
 If the source programme was successfully parsed to a parse AST, we proceed by
-translating the parsed programme to the type AST representation that we use in
+translating the parsed programme to a new AST representation used in
 the typing stage.
-\cref{fig:type-ast} shows the new AST that we use during the typing stage.
+\cref{fig:type-ast} shows this new \emph{typing AST}.
 As you can see, the definition has shrunk somewhat when compared to that of
-\cref{fig:parse-ast}; this is due to the fact that all field selectors and
-operators on expressions have been converted to regular function calls
-(case \haskell{FunCallE}).
-Field selectors in variable assignments remain unchanged, however.
-
+\cref{fig:parse-ast}. This is mostly due to the fact that all field selectors
+and operators on expressions have been converted to regular function calls (case
+\haskell{FunCallE}), although field selectors in variable assignments remain
+unchanged.
+In addition, all the garbage nodes available in the parse AST are no longer
+present in the typing AST: since such garbage nodes indicate errors in the
+parsing stage, we should not proceed to the typing stage in their presence, and
+thus do not require corresponding nodes in our typing ASTs.
 
 \begin{figure}
 \begin{minted}[breaklines]{haskell}
@@ -49,11 +52,232 @@ data Expr a = Ident Loc T.Text a
 \label{fig:type-ast}
 \end{figure}
 
+Another key difference is that we extend many of the nodes with type
+parameters \haskell{a} and \haskell{b}. The fields correspond to the types we
+infer for the respective nodes during the typing stage.
+Initially, we have no type information available (aside from the optional type
+annotations in the source program), and represent this lack of information
+with the \haskell{()} type, e.g. \haskell{Expr ()}. During the typing stage, we
+iterate through the typing AST, replacing these dummy fields of type \haskell{()}
+with our inferred type information, represented by \haskell{UType}.
+For instance, when checking an expression $e$, we start with an instance of
+\haskell{Expr ()}, and return an instance of \haskell{Expr UType}.
+The definition of \haskell{UType} is given in \cref{fig:type-adt}, and
+corresponds to the grammar of SPL types, with the addition of \emph{unification
+variables} \haskell{UVar}.
+Unification variables are represented simply by integers, and are generated as
+placeholders for unknown types during type checking. While iterating through the
+AST, we annotate the nodes with these unification variables, and simultaneously
+generate a set of constraints between them, expressing how the (currently still
+unknown) types must relate to each other.
 
-\begin{itemize}
-	\item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
-	\item Error messages?
-	\item Polymorphism? Inference? Overloading?
-	\item Problems?
-	\item\ldots
-\end{itemize}
+To illustrate, let us consider a simple example: say we are typing the
+expression \spl{(1,2).fst}. The field selector \spl{.fst} will be desugared
+to a regular function, meaning we can think of the expression as something
+closer to \spl{fstfun((1,2))}. The type of \spl{fstfun} is polymorphic, and
+given by $\forall \alpha \beta.\ (\alpha,\beta) \to \alpha$, expressing that
+from a tuple with entries of---respectively---type $\alpha$ and $\beta$,
+\spl{fstfun} returns the first entry with type $\alpha$.
+During typing, we generate unification variables $\alpha_1$, $\alpha_2$, and
+$\beta$, where $(\alpha_1,\alpha_2)$ is the input type of \spl{fstfun}, $\beta$
+is the output type and thus the type of \spl{(1,true).fst}, and we also know
+that $\alpha_1 = \beta$, since we are selecting the first component.
+Next, we look at the pair constructor, whose type is given as the \emph{product}
+of the two inner types, that is, the types of \spl{1} and \spl{true}.
+These, in turn, are trivial to typecheck, and do not yield any constraints or
+substitutions. Given that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
+to the constraints from earlier:
+We now know that \code{($\alpha_1$,$\alpha_2$) $=$ (Int,Bool)}, so by
+$\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
+$\beta = \code{Int}$.
+
+\begin{figure}
+\begin{minted}[breaklines]{haskell}
+type UVar = Int
+type TVar = T.Text
+
+data UType = Int | Bool | Char | Void
+           | Prod UType UType | List UType
+           | Fun [UType] UType
+           | UVar UVar
+           | TVar TVar
+\end{minted}
+
+  \caption{Algebraic data type of SPL types}
+  \label{fig:type-adt}
+\end{figure}
+
+
+\section{Scoping}
+SPL features essentially only two scopes: the global scope covers top-level
+variable definitions and all function declarations, while function arguments
+and variables assigned within a function body fall under the local scope of the
+respective function.
+
+Consider the following example program:
+%
+\begin{lstlisting}[language=SPL]
+  Int a = 2;
+
+  f(x) :: Int -> Int {
+    Int b = 20;
+    return x * b;
+  }
+
+  main() {
+    print(f(2) + a);
+  }
+\end{lstlisting}
+%
+Here, \spl{a} and \spl{f} are bound in the global scope, while \spl{x} and
+\spl{b} are bound only in the body of function \spl{f}.
+
+To represent this information, our type inference implementation uses two
+variants of identifier, as well as two separate environments, one of which
+stores global identifiers, while they other tracks local bindings.
+
+\begin{minted}{haskell}
+data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
+data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
+
+data EnvLevel = GlobalLevel | LocalLevel
+
+type GlobalEnv = M.Map GlobalId UScheme
+type LocalEnv = M.Map LocalId UType
+\end{minted}
+
+The \haskell{LocalId} and \haskell{GlobalId} data types both distinguish between
+term variables $x$ and function names $f$ at the respective levels.
+\haskell{LocalId} additionally features the special case of \haskell{RetType},
+which is used within the local scope of a function body to identify the return
+type, as it has no explicit identifier in the source.
+Next, we have \haskell{EnvLevel}, which simply serves as a toggle for certain
+functions whose behaviour differs depending on the scope.
+Finally, \haskell{GlobalEnv} maps \haskell{GlobalId}s to \haskell{UScheme}s,
+while \haskell{LocalEnv} maps \haskell{LocalId}s to \haskell{UType}s.
+The reason for using \haskell{UScheme} at the top level is that the types of
+functions are generalised in the free unification variables, that is, they have
+the general form $\forall\ \set{\alpha}.\ \tau$, while variables are always
+assigned monotypes.
+
+
+\section{Variables and Substitutions}
+
+During the typing procedure, we must generate fresh unification variables and
+work with substitutions, which we also need to compose and apply to types.
+For generating fresh variable names, we simply keep track of an integer
+\haskell{varState} under the state monad, which allows us to simply read and
+increment the counter whenever we need a new name. Since the counter strictly
+increases, we are guaranteed to obtain a (currently) unused name.
+
+Substitutions $S$ are represented by maps from unification variables
+\haskell{UVar} to (unification) types \haskell{UType}. Their type \haskell{Subst}
+constitutes an instance of Haskell's \haskell{Monoid} typeclass, where the
+binary operation is defined as composition $S_1 \circ S_2$, and the unit element
+is given by the empty substitution $\emptyset$.
+
+\begin{minted}{haskell}
+instance Semigroup Subst where
+  Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1
+
+instance Monoid Subst where
+  mempty = Subst M.empty
+\end{minted}
+
+We write $\tau.S$ for applying the substitution $S$ to type $\tau$, where the
+substitution procedure is defined as follows:
+
+\[
+\begin{array}{rcl}
+  \alpha.S & \eqdef & S(\alpha) \\
+  \Int.S & \eqdef & \Int \\
+  \Bool.S & \eqdef & \Bool \\
+  \Char.S & \eqdef & \Char \\
+  \Void.S & \eqdef & \Void \\
+  \TProd{\tau_1}{\tau_2}.S & \eqdef & \TProd{\tau_1.S}{\tau_2.S} \\
+  \TList{\tau}.S & \eqdef & \TList{\tau.S} \br
+  \Parens{ \TFun{\set{\sigma_i}}{\tau} }.S & \eqdef & \TFun{\set{\sigma_i.S}}{\tau.S}
+\end{array}
+\]
+
+For the free (unification) variables in a type $\tau$, we write $\FV(\tau)$, where
+$\FV$ is defined by:
+
+\[
+\begin{array}{rcl}
+  \FV(\alpha) & \eqdef & \{ \alpha \} \\
+  \FV(\Int) & \eqdef & \emptyset \\
+  \FV(\Bool) & \eqdef & \emptyset \\
+  \FV(\Char) & \eqdef & \emptyset \\
+  \FV(\Void) & \eqdef & \emptyset \\
+  \FV( \TProd{\tau_1}{\tau_2} ) & \eqdef & \FV(\tau_1) \cup \FV(\tau_2) \\
+  \FV( \TList{\tau} ) & \eqdef & \FV(\tau) \\
+  \FV( \TFun{\set{\sigma_i}}{\tau} ) & \eqdef & \{ \FV(\sigma_i) \mid i \} \cup \FV(\tau)
+\end{array}
+\]
+
+
+
+\section{Type Inference}
+
+We now present our type inference algorithm. By misuse of notation, we describe
+the cases of the algorithm in deduction rules, where the judgement
+$\Gamma \vdash_W e : \tau, S$ states that in context $\Gamma$, the expression $e$
+is typed with $\tau$ under generation of the substitution $S$.
+When considering a list of expressions, such as the arguments to a function, we
+use the overlined notation $\set{e_i}$ for $e_1,\dots,e_n$. Similarly, we
+extend this notation to types, substitutions and the typing judgement, as seen
+in e.g. \ruleref{W-FunCall}.
+The judgement $\fresh(\alpha)$ states that the unification variable $\alpha$ is
+freshly generated. We write $\inst(\forall \set{\alpha}. \tau)$ for the
+typing scheme $\forall \set{\alpha}. \tau$ where all $\set{\alpha}$ are
+substituted with fresh unification variables.
+Finally, $\unify(\sigma,\tau)$ denotes the substitution generated by performing
+the unification procedure on types $\sigma$ and $\tau$.
+
+\begin{figure}[h]
+  \begin{mathpar}
+
+    \inferrule[W-Var]
+      {\Gamma(x) = \tau}
+      {\Gamma \vdash_W x : \tau,\ \emptyset}
+
+    \inferrule[W-Int]{ }
+      {\Gamma \vdash_W n : \code{Int},\ \emptyset}
+
+    \inferrule[W-Bool]{ }
+      {\Gamma \vdash_W b : \code{Bool},\ \emptyset}
+
+    \inferrule[W-Char]{ }
+      {\Gamma \vdash_W c : \code{Char},\ \emptyset}
+
+    \inferrule[W-Empty]%
+      {\fresh(\alpha)}
+      {\Gamma \vdash_W \code{[]} : \code{[$\alpha$]},\ \emptyset}
+
+    \inferrule[W-Tuple]%
+      {\Gamma \vdash_W e_1 : \tau_1,\ S_1 \\
+      \Gamma \vdash_W e_2 : \tau_2,\ S_2}
+      {\Gamma \vdash_W \code{($e_1$,$e_2$)} : \code{($\tau_1$,$\tau_2$)},\ S_2 \circ S_1}
+
+    \inferH{W-FunCall}%
+      {\set{\sigma_i} \to \sigma = \mathit{inst}(\Gamma(f)) \\
+        \set{ \Gamma \vdash_W e_i : \tau_i,\ S_i} \\
+        S = \mathit{unify}(\set{\sigma_i}, \set{\tau_i})}
+      {\Gamma \vdash_W \code{$f$($\set{e_i}$)} : \tau.S,\ S \circ \set{S_i}}
+  \end{mathpar}
+
+  \caption{Rules for type inference algorithm on expressions}
+  \label{fig:typing-rules-expr}
+\end{figure}
+
+
+\begin{todoenv}
+  \begin{itemize}
+    \item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
+    \item Error messages?
+    \item Polymorphism? Inference? Overloading?
+    \item Problems?
+    \item\ldots
+  \end{itemize}
+\end{todoenv}

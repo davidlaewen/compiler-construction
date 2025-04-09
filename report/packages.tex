@@ -3,15 +3,16 @@
 % Use nicer fonts
 \usepackage[mono=false]{libertine}
 \usepackage[libertine]{newtxmath}
-\usepackage[varqu]{zi4}
+\usepackage[varqu,scale=0.9]{zi4}
 
 \usepackage{hyperref}
-\usepackage{xcolor}
 
 % Math stuff
 \usepackage{amsmath}
 \usepackage{stmaryrd}
 \usepackage{mathtools}
+\usepackage{mathpartir}
+\usepackage{pftools} % Rule referencing
 \usepackage{listings}
 
 \usepackage[nameinlink,noabbrev,capitalise]{cleveref}
@@ -23,6 +24,7 @@
 % Syntax highlighting (for Haskell)
 \usepackage[outputdir=build]{minted}
 \usemintedstyle{tango}
+% \setminted{fontsize=\small}
 
 \usepackage[most]{tcolorbox} % Colour boxes
 \usepackage[color=orange!40]{todonotes} % To-do notes
@@ -36,6 +38,17 @@
 \definecolor[named]{ACMGreen}{cmyk}{0.20,0,1,0.19}
 \definecolor[named]{ACMPurple}{cmyk}{0.55,1,0,0.15}
 \definecolor[named]{ACMDarkBlue}{cmyk}{1,0.58,0,0.21}
+
+% Other colour definitions
+\usepackage{xcolor}
+
+\definecolor{darkblue}{rgb}{0.2, 0.2, 0.6}
+\definecolor{lightblue}{rgb}{0.3, 0.6, 0.7}
+\definecolor{otherblue}{rgb}{0.0, 0.3, 0.4}
+\definecolor{darkorange}{rgb}{0.5, 0.2, 0.0}
+\definecolor{purple}{rgb}{0.5, 0.0, 0.5}
+\definecolor{codeBlue}{rgb}{0.2,0.2,0.7}
+\definecolor{codebg}{rgb}{0.9,0.9,0.9}
 
 % Set up the hyperref package
 \hypersetup{
@@ -72,12 +85,13 @@
 		{==}{{$\equiv$}}1
 }
 \lstset{%
+  mathescape,
 	upquote=true,
 	breakatwhitespace=false,
 	breaklines=true,
 	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
 	keepspaces=true,
-	basicstyle=\tt\footnotesize,
+	basicstyle=\tt,
 	commentstyle=\sl,
 	keywordstyle=\bf,
 	stringstyle=\tt,

@@ -1,7 +1,7 @@
 \chapter{Lexing \& Parsing}
 
 In this chapter we discuss the lexing and parsing phases of our compiler.
-For both these phases we make use of Haskell's \texttt{megaparsec}
+For both these phases we make use of Haskell's Megaparsec
 library~\footnote{\url{https://hackage.haskell.org/package/megaparsec}}.
 
 \section{Lexing}
@@ -38,20 +38,20 @@ can consume spaces, tabs, line breaks as well as line and block comments,
 according to delimiters specified by the client.
 By defining the delimiters \code{//} as well as \code{/*} and \code{*/}, we can
 instruct Megaparsec to strip all line and block comments from the input.
-For block comments, Megaparsec even offers an option for handling nested block
-comments.
+For block comments, Megaparsec even provides an option for correctly handling
+nested block comments.
 
 The lexer has error recovery, which is quite easy to implement.
 There are basically two types of errors in our lexer.
 Either the lexer encounters an invalid integer (e.g. \verb|123ab|),
-or it encounters an unknown symbol.
+or it encounters an unknown symbol not featured in the symbol table.
 In both cases we recover from the error by repeatedly discarding characters from
 the input until we can successfully lex a token again.
 
 
 \section{Parsing}
 In order to write parser functions corresponding to the provided grammar of SPL,
-we needed to transform the grammar in order to eliminate occurrences of left
+we needed to transform the grammar such that we eliminate occurrences of left
 recursion and to obtain the desired structure of the AST.
 The main challenge when implementing the parser was the parsing of expressions.
 In particular, the rule
@@ -61,32 +61,24 @@ Additionally, when parsing expressions of this form, we must consider the
 associativity and precedence of the operators when designing the rules of our
 parser grammar in order to obtain the desired AST.
 
-We achieved this by creating a recursive descent parser with multiple levels,
-corresponding to the precedence levels of the operators.
-The parser thus begins at the lowest precedence level, featuring the Boolean
-operators \code{\&\&} and \code{||}.
-The leftmost non-terminal in the first rule is $\NT{Prop}$ and not $\NT{Expr}$
-itself, allowing us to avoid infinite parsing loops caused by left recursion.
+To illustrate, let us think about the desired AST for the expression
+\[ \code{2 == 1+1 \&\& 2 != 3-2} .\]
+One would expect this to denote a conjunction of two (in)equalities, rather than
+(for instance) an equality between \code{2} and everything right of the
+\code{==}, or an inequality between \code{2 == 1+1 \&\& 2} and \code{3-2}.
+The latter two options of course make no sense, and the programmer would not
+expect the expression to be parsed as such.
+Ideally, our parser should yield the desired AST without requiring the
+programmer to add parentheses, hence the precedence of \code{\&\&} must be lower
+than that of \code{==} and \code{!=}.
+Similarly, all comparison operators should have a lower precedence than the
+\emph{cons} operator ``\code{:}'', which in turn should be followed by addition
+and subtraction, then by multiplication, division and modulo and finally by
+Boolean negation and unary minus.
 
-In order to still parse arbitrarily many applications of \code{\&\&} or
-\code{||}, we use the pattern $((\code{\&\&} \mid \code{||})\ \NT{Prop})^*$,
-hence we can parse any expression of the form $\dots \code{\&\&} \dots \code{||} \dots$,
-and also simply a $\NT{Prop}$, since $*$ denotes zero or more occurrences of
-a pattern.
-
-For the following rules of the expression grammar, we proceed in much the same
-manner: They consist of an expression matching the following rule, followed
-by zero or more occurrences of a binary operator and another expression matching
-the following rule. The resulting expression grammar after applying the
-transformations outlined above is shown in \cref{fig:new-expr-grammar}.
-
-The desired AST for the expression
-\[ \code{2 == 1+1 \&\& 2 != 3-2} \]
-is a conjunction of two (in)equalities, rather than (for instance) an equality
-between \code{2} and the remaining conjunction.
-Our parser should yield the desired AST without requiring the programmer to add
-parentheses, hence the precedence of \code{\&\&} must be lower than that of
-\code{==} and \code{!=}.
+We achieve this behaviour using a recursive descent parser with multiple levels,
+shown in \cref{fig:new-expr-grammar}, where each non-terminal corresponds to a
+level in the precedence hierarchy of operators.
 
 \begin{figure}[h]
   \[
@@ -115,34 +107,64 @@ parentheses, hence the precedence of \code{\&\&} must be lower than that of
   \label{fig:new-expr-grammar}
 \end{figure}
 
-Similarly, all comparison operators should have a lower precedence than the
-\emph{cons} operator ``\code{:}'', which in turn should be followed by addition
-and subtraction, then by multiplication, division and modulo and finally by
-Boolean negation and unary minus.
-Following this precedence hierarchy, we end up with the multiple rules or
-\emph{levels} of the grammar in \cref{fig:new-expr-grammar}.
+
+The parser thus begins at the lowest precedence level, featuring the Boolean
+operators \code{\&\&} and \code{||}.
+In the rule for $\NT{Expr}$, the leftmost non-terminal is $\NT{Prop}$ and not
+$\NT{Expr}$ itself, allowing us to avoid infinite parsing loops caused by left
+recursion. Below the expression level, denoted by $\NT{Expr}$, our grammar
+features the following levels, in increasing precedence level, where a few level
+names are somewhat arbitrary:
+\begin{itemize}
+  \item Propositions $\NT{Prop}$, which include the comparison operators;
+  \item $\NT{List}$, with the \spl{:} (cons) operator on lists;
+  \item formulas $\NT{Form}$, featuring addition and subtraction;
+  \item terms $\NT{Term}$, featuring multiplication, division, and the modulo
+        operator;
+  \item and finally values $\NT{Val}$, which include integer, Boolean and
+        character literals, the empty list \spl{[]} the unary operators \spl{!}
+        and \spl{-}, function calls, identifiers, tuples, or just a pair of
+        parentheses, which modifies the precedence.
+\end{itemize}
+
+The rule for $\NT{Val}$ allows us to jump back to $\NT{Expr}$ at the topmost
+level of the grammar, either via an opening parenthesis \spl{(}, or the
+arguments of a function call \code{$f$($e_1$,$\dots$,$e_n$)}.
+
+In order to still parse arbitrarily many applications of \code{\&\&} or
+\code{||}, we use the pattern $((\code{\&\&} \mid \code{||})\ \NT{Prop})^*$,
+hence we can parse any expression of the form $\dots \code{\&\&} \dots \code{||} \dots$,
+and also simply a $\NT{Prop}$, since $*$ denotes zero or more occurrences of
+a pattern.
+
+For the following rules of the expression grammar, we proceed in much the same
+manner: They consist of an expression matching the following rule, followed
+by zero or more occurrences of a binary operator and another expression matching
+the following rule. The resulting expression grammar after applying the
+transformations outlined above is shown in \cref{fig:new-expr-grammar}.
+
 
 Another important consideration for the expression grammar is the
 \emph{associativity} of the various operators. For instance, since addition
 associates to the left, we want the expression \code{1+2+3} to result in an AST
 of the form \code{Add (Add 1 2) 3} rather than \code{Add 1 (Add 2 3)} (see
-\cref{fig:ast} for the actual AST data type of our implementation).
+\cref{fig:parse-ast} for the actual AST data type of our implementation).
 In fact, all binary operators included in SPL are typically left-associative, in
 contrast to e.g. exponentiation, which is usually taken to be right-associative.
 
 We obtain the correct AST through the grammar rule pattern
 $\NT{e}\ (\NT{op}\ \NT{e})^*$ discussed previously.
 Here, we first parse an instance of $\NT{e}$, which we then (possibly) combine
-repeatedly with another instance of $\NT{e}$. This way, we can use an
+repeatedly with another instance of $\NT{e}$. We can do so using an
 accumulator $a$, which we initialise with the leftmost subexpression
-$e_1$, then replace by $a = op\ e_1\ e_2$, then to $a = op\ a\ e_3$, and so
-forth. By successively combining the (nested) expression parsed thus far with
-the following subexpression, we achieve the desired left-deep nesting of the
-AST.
+$e_1$, then update by $a \leftarrow op\ e_1\ e_2$, then by
+$a \leftarrow op\ a\ e_3$, and so forth. By successively combining the (nested)
+expression parsed thus far with the following subexpression, we achieve the
+desired left-deep nesting of the AST.
 
 Certain terminals and non-terminals, such as $\NT{Char}$ or \code{[]}, could be
-placed higher up in the grammar, since characters and the empty list cannot be
-used in arithmetic operations. Despite this, we chose to place these in the
+placed higher up in the grammar, since e.g. characters and the empty list cannot
+be used in arithmetic operations. Despite this, we chose to place these in the
 $\NT{Val}$ rule, since it is more intuitive to provide a type error rather than
 a parse error for non-numbers occuring in an arithmetic expression.
 
@@ -241,12 +263,14 @@ compiler.
 We also did not add source position information to the AST yet.
 We will do this whenever we find we need this information in the AST.
 
-\begin{itemize}
-	\item How did you design the Abstract Syntax Tree
-	\item How does the parser work?
-	\item How did you handle difficult things like fixity, associativity etc.
-	\item Is there error handling? Recovery?
-	\item Do you have a lexer and parser?
-	\item How do they communicate?
-	\item Problems?
-\end{itemize}
+\begin{todoenv}
+  \begin{itemize}
+    \item How did you design the Abstract Syntax Tree
+    \item How does the parser work?
+    \item How did you handle difficult things like fixity, associativity etc.
+    \item Is there error handling? Recovery?
+    \item Do you have a lexer and parser?
+    \item How do they communicate?
+    \item Problems?
+  \end{itemize}
+\end{todoenv}
