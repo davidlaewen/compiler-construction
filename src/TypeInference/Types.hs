@@ -5,7 +5,6 @@ module TypeInference.Types (
 import qualified Data.Text as T
 import qualified Data.Set as S
 import Parser.Tokens (Keyword(..))
-import Control.Applicative.Combinators (sepBy)
 
 type UVar = Int
 type TVar = T.Text

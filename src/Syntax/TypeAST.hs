@@ -14,7 +14,6 @@ module Syntax.TypeAST (
 import qualified Data.Text as T
 import TypeInference.Types ( UType )
 import Utils.Loc (Loc, HasLoc(..))
-import Parser.Tokens (Symbol(SymBang))
 
 data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show
