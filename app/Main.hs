@@ -9,7 +9,7 @@ import Parser.Parser (parser)
 import qualified Syntax.ParseAST as ParseAST (Program)
 import qualified Syntax.TypeAST as TypeAST (Program)
 
-import PrettyPrinter (prettyPrinter)
+import Pretty.Parsing (prettyPrinter)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty)

@@ -1,4 +1,4 @@
-module PrettyPrinter (prettyPrinter) where
+module Pretty.Parsing (prettyPrinter) where
 
 import Data.List (intersperse)
 import qualified Data.Text.IO as T
@@ -66,7 +66,7 @@ prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   spaces (putShow SymRightArrow)
   prettyPrintType retType
-prettyPrintType GarbageType = putStr "GarbageType"
+prettyPrintType GarbageType = putShow GarbageType
 
 prettyPrintExpr :: Expr -> IO ()
 prettyPrintExpr = go 0

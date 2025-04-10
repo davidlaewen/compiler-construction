@@ -24,7 +24,7 @@ library
       Parser.Lexer
       Parser.Parser
       Parser.Tokens
-      PrettyPrinter
+      Pretty.Parsing
       Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST
