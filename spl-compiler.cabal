@@ -1,27 +1,19 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
 name:           spl-compiler
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/spl-compiler#readme>
-homepage:       https://github.com/githubuser/spl-compiler#readme
-bug-reports:    https://github.com/githubuser/spl-compiler/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2023 Author name here
+author:         David Läwen
+maintainer:     david.laewen@ru.nl
+copyright:      2025 David Läwen
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
-    CHANGELOG.md
-
-source-repository head
-  type: git
-  location: https://github.com/githubuser/spl-compiler
 
 library
   exposed-modules:
