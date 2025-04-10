@@ -24,7 +24,9 @@ library
       Parser.Lexer
       Parser.Parser
       Parser.Tokens
+      Pretty.Common
       Pretty.Parsing
+      Pretty.Typing
       Syntax.Desugar
       Syntax.ParseAST
       Syntax.TypeAST

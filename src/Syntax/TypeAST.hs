@@ -14,6 +14,7 @@ module Syntax.TypeAST (
 import qualified Data.Text as T
 import TypeInference.Types ( UType )
 import Utils.Loc (Loc, HasLoc(..))
+import Parser.Tokens (Symbol(SymBang))
 
 data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show
@@ -29,6 +30,7 @@ data FunMutDecl a b = MutualDecls Loc [FunDecl a b] | SingleDecl (FunDecl a b)
 
 data Stmt a = If Loc (Expr a) [Stmt a] [Stmt a]
             | While Loc (Expr a) [Stmt a]
+            -- | We need type info in assignments during code gen
             | Assign Loc VarLookup a (Expr a)
             | FunCall Loc FunName [Expr a]
             | Return Loc (Maybe (Expr a))
@@ -48,7 +50,6 @@ data FunName = Name T.Text
              | Cons | IsEmpty
              | HeadFun | TailFun | FstFun | SndFun
              | Print
-  deriving Show
 
 data Expr a = Ident Loc T.Text a
             | Int Loc Int a
@@ -67,6 +68,34 @@ getTypeExpr (Bool _ _ ty) = ty
 getTypeExpr (FunCallE _ _ _ ty) = ty
 getTypeExpr (EmptyList _ ty) = ty
 getTypeExpr (Tuple _ _ _ ty) = ty
+
+------------------------------------
+
+instance Show FunName where
+    show (Name t) = T.unpack t
+    show Not = "_not"
+    show Neg = "_neg"
+    show Add = "_add"
+    show Sub = "_sub"
+    show Mul = "_mul"
+    show Div = "_div"
+    show Mod = "_mod"
+    show Eq = "_eq"
+    show Neq = "_neq"
+    show Lt = "_lt"
+    show Gt = "_gt"
+    show Lte = "_lte"
+    show Gte = "_gte"
+    show And = "_and"
+    show Or = "_or"
+    show Cons = "_cons"
+    show IsEmpty = "_isEmpty"
+    show HeadFun = "_head"
+    show TailFun = "_tail"
+    show FstFun = "_fst"
+    show SndFun = "_snd"
+    show Print = "_print"
+
 
 -------------------------------------
 -- HasLoc instance declarations

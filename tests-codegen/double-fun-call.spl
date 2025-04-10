@@ -1,4 +1,4 @@
-foo(x) {
+foo(x) :: Int -> Int {
   return x + 1;
 }
 

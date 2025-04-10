@@ -1,6 +1,5 @@
 name:                spl-compiler
 version:             0.1.0.0
-gitlab:              "https://gitlab.science.ru.nl/compilerconstruction/2425/group-23"
 license:             BSD3
 author:              "David Läwen"
 maintainer:          "david.laewen@ru.nl"

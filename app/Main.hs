@@ -20,6 +20,7 @@ import TypeInference.Definition (UType, UScheme, runCgen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
 import CodeGen.CodeGen (codegen, runCodegen)
+import Pretty.Typing (printProgram)
 
 newtype Stage i o = Stage {runStage :: FilePath -> i -> Either (IO ()) o}
 
@@ -40,11 +41,11 @@ parseStage = Stage $ \filePath tokens ->
     Left errors -> Left $ hPutStrLn stderr $ errorBundlePretty errors
     Right program -> Right program
 
-prettyPrintStage :: Stage ParseAST.Program (IO ())
-prettyPrintStage = Stage $ const $ \program -> Right $ prettyPrinter program
-
 printStage :: Show a => Stage a (IO ())
 printStage = Stage $ \_ input -> Right $ print input
+
+parsePrintStage :: Stage ParseAST.Program (IO ())
+parsePrintStage = Stage $ const $ \program -> Right $ prettyPrinter program
 
 desugarStage :: Stage ParseAST.Program (TypeAST.Program () ())
 desugarStage = Stage $ \_ p -> Right $ desugar p
@@ -54,6 +55,9 @@ typecheckStage = Stage $ \_ p ->
   case runCgen (checkProgram p) of
     Left err -> Left $ hPutStrLn stderr $ T.unpack err
     Right (p', s) -> Right $ annotateProgram s p'
+
+typePrintStage :: Stage (TypeAST.Program UType UScheme) (IO ())
+typePrintStage = Stage $ const $ \program -> Right $ printProgram program
 
 codeGenStage :: Stage (TypeAST.Program UType UScheme) String
 codeGenStage = Stage $ \_ p -> Right $ unlines $ show <$> runCodegen (codegen p)
@@ -69,11 +73,13 @@ parseArgs ("lex" : filePath : _) =
 parseArgs ("parse" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> printStage))
 parseArgs ("prettyprint" : filePath : _) =
-  Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
+  Just (Args filePath (lexStage >-> parseStage >-> parsePrintStage))
 parseArgs ("desugar" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
 parseArgs ("typecheck" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
+parseArgs ("typeprint" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> typePrintStage))
 parseArgs ("codegen" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> putStrStage))
 parseArgs _ = Nothing
@@ -89,6 +95,7 @@ main = do
       \spl-compiler prettyprint <filename>\n\t\
       \spl-compiler desugar <filename>\n\t\
       \spl-compiler typecheck <filename>\n\t\
+      \spl-compiler typeprint <filename>\n\t\
       \spl-compiler codegen <filename>"
     Just (Args filePath stage) -> do
       try (T.readFile filePath) >>= loadFile filePath stage

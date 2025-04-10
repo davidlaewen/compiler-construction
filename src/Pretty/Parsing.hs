@@ -1,38 +1,11 @@
 module Pretty.Parsing (prettyPrinter) where
 
-import Data.List (intersperse)
 import qualified Data.Text.IO as T
 import Syntax.ParseAST
 import Control.Monad (unless)
 import Parser.Tokens (Keyword(..), Token(..), Symbol (..))
+import Pretty.Common
 
--- Represents the amount of spaces to indent after a newline
-type Indentation = Int
-
-tabWidth :: Indentation
-tabWidth = 2
-
-printIndentation :: Indentation -> IO ()
-printIndentation i = putStr (replicate i ' ')
-
-putShow :: Show a => a -> IO ()
-putShow x = putStr $ show x
-
-sepBy :: String -> (a -> IO ()) -> [a] -> IO ()
-sepBy sep f xs =
-  sequence_ $ intersperse (putStr sep) $ f <$> xs
-
-between :: String -> String -> IO () -> IO ()
-between l r x = putStr l >> (x >> putStr r)
-
-parens :: IO () -> IO ()
-parens = between (show SymParenLeft) (show SymParenRight)
-braces :: IO () -> IO ()
-braces = between (show SymBraceLeft) (show SymBraceRight)
-brackets :: IO () -> IO ()
-brackets = between (show SymBracketLeft) (show SymBracketRight)
-spaces :: IO () -> IO ()
-spaces = between " " " "
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
@@ -75,7 +48,7 @@ prettyPrintExpr = go 0
     go _ (Ident _ t) = T.putStr t
     go _ (ExprLookup _ exprLookup) = prettyPrintExprLookup exprLookup
     go _ (Int _ n) = putShow n
-    go _ (Char _ c) = putChar '\'' >> putChar c >> putChar '\''
+    go _ (Char _ c) = putShow (CharLit c)
     go _ (Bool _ b) = putShow (BoolLit b)
     go _ (EmptyList _) = putShow SymBracketLeft >> putShow SymBracketRight
     go _ (FunCallE _ name args) = do
@@ -124,12 +97,6 @@ prettyPrintFunMutDecl i (MutualDecls _ funDecls) = do
   putShow KwMutual
   printBlock i $
     sepBy "\n" (prettyPrintFunDecl $ i + tabWidth) funDecls
-
--- Adds a block with braces around printer `p`
-printBlock :: Indentation -> IO () -> IO ()
-printBlock i p = braces (do
-  putChar '\n' >> p >> putChar '\n'
-  printIndentation i)
 
 prettyPrintFunDecl :: Indentation -> FunDecl -> IO ()
 prettyPrintFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts) = do
@@ -196,13 +163,13 @@ prettyPrintExprLookup (ExprField expr field) =
   prettyPrintExpr expr >> prettyPrintField field
 
 prettyPrintField :: Field -> IO ()
-prettyPrintField f = putStr $ show SymDot ++ field2Kw f
+prettyPrintField f = putShow SymDot >> putStr (field2Kw f)
   where
     field2Kw Head = show KwHead
     field2Kw Tail = show KwTail
     field2Kw Fst = show KwFst
     field2Kw Snd = show KwSnd
-    field2Kw GarbageField = "GarbageField"
+    field2Kw GarbageField = show GarbageField
 
 
 prettyPrinter :: Program -> IO ()
