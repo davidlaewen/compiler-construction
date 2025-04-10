@@ -219,6 +219,23 @@ $\FV$ is defined by:
 \end{array}
 \]
 
+The operation $\unify$ takes two types and attempts to unify them, resulting in
+a substitution $S$.
+
+\[
+\begin{array}{rcl}
+  \unify(\Int,\Int) & \eqdef & \emptyset \\
+  \unify(\Bool,\Bool) & \eqdef & \emptyset \\
+  \unify(\Char,\Char) & \eqdef & \emptyset \\
+  \unify(\Void,\Void) & \eqdef & \emptyset \\
+  \unify(\alpha,\alpha) & \eqdef & \emptyset \\
+  \unify(\alpha,\tau) & \eqdef &
+    \{ \alpha \mapsto \tau \},\ \text{if}\ \alpha \notin \FV(\tau) \\
+  \unify(\tau,\alpha) & \eqdef & \unify(\alpha,\tau) \\
+  \unify(\TList{\tau},\TList{\sigma}) & \eqdef & \unify(\tau,\sigma)
+  % \unify(\TProd{\tau_1}{\tau_2}, \TProd{\sigma_1}{\sigma_2}) & \eqdef &
+\end{array}
+\]
 
 
 \section{Type Inference}
