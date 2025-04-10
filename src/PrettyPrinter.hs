@@ -15,34 +15,43 @@ tabWidth = 2
 printIndentation :: Indentation -> IO ()
 printIndentation i = putStr (replicate i ' ')
 
+putShow :: Show a => a -> IO ()
+putShow x = putStr $ show x
+
 sepBy :: String -> (a -> IO ()) -> [a] -> IO ()
 sepBy sep f xs =
   sequence_ $ intersperse (putStr sep) $ f <$> xs
 
+between :: String -> String -> IO () -> IO ()
+between l r x = putStr l >> (x >> putStr r)
+
 parens :: IO () -> IO ()
-parens f = do
-  putStr $ show SymParenLeft
-  f
-  putStr $ show SymParenRight
+parens = between (show SymParenLeft) (show SymParenRight)
+braces :: IO () -> IO ()
+braces = between (show SymBraceLeft) (show SymBraceRight)
+brackets :: IO () -> IO ()
+brackets = between (show SymBracketLeft) (show SymBracketRight)
+spaces :: IO () -> IO ()
+spaces = between " " " "
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
-  sepBy "\n\n" prettyPrintFunMutDecl funDecls
+  sepBy "\n\n" (prettyPrintFunMutDecl 0) funDecls
   putStrLn ""
 
 prettyPrintVarDecl :: Indentation -> VarDecl -> IO ()
 prettyPrintVarDecl i (VarDecl _ typeM ident e) = do
   printIndentation i
   case typeM of
-    Nothing -> putStr $ show KwVar
+    Nothing -> putShow KwVar
     Just typ -> prettyPrintType typ
   putChar ' '
   T.putStr ident
-  putStr " = "
+  spaces (putShow SymEq)
   prettyPrintExpr e
-  putStr $ show SymSemicolon
+  putShow SymSemicolon
 
 prettyPrintType :: Type -> IO ()
 prettyPrintType (IntT  _) = putStr $ show KwInt
@@ -50,21 +59,14 @@ prettyPrintType (BoolT _) = putStr $ show KwBool
 prettyPrintType (CharT _) = putStr $ show KwChar
 prettyPrintType (Void  _) = putStr $ show KwVoid
 prettyPrintType (TyVar _ ident) = T.putStr ident
-prettyPrintType (Prod _ t1 t2) = do
-  putStr $ show SymParenLeft
-  prettyPrintType t1
-  putStr ", "
-  prettyPrintType t2
-  putStr $ show SymParenRight
-prettyPrintType (List _ t) = do
-  putStr $ show SymBracketLeft
-  prettyPrintType t
-  putStr $ show SymBracketRight
+prettyPrintType (Prod _ t1 t2) =
+  parens $ prettyPrintType t1 >> putStr ", " >> prettyPrintType t2
+prettyPrintType (List _ t) = brackets $ prettyPrintType t
 prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
-  putStr " -> "
+  spaces (putStr $ show SymRightArrow)
   prettyPrintType retType
-prettyPrintType GarbageType = putStr "Garbage"
+prettyPrintType GarbageType = putStr "GarbageType"
 
 prettyPrintExpr :: Expr -> IO ()
 prettyPrintExpr = go 0
@@ -75,29 +77,23 @@ prettyPrintExpr = go 0
     go _ (Int _ n) = putStr $ show n
     go _ (Char _ c) = putChar '\'' >> putChar c >> putChar '\''
     go _ (Bool _ b) = putStr $ show (BoolLit b)
-    go _ (EmptyList _) = putStr "[]"
+    go _ (EmptyList _) = putStr $ show SymBracketLeft <> show SymBracketRight
     go _ (FunCallE _ name args) = do
       T.putStr name
-      putChar '('
-      sepBy ", " (go 0) args
-      putChar ')'
+      parens $ sepBy ", " (go 0) args
     go _ (Tuple _ e1 e2) = do
-      putChar '('
-      go 0 e1
-      putStr ", "
-      go 0 e2
-      putChar ')'
+      parens $ go 0 e1 >> putStr ", " >> go 0 e2
     go _ (UnOp _ op e) = do
       putStr $ show op
       go unOpPrecedence e
     go currentPrecedence (BinOp _ op e1 e2) =
       if currentPrecedence > precedence op
-        then putChar '(' >> go (precedence op) e1 >> prettyPrintBinOp op >> go (precedence op) e2 >> putChar ')'
+        then parens $ go (precedence op) e1 >> prettyPrintBinOp op >> go (precedence op) e2
         else go currentPrecedence e1 >> prettyPrintBinOp op >> go currentPrecedence e2
     go _ GarbageExpr = putStr "GarbageExpr"
 
     prettyPrintBinOp :: BinaryOp -> IO ()
-    prettyPrintBinOp binop = putStr $ " " <> show binop <> " "
+    prettyPrintBinOp binop = spaces (putStr $ show binop)
 
     precedence :: BinaryOp -> Int
     precedence Or   = 0
@@ -122,81 +118,70 @@ prettyPrintExpr = go 0
     unOpPrecedence :: Int
     unOpPrecedence = 6
 
-prettyPrintFunMutDecl :: FunMutDecl -> IO ()
-prettyPrintFunMutDecl (SingleDecl funDecl) = prettyPrintFunDecl 0 funDecl
-prettyPrintFunMutDecl (MutualDecls _ funDecls) = do
-  putStrLn "mutual {"
-  sepBy "\n" (prettyPrintFunDecl 4) funDecls
-  putChar '\n'
-  putChar '}'
+prettyPrintFunMutDecl :: Indentation -> FunMutDecl -> IO ()
+prettyPrintFunMutDecl i (SingleDecl funDecl) = prettyPrintFunDecl i funDecl
+prettyPrintFunMutDecl i (MutualDecls _ funDecls) = do
+  putStr $ show KwMutual
+  printBlock i $
+    sepBy "\n" (prettyPrintFunDecl $ i + tabWidth) funDecls
+
+printBlock :: Indentation -> IO () -> IO ()
+printBlock i p = braces (do
+  putChar '\n' >> p >> putChar '\n'
+  printIndentation i)
 
 prettyPrintFunDecl :: Indentation -> FunDecl -> IO ()
 prettyPrintFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts) = do
   printIndentation i
   T.putStr funName
-  putChar '('
-  sepBy ", " T.putStr argNames
-  putChar ')'
+  parens $ sepBy ", " T.putStr argNames
   case retTypeM of
     Nothing -> pure ()
     Just retType -> do
-      putStr " :: "
+      spaces (putStr $ show SymColonColon)
       prettyPrintType retType
-  putStrLn " {"
-  sepBy "\n" (prettyPrintVarDecl $ i + tabWidth) varDecls
-  unless (null varDecls || null stmts) $ putStrLn ""
-  sepBy "\n" (prettyPrintStmt $ i + tabWidth) stmts
-  putStrLn ""
-  printIndentation i
-  putChar '}'
+  putChar ' '
+  printBlock i (do
+    sepBy "\n" (prettyPrintVarDecl $ i + tabWidth) varDecls
+    unless (null varDecls || null stmts) $ putStrLn ""
+    sepBy "\n" (prettyPrintStmt $ i + tabWidth) stmts)
 
 prettyPrintStmt :: Indentation -> Stmt -> IO ()
 prettyPrintStmt i (If _ e stmts1 stmts2) = do
   printIndentation i
-  putStr $ show KwIf <> " "
-  parens $ prettyPrintExpr e
-  putStrLn " {"
-  sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts1
-  putStrLn ""
-  printIndentation i
-  putStr "}"
+  putStr $ show KwIf
+  spaces $ parens $ prettyPrintExpr e
+  printBlock i $ sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts1
   unless (null stmts2) $ do
-    putStrLn " else {"
-    sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts2
-    putStrLn ""
-    printIndentation i
-    putStr "}"
+    spaces $ putStr $ show KwElse
+    printBlock i $ sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts2
 prettyPrintStmt i (While _ e stmts) = do
   printIndentation i
-  putStr "while ("
-  prettyPrintExpr e
-  putStrLn ") {"
-  sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts
-  putStrLn ""
-  printIndentation i
-  putStr "}"
+  putStr $ show KwWhile
+  spaces $ parens $ prettyPrintExpr e
+  printBlock i $
+    sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts
 prettyPrintStmt i (Assign _ varLookup e) = do
   printIndentation i
   prettyPrintVarLookup varLookup
-  putStr " = "
+  spaces $ putStr $ show SymEq
   prettyPrintExpr e
-  putStr ";"
+  putChar ';'
 prettyPrintStmt i (FunCall _ funName args) = do
   printIndentation i
   T.putStr funName
-  putChar '('
-  sepBy ", " prettyPrintExpr args
-  putStr ");"
+  parens $ sepBy ", " prettyPrintExpr args
+  putChar ';'
 prettyPrintStmt i (Return _ eM) = do
   printIndentation i
-  putStr "return"
+  putStr $ show KwReturn
   case eM of
     Nothing -> pure ()
     Just e -> putChar ' ' >> prettyPrintExpr e
   putChar ';'
 prettyPrintStmt i GarbageStmt = do
   printIndentation i
-  putStr "Garbage;"
+  putStr "GarbageStmt;"
 
 prettyPrintVarLookup :: VarLookup -> IO ()
 prettyPrintVarLookup (VarId _ t) = T.putStr t
