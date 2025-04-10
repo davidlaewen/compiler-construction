@@ -64,7 +64,7 @@ prettyPrintType (Prod _ t1 t2) =
 prettyPrintType (List _ t) = brackets $ prettyPrintType t
 prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
-  spaces (putStr $ show SymRightArrow)
+  spaces (putShow SymRightArrow)
   prettyPrintType retType
 prettyPrintType GarbageType = putStr "GarbageType"
 
@@ -74,10 +74,10 @@ prettyPrintExpr = go 0
     go :: Int -> Expr -> IO ()
     go _ (Ident _ t) = T.putStr t
     go _ (ExprLookup _ exprLookup) = prettyPrintExprLookup exprLookup
-    go _ (Int _ n) = putStr $ show n
+    go _ (Int _ n) = putShow n
     go _ (Char _ c) = putChar '\'' >> putChar c >> putChar '\''
-    go _ (Bool _ b) = putStr $ show (BoolLit b)
-    go _ (EmptyList _) = putStr $ show SymBracketLeft <> show SymBracketRight
+    go _ (Bool _ b) = putShow (BoolLit b)
+    go _ (EmptyList _) = putShow SymBracketLeft >> putShow SymBracketRight
     go _ (FunCallE _ name args) = do
       T.putStr name
       parens $ sepBy ", " (go 0) args
@@ -90,7 +90,7 @@ prettyPrintExpr = go 0
       if currentPrecedence > precedence op
         then parens $ go (precedence op) e1 >> prettyPrintBinOp op >> go (precedence op) e2
         else go currentPrecedence e1 >> prettyPrintBinOp op >> go currentPrecedence e2
-    go _ GarbageExpr = putStr "GarbageExpr"
+    go _ GarbageExpr = putShow GarbageExpr
 
     prettyPrintBinOp :: BinaryOp -> IO ()
     prettyPrintBinOp binop = spaces (putStr $ show binop)
@@ -121,10 +121,11 @@ prettyPrintExpr = go 0
 prettyPrintFunMutDecl :: Indentation -> FunMutDecl -> IO ()
 prettyPrintFunMutDecl i (SingleDecl funDecl) = prettyPrintFunDecl i funDecl
 prettyPrintFunMutDecl i (MutualDecls _ funDecls) = do
-  putStr $ show KwMutual
+  putShow KwMutual
   printBlock i $
     sepBy "\n" (prettyPrintFunDecl $ i + tabWidth) funDecls
 
+-- Adds a block with braces around printer `p`
 printBlock :: Indentation -> IO () -> IO ()
 printBlock i p = braces (do
   putChar '\n' >> p >> putChar '\n'
@@ -138,50 +139,52 @@ prettyPrintFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts) = do
   case retTypeM of
     Nothing -> pure ()
     Just retType -> do
-      spaces (putStr $ show SymColonColon)
+      spaces $ putShow SymColonColon
       prettyPrintType retType
   putChar ' '
   printBlock i (do
     sepBy "\n" (prettyPrintVarDecl $ i + tabWidth) varDecls
-    unless (null varDecls || null stmts) $ putStrLn ""
+    unless (null varDecls || null stmts) $ putChar '\n'
     sepBy "\n" (prettyPrintStmt $ i + tabWidth) stmts)
 
+-- | Since statements can be indented in code blocks, we always print `i`-many
+-- spaces before the statement,
 prettyPrintStmt :: Indentation -> Stmt -> IO ()
 prettyPrintStmt i (If _ e stmts1 stmts2) = do
   printIndentation i
-  putStr $ show KwIf
+  putShow KwIf
   spaces $ parens $ prettyPrintExpr e
   printBlock i $ sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts1
   unless (null stmts2) $ do
-    spaces $ putStr $ show KwElse
+    spaces $ putShow KwElse
     printBlock i $ sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts2
 prettyPrintStmt i (While _ e stmts) = do
   printIndentation i
-  putStr $ show KwWhile
+  putShow KwWhile
   spaces $ parens $ prettyPrintExpr e
   printBlock i $
     sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts
 prettyPrintStmt i (Assign _ varLookup e) = do
   printIndentation i
   prettyPrintVarLookup varLookup
-  spaces $ putStr $ show SymEq
+  spaces $ putShow SymEq
   prettyPrintExpr e
-  putChar ';'
+  putShow SymSemicolon
 prettyPrintStmt i (FunCall _ funName args) = do
   printIndentation i
   T.putStr funName
   parens $ sepBy ", " prettyPrintExpr args
-  putChar ';'
+  putShow SymSemicolon
 prettyPrintStmt i (Return _ eM) = do
   printIndentation i
   putStr $ show KwReturn
   case eM of
     Nothing -> pure ()
     Just e -> putChar ' ' >> prettyPrintExpr e
-  putChar ';'
+  putShow SymSemicolon
 prettyPrintStmt i GarbageStmt = do
   printIndentation i
-  putStr "GarbageStmt;"
+  putShow GarbageStmt >> putShow SymSemicolon
 
 prettyPrintVarLookup :: VarLookup -> IO ()
 prettyPrintVarLookup (VarId _ t) = T.putStr t
