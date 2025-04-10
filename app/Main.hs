@@ -64,12 +64,18 @@ putStrStage = Stage $ \_ str -> Right $ putStr str
 data Args = Args FilePath (Stage T.Text (IO ()))
 
 parseArgs :: [String] -> Maybe Args
-parseArgs ("lex" : filePath : _) = Just (Args filePath (lexStage >-> printStage))
-parseArgs ("parse" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> printStage))
-parseArgs ("prettyprint" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
-parseArgs ("desugar" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
-parseArgs ("typecheck" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
-parseArgs ("codegen" : filePath : _) = Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> putStrStage))
+parseArgs ("lex" : filePath : _) =
+  Just (Args filePath (lexStage >-> printStage))
+parseArgs ("parse" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> printStage))
+parseArgs ("prettyprint" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> prettyPrintStage))
+parseArgs ("desugar" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> printStage))
+parseArgs ("typecheck" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
+parseArgs ("codegen" : filePath : _) =
+  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> codeGenStage >-> putStrStage))
 parseArgs _ = Nothing
 
 main :: IO ()

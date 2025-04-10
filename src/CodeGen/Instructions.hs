@@ -18,18 +18,18 @@ instance Show Register where
   show Scratch3 = "R7"
 
 data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
-           | LoadReg Register | StoreReg Register
-           | LoadStack Int | StoreStack Int | LoadStackMulti Int Int | StoreStackMulti Int Int
-           | LoadLocal Int | StoreLocal Int | LoadLocalMulti Int Int | StoreLocalMulti Int Int
-           | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
-           | LoadAddress Int | LoadAddressMulti Int Int
-           | StoreAddress Int | StoreAddressMulti Int Int
-           | LoadConst Int | AddOffset Int
-           | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
-           | NotOp | AndOp | OrOp | XorOp
-           | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
-           | NegOp | AddOp | SubOp | MulOp | DivOp | ModOp
-           | TrapInt | TrapChar
+  | LoadReg Register | StoreReg Register
+  | LoadStack Int | StoreStack Int | LoadStackMulti Int Int | StoreStackMulti Int Int
+  | LoadLocal Int | StoreLocal Int | LoadLocalMulti Int Int | StoreLocalMulti Int Int
+  | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
+  | LoadAddress Int | LoadAddressMulti Int Int
+  | StoreAddress Int | StoreAddressMulti Int Int
+  | LoadConst Int | AddOffset Int
+  | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
+  | NotOp | AndOp | OrOp | XorOp
+  | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
+  | NegOp | AddOp | SubOp | MulOp | DivOp | ModOp
+  | TrapInt | TrapChar
 
 tab :: String
 tab = "  "

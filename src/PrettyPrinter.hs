@@ -10,7 +10,7 @@ import Parser.Tokens (Keyword(..), Token(..), Symbol (..))
 type Indentation = Int
 
 tabWidth :: Indentation
-tabWidth = 4
+tabWidth = 2
 
 printIndentation :: Indentation -> IO ()
 printIndentation i = putStr (replicate i ' ')
@@ -18,6 +18,12 @@ printIndentation i = putStr (replicate i ' ')
 sepBy :: String -> (a -> IO ()) -> [a] -> IO ()
 sepBy sep f xs =
   sequence_ $ intersperse (putStr sep) $ f <$> xs
+
+parens :: IO () -> IO ()
+parens f = do
+  putStr $ show SymParenLeft
+  f
+  putStr $ show SymParenRight
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program varDecls funDecls) = do
@@ -82,9 +88,7 @@ prettyPrintExpr = go 0
       go 0 e2
       putChar ')'
     go _ (UnOp _ op e) = do
-      case op of
-        Not -> putChar '!'
-        Neg -> putChar '-'
+      putStr $ show op
       go unOpPrecedence e
     go currentPrecedence (BinOp _ op e1 e2) =
       if currentPrecedence > precedence op
@@ -93,20 +97,7 @@ prettyPrintExpr = go 0
     go _ GarbageExpr = putStr "GarbageExpr"
 
     prettyPrintBinOp :: BinaryOp -> IO ()
-    prettyPrintBinOp And  = putStr " && "
-    prettyPrintBinOp Or   = putStr " || "
-    prettyPrintBinOp Eq   = putStr " == "
-    prettyPrintBinOp Neq  = putStr " != "
-    prettyPrintBinOp Lt   = putStr " < "
-    prettyPrintBinOp Gt   = putStr " > "
-    prettyPrintBinOp Lte  = putStr " <= "
-    prettyPrintBinOp Gte  = putStr " >= "
-    prettyPrintBinOp Cons = putStr " : "
-    prettyPrintBinOp Add  = putStr " + "
-    prettyPrintBinOp Sub  = putStr " - "
-    prettyPrintBinOp Mul  = putStr " * "
-    prettyPrintBinOp Div  = putStr " / "
-    prettyPrintBinOp Mod  = putStr " % "
+    prettyPrintBinOp binop = putStr $ " " <> show binop <> " "
 
     precedence :: BinaryOp -> Int
     precedence Or   = 0
@@ -162,9 +153,9 @@ prettyPrintFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts) = do
 prettyPrintStmt :: Indentation -> Stmt -> IO ()
 prettyPrintStmt i (If _ e stmts1 stmts2) = do
   printIndentation i
-  putStr "if ("
-  prettyPrintExpr e
-  putStrLn ") {"
+  putStr $ show KwIf <> " "
+  parens $ prettyPrintExpr e
+  putStrLn " {"
   sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts1
   putStrLn ""
   printIndentation i
@@ -177,9 +168,9 @@ prettyPrintStmt i (If _ e stmts1 stmts2) = do
     putStr "}"
 prettyPrintStmt i (While _ e stmts) = do
   printIndentation i
-  putStrLn "while ("
+  putStr "while ("
   prettyPrintExpr e
-  putStr ") {"
+  putStrLn ") {"
   sepBy "\n" (prettyPrintStmt (i + tabWidth)) stmts
   putStrLn ""
   printIndentation i
