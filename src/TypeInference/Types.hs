@@ -24,12 +24,13 @@ instance Show UType where
   show Void = show KwVoid
   show (Prod ty1 ty2) = "(" <> show ty1 <> "," <> show ty2 <> ")"
   show (List ty) = "[" <> show ty <> "]"
-  show (Fun argTys retTy) = show argTys <> " -> " <> show retTy
-  -- show (Fun argTys retTy) = concat (sepBy " " (show <$> argTys)) <> " -> " <> show retTy
+  show (Fun argTys retTy) = unwords (show <$> argTys) <> " -> " <> show retTy
   show (UVar i) = "u" <> show i
   show (TVar t) = T.unpack t
 
 data UScheme = UScheme (S.Set UVar) UType
 
 instance Show UScheme where
-  show (UScheme vars ty) = "∀" <> show (S.toList vars) <> ". " <> show ty
+  show (UScheme vars ty) = "∀" <> unwords (showUVar <$> S.toList vars) <> ". " <> show ty
+    where
+      showUVar i = "u" <> show i

@@ -13,6 +13,7 @@ printProgram (Program varDecls funDecls) = do
   sepBy "\n" (printVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" (printFunMutDecl 0) funDecls
+  putChar '\n'
 
 printVarDecl :: Show a => Indentation -> VarDecl a -> IO ()
 printVarDecl i (VarDecl _ typeM ident e ty) = do
