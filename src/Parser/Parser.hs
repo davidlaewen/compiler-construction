@@ -278,9 +278,15 @@ exprP = propP >>= opPropP
 -------------------------
 -- Statements
 
--- | Consumes tokens up until either `;` or `}`, then attempts to parse a
--- statement with recovery by recursing. Recovery should fail if the next token
--- is `}`, that is, when we have reached the end of the current statement block.
+-- | Consumes tokens up until either `;` or `}`, in an attempt to find the start
+-- of the next statement, and parse it (again with recovery, by recursion).
+-- Recovery should fail if the next token is `}`, that is, when we have reached
+-- the end of the current statement block, otherwise the recovery will 'escape'
+-- from the current statement block and begin eating the rest of the program,
+-- leading to other errors that no longer correspond to the source program.
+-- NOTE: In order to recover parsing after an invalid statement, we need to
+-- encounter a valid statement before the end of the current block. If all
+-- remaining statements are invalid, or there are none,
 parseToNextStmt :: ParseError TokenStream ParserError -> TokenParser Stmt
 parseToNextStmt e = (symbolP SymBraceRight >> fail "") <|>
   (skipManyTill (satisfy $ const True)
@@ -371,7 +377,6 @@ nameReserved :: Text -> Lexer ()
 nameReserved s | isKeyword s = fail . T.unpack $ "Keyword " <> s <> " cannot be used as an identifier."
                | otherwise = return ()
 
-
 --------------------------
 -- Expressions
 
@@ -386,8 +391,6 @@ exprP = unOpP <|> parensP (exprP <* sc) <|> emptyList <|>
     emptyList = keywordP KwEmpty >> pure EmptyList
 
 -}
-
-
 
 ----------------------------
 -- Parser helpers

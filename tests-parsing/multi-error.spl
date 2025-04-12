@@ -8,7 +8,7 @@ main() {
   a = ];
   if (True) { x = 1; return; }
   while (True) {
-    b =  + 1;
+    b = 1 + ;
     t = t + 1;
     return ];
   }
@@ -25,6 +25,6 @@ main() {
 } // main
 
 bar(t) :: Int -> Void {
-  x = 1;
+  x = 1 + ;
   return;
 } // bar
