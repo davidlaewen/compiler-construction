@@ -1,0 +1,92 @@
+\chapter{Code Generation}
+
+In the code generation stage, we use the type-annotated syntax tree from our
+typing stage to generate code for the \emph{Simple Stack Machine}
+(\emph{SSM})\footnote{\url{https://gitlab.science.ru.nl/compilerconstruction/ssm}}.
+The typing information we inferred and checked during the previous stage is
+vital to the code generation, as we need it to determine which data to store on
+the heap and the stack, and how much space we need to allocate.
+Of course, the semantic analyses also preclude many possible errors that might
+arise during code generation, or at runtime, due to e.g. mismatched types,
+missing return statements, or functions being called prior to their definition
+in the source file.
+
+
+\section{Evaluation Order}
+
+We take the evaluation strategy of SPL to be \emph{eager}, or call-by-value,
+meaning that function arguments are evaluated prior to performing function
+application. For instance, in the function call \spl{f(1+1)}, we first evaluate
+the expression \spl{1+1} to \spl{2} before performing any computation in the
+\emph{body} (that is, the definition) of the function \spl{f}.
+In more practical terms, this means that the generated SSM instructions will
+first reduce all argument expressions, such that these are in value form on the
+stack before we jump to the respective function.
+
+As a consequence, we may perform unnecessary evaluation of arguments if they are
+never used in the function body, though the upside is that values only require
+a fixed amount of space (for the base types \spl{Int}, \spl{Bool}, and
+\spl{Char} at least---we will talk about tuples and lists in detail later),
+while a \emph{lazy} evaluation strategy would require us to store unevaluated
+expressions, which may be arbitrarily large.
+The memory usage under call-by-value is thus significantly smaller, and we avoid
+complicated memory management involving the storing and loading of arbitrary
+expressions.
+
+
+\section{General Setup}
+
+Our code generation stage makes use of the state monad, where the state consists
+of a label counter which is simply a `fresh' integer we append to our labels to
+ensure their uniqueness, along with two maps from \haskell{Text} to
+\haskell{Int} for storing offsets on the stack for local variables, and heap
+locations for global variables and boxed data.
+
+
+\section{Instructions}
+
+We defined algebraic data types \haskell{Register} and \haskell{Instr} for the
+register names and instructions available in SSM. An SSM program is simply a
+list of instructions: \haskell{type Program = [Instr]}.
+By defining \haskell{Show} instances for the registers and instructions, we can
+easily print/output a \verb|.ssm| file from an SSM program \haskell{p} of type
+\haskell{[Instr]} with \haskell{unlines $ show <$> p}.
+
+An excerpt of the data type for instructions and the corresponding \haskell{Show}
+instance is given below.
+
+\begin{minted}{haskell}
+  data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int | ...
+
+  instance Show Instr where
+    show (Label t) = T.unpack t <> ":"
+    show Ret = tab <> "ret"
+    show Halt = tab <> "halt"
+    show (Link i) = tab <> "link" <+> show i
+    show Unlink = tab <> "unlink"
+    show (Adjust i) = tab <> "ajs" <+> show i
+    ...
+\end{minted}
+
+All instructions are indented by two spaces except for labels, which helps with
+navigating the resulting SSM code.
+
+
+
+\section{Polymorphism and Boxing}
+
+
+
+
+
+
+\begin{itemize}
+	\item Compilation scheme?
+	\item How is data represented? Lists, tuples
+	\item Semantics style, call-by-reference, call-by-value?
+	\item How did you solve overloaded functions?
+	\item Polymorphism?
+	\item Printing?
+	\item Problems?
+	\item\ldots
+\end{itemize}
