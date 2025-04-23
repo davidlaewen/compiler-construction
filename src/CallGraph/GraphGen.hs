@@ -61,6 +61,7 @@ funDeclToGraph funDecl@(FunDecl _ funName argNames mty varDecls stmts ty) = do
 
 funMutDeclToGraph :: FunMutDecl () () -> GraphGen ()
 funMutDeclToGraph (SingleDecl funDecl) = funDeclToGraph funDecl
+-- For now, we just ignore the existing grouping into `mutual` blocks
 funMutDeclToGraph (MutualDecls _ funDecls) = do
   mapM_ funDeclToGraph funDecls
 

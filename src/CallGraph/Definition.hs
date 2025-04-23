@@ -1,7 +1,8 @@
 {-# LANGUAGE LambdaCase, OverloadedRecordDot #-}
 
 module CallGraph.Definition (
-  GraphGen, runGraphGen, insertDecl, nameToVertex, insertEdge
+  GraphGen, runGraphGen, insertDecl, nameToVertex, insertEdge,
+  buildCallGraph, findSCCs, programFromSCCs
 ) where
 
 import Data.Graph
@@ -12,6 +13,8 @@ import qualified Data.Text as T
 
 import Syntax.TypeAST
 import qualified Data.Set as S
+import Data.Functor ((<&>))
+import Utils.Loc (defaultLoc)
 
 
 
@@ -58,9 +61,6 @@ insertName name ty = modifyNameMap (M.insert name ty)
 lookupName :: Name -> GraphGen (Maybe Vertex)
 lookupName name = gets (M.lookup name . nameMap)
 
-lookupDecl :: Vertex -> GraphGen (Maybe (FunDecl () ()))
-lookupDecl vtx = gets (M.lookup vtx . declMap)
-
 insertDecl :: Vertex -> FunDecl () () -> GraphGen ()
 insertDecl vtx decl = modifyDeclMap (M.insert vtx decl)
 
@@ -84,3 +84,17 @@ insertEdge :: Vertex -> Name -> GraphGen ()
 insertEdge f g = do
   vtx <- nameToVertex g
   modifyEdgeMap (M.update (Just . S.insert vtx) f)
+
+buildCallGraph :: GraphGenState -> [(FunDecl () (), Vertex, [Vertex])]
+buildCallGraph s = M.toList s.declMap <&> (\(vtx,decl) ->
+  (decl, vtx, S.toList . S.unions $ M.lookup vtx s.edgeMap))
+
+findSCCs :: GraphGenState -> [SCC (FunDecl () ())]
+findSCCs s = stronglyConnComp (buildCallGraph s)
+
+funMutDeclFromSCC :: SCC (FunDecl () ()) -> FunMutDecl () ()
+funMutDeclFromSCC (AcyclicSCC funDecl) = SingleDecl funDecl
+funMutDeclFromSCC (CyclicSCC funDecls) = MutualDecls defaultLoc funDecls
+
+programFromSCCs :: [VarDecl ()] -> [SCC (FunDecl () ())] -> Program () ()
+programFromSCCs varDecls sccs = Program varDecls (funMutDeclFromSCC <$> sccs)
