@@ -11,7 +11,7 @@ import TypeInference.Types as Ty
 printProgram :: (Show va, Show fa) => Program va fa -> IO ()
 printProgram (Program varDecls funDecls) = do
   sepBy "\n" (printVarDecl 0) varDecls
-  unless (null varDecls || null funDecls) $ putStrLn ""
+  unless (null varDecls || null funDecls) $ putStrLn "\n"
   sepBy "\n\n" (printFunMutDecl 0) funDecls
   putChar '\n'
 

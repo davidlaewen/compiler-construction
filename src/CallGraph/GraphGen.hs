@@ -1,4 +1,4 @@
-module CallGraph.GenGraph (programToGraph) where
+module CallGraph.GraphGen (programToGraph) where
 
 import CallGraph.Definition
 import Syntax.TypeAST

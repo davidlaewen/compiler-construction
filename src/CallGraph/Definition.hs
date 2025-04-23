@@ -41,8 +41,8 @@ data GraphGenState = GraphGenState {
 -- Call graph generation monad
 type GraphGen = StateT GraphGenState (Except T.Text)
 
-runGraphGen :: GraphGen a -> Either T.Text a
-runGraphGen x = fst <$> runExcept (runStateT x $
+runGraphGen :: GraphGen a -> Either T.Text GraphGenState
+runGraphGen x = snd <$> runExcept (runStateT x $
   GraphGenState M.empty M.empty M.empty 0)
 
 
@@ -77,6 +77,7 @@ nameToVertex name = do
     Nothing -> do -- Get fresh vertex and update `nameMap`
       vtx <- freshVertex
       insertName name vtx
+      modifyEdgeMap (M.insert vtx S.empty)
       pure vtx
 
 -- | Insert edge from vertex for `f` to node with name `g`

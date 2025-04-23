@@ -1,0 +1,37 @@
+// Even and odd predicates defined by mutual recursion
+
+var l1 = (1,False):(2,True):(3,False):[];
+var l2 = 1:2:3:4:5:6:[];
+
+lenEven(l) :: [a] -> Bool {
+  if (isEmpty(l)) {
+    return True;
+  } else {
+    return lenOdd(l.tl);
+  }
+}
+
+lenOdd(l) :: [a] -> Bool {
+  if (isEmpty(l)) {
+    return False;
+  } else {
+    return lenEven(l.tl);
+  }
+}
+
+printBool(b) :: Bool -> Void {
+  if (b) {
+    print('T');
+  } else {
+    print('F');
+  }
+  return;
+}
+
+main() {
+  // Should print `FTTF`
+  printBool(lenEven(l1));
+  printBool(lenOdd(l1));
+  printBool(lenEven(l2));
+  printBool(lenOdd(l2));
+}
