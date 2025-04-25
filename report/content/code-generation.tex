@@ -73,7 +73,39 @@ navigating the resulting SSM code.
 
 
 
+\section{Multi-Register Values}
+
+While values of the base types $\Int$, $\Bool$ and $\Char$ can all be
+stored in a single register, value instances of lists
+require---in general---multiple registers.
+We also support tuples, which also require at least two registers:
+values of type \code{$\tau_1$,$\tau_2$} can be stored in two registers
+when both $\tau_1$ and $\tau_2$ are base types.
+The left and right component may again be multi-register values though, and
+the programmer can nest tuples to an arbitrary depth, with types such as
+$\TProd{\TProd{\Int}{\Bool}}{\TProd{\Int}{\Char}}$. In this case, we would
+require four registers, within which we must compute the offsets when
+translating e.g. the selectors \code{.fst} and \code{.snd}.
+
+Perhaps more importantly, values of a list type \code{[$\tau$]} may require
+arbitrarily many registers, even when $\tau$ is a base type such as $\Int$.
+We store lists in a \emph{linked} representation on the heap, where the $i$-th
+element of a list is stored in two components: the value at the $i$-th position,
+along with the address at which the subsequent element of the list is stored.
+To terminate such a chain of references, we reserve the register value
+\code{0xF0F0F0F0} as a `null pointer', similar to e.g. \code{null} in C or Java.
+We use this null pointer in the final segment of a list to express that the
+second component does not refer to the next segment, but instead terminates the
+list. In this way, the null pointer is the SSM counterpart to SPL's empty list
+value \spl{[]}.
+
+At this point, it may seem odd that we use such a linked representation of
+lists, as it is rather inefficient in both space and time complexity when
+compared to storing the list elements in an array of fixed size.
+
+
 \section{Polymorphism and Boxing}
+
 
 
 
