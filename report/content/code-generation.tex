@@ -26,9 +26,9 @@ stack before we jump to the respective function.
 As a consequence, we may perform unnecessary evaluation of arguments if they are
 never used in the function body, though the upside is that values only require
 a fixed amount of space (for the base types \spl{Int}, \spl{Bool}, and
-\spl{Char} at least---we will talk about tuples and lists in detail later),
-while a \emph{lazy} evaluation strategy would require us to store unevaluated
-expressions, which may be arbitrarily large.
+\spl{Char} at least---we will talk about lists in detail in
+\cref{sec:multi-reg-vals}), while a \emph{lazy} evaluation strategy would
+require us to store unevaluated expressions, which may be arbitrarily large.
 The memory usage under call-by-value is thus significantly smaller, and we avoid
 complicated memory management involving the storing and loading of arbitrary
 expressions.
@@ -49,7 +49,7 @@ We defined algebraic data types \haskell{Register} and \haskell{Instr} for the
 register names and instructions available in SSM. An SSM program is simply a
 list of instructions: \haskell{type Program = [Instr]}.
 By defining \haskell{Show} instances for the registers and instructions, we can
-easily print/output a \verb|.ssm| file from an SSM program \haskell{p} of type
+easily print/output a \verb|.ssm| file from an instance of type
 \haskell{[Instr]} with \haskell{unlines $ show <$> p}.
 
 An excerpt of the data type for instructions and the corresponding \haskell{Show}
@@ -68,18 +68,18 @@ instance is given below.
     ...
 \end{minted}
 
-All instructions are indented by two spaces except for labels, which helps with
+All instructions except for labels are indented by two spaces, which helps with
 navigating the resulting SSM code.
 
 
 
-\section{Multi-Register Values}
+\section{Multi-Register Values} \label{sec:multi-reg-vals}
 
 While values of the base types $\Int$, $\Bool$ and $\Char$ can all be
 stored in a single register, value instances of lists
 require---in general---multiple registers.
 We also support tuples, which also require at least two registers:
-values of type \code{$\tau_1$,$\tau_2$} can be stored in two registers
+values of type \code{\TProd{$\tau_1$}{$\tau_2$}} can be stored in two registers
 when both $\tau_1$ and $\tau_2$ are base types.
 The left and right component may again be multi-register values though, and
 the programmer can nest tuples to an arbitrary depth, with types such as
@@ -89,22 +89,92 @@ translating e.g. the selectors \code{.fst} and \code{.snd}.
 
 Perhaps more importantly, values of a list type \code{[$\tau$]} may require
 arbitrarily many registers, even when $\tau$ is a base type such as $\Int$.
-We store lists in a \emph{linked} representation on the heap, where the $i$-th
-element of a list is stored in two components: the value at the $i$-th position,
-along with the address at which the subsequent element of the list is stored.
+We store lists in a \emph{linked} representation on the heap, that is, as a
+number of list segments which reference each other's location in memory.
+More specifically, the $i$-th element of a list is stored in two components: the
+value at the $i$-th position, along with the address at which the subsequent
+element of the list is stored.
 To terminate such a chain of references, we reserve the register value
 \code{0xF0F0F0F0} as a `null pointer', similar to e.g. \code{null} in C or Java.
 We use this null pointer in the final segment of a list to express that the
 second component does not refer to the next segment, but instead terminates the
-list. In this way, the null pointer is the SSM counterpart to SPL's empty list
-value \spl{[]}.
+list. In this way, the null pointer is the SSM counterpart to SPL's `nil', or
+\spl{[]}.
 
+\subsection{List Representation Trade-Offs}
 At this point, it may seem odd that we use such a linked representation of
 lists, as it is rather inefficient in both space and time complexity when
 compared to storing the list elements in an array of fixed size.
+However, such a representation has some important advantages when dealing with
+polymorphism, which we will cover in \cref{sec:polymorphism-boxing}, and in
+mapping the semantics of SPL onto the instruction set of SSM.
+The semantics of lists in SPL is much like that of lists in functional,
+high-level languages such as ML/OCaml or Haskell, where lists are viewed as
+essentially left-deep nested tuples, decomposable into a \emph{head} (the first
+element of the list) and a \emph{tail}, the remainder of the list following the
+head. This is reflected in the way SPL allows construction of lists, that is,
+via the \emph{cons} constructor `\spl{:}' with type
+$\forall \alpha.\ \tau \to \TList{\alpha} \to \TList{\alpha}$, as well as the
+destructors (selectors) on lists, namely \spl{.hd} and \spl{.tl}, which take a
+non-nil list instance and return the head and tail, respectively.
+
+Such a recursive representation of lists stands in contrast to the \emph{arrays}
+that are a staple of imperative languages such as C or Java. These are
+essentially a block of registers with fixed size, where the registers can be
+accessed via indexing in $\bigO(1)$ time.
+Importantly, the size of an array is fixed at instantiation and thus known
+a-priori, while a recursive SPL list can grow and shrink at runtime. To express
+such a semantics in SPL while storing the list elements in register blocks would
+require an abstraction mechanism similar to e.g. Java's
+\mintinline{java}|ArrayList<T>|, where the list is represented internally as an
+array, along with the largest index currently in use. The internal array is then
+upsized and downsized dynamically as necessary (or reasonable).
+
+Employing such a strategy in the code generation would result in significantly
+faster access times for lists, since accesses are $\bigO(1)$ for array lists
+too, compared to $\bigO(n)$ for linked lists.
+Despite this, we chose the linked representation in SSM for the following reasons:
+%
+\begin{itemize}
+  \item To benefit from the fast random access of arrays, SPL would need to be
+        extended with a construct for index-based lookup in lists. With only the
+        \spl{.hd} and \spl{.tl} selectors, the programmer could not leverage the
+        improved access times in the first place.
+  %
+  \item Generating code for \code{ArrayList}-style lists would be a lot more
+        complicated, especially in their interaction with polymorphism, and due
+        to the fact that the size of lists in SPL cannot be determined
+        statically. For instance, the length of a list may depend on user input,
+        and thus our generated code would need to determine at runtime when an
+        (array) list needs to be resized. At that point, it would make more
+        sense to support an array (or rather, \emph{vector}) type in SPL
+        directly, and then implement an \code{ArrayList}-style abstract
+        interface within SPL, rather than in the compiler.
+  %
+  \item For lists with relatively few elements the performance advantages of
+        arrays are negligible, and even more so for lists which are frequently
+        modified by appending or removing elements at the start of the list,
+        which may even be slower with a dynamically resized array.
+        These are common use cases in SPL, and so again, it would seem more
+        reasonable to support a specific vector type for use cases where (very)
+        large lists must be accessed often and out-of-order.
+  %
+  \item Using a representation of lists in SSM that is fundamentally different
+        to the lists of SPL would lead to rather unpredictable performance from
+        the user perspective. For example, extending a list
+        $\code{l}$ of type $\TList{\Int}$ by \spl{l := 1:l;} could occasionally
+        require copying all elements in \code{l}, causing the same operation to
+        vary between being near-instant and very slow, which seems undesirable
+        from the perspective of the programmer.
+\end{itemize}
+
+Overall, we think that it would be more worthwhile to extend SPL with a vector
+type distinct from the list type $\TList{\tau}$, as well as syntax for
+index-based lookup in a vector, e.g. with $\code{.(}i\code{)}$ as a new
+selector, where $i$ is an expression of type $\Int$.
 
 
-\section{Polymorphism and Boxing}
+\section{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
 
 
 
