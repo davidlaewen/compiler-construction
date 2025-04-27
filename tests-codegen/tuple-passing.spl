@@ -1,0 +1,16 @@
+// Tuple reference passing
+
+f(x) :: Int -> Int {
+  (Int,Bool) t = (x,True);
+  g(t);
+  return t.fst;
+}
+
+g(t) :: (Int,a) -> Void {
+  t.fst = t.fst + 1;
+  return;
+}
+
+main() {
+  print(f(42));
+}

@@ -119,8 +119,8 @@ destructors (selectors) on lists, namely \spl{.hd} and \spl{.tl}, which take a
 non-nil list instance and return the head and tail, respectively.
 
 Such a recursive representation of lists stands in contrast to the \emph{arrays}
-that are a staple of imperative languages such as C or Java. These are
-essentially a block of registers with fixed size, where the registers can be
+that are a staple of imperative languages such as C or Java. These correspond
+to a block of registers with fixed size, where the registers can be
 accessed via indexing in $\bigO(1)$ time.
 Importantly, the size of an array is fixed at instantiation and thus known
 a-priori, while a recursive SPL list can grow and shrink at runtime. To express
@@ -128,7 +128,7 @@ such a semantics in SPL while storing the list elements in register blocks would
 require an abstraction mechanism similar to e.g. Java's
 \mintinline{java}|ArrayList<T>|, where the list is represented internally as an
 array, along with the largest index currently in use. The internal array is then
-upsized and downsized dynamically as necessary (or reasonable).
+upsized and downsized dynamically as necessary (or when reasonable).
 
 Employing such a strategy in the code generation would result in significantly
 faster access times for lists, since accesses are $\bigO(1)$ for array lists
@@ -151,7 +151,7 @@ Despite this, we chose the linked representation in SSM for the following reason
         directly, and then implement an \code{ArrayList}-style abstract
         interface within SPL, rather than in the compiler.
   %
-  \item For lists with relatively few elements the performance advantages of
+  \item For lists with relatively few elements, the performance advantages of
         arrays are negligible, and even more so for lists which are frequently
         modified by appending or removing elements at the start of the list,
         which may even be slower with a dynamically resized array.
@@ -174,11 +174,135 @@ index-based lookup in a vector, e.g. with $\code{.(}i\code{)}$ as a new
 selector, where $i$ is an expression of type $\Int$.
 
 
-\section{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
+\subsection{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
+
+As pointed out in the previous section, our choice of representation for lists
+and tuples in SSM is also informed by the code generation for polymorphic
+functions, and their interaction with the data on which they operate.
+
+To a simple example (perhaps the simplest), let us consider the polymorphic
+identity function:
+\begin{lstlisting}[language=spl]
+  id(x) :: a -> a {
+    return x;
+  }
+\end{lstlisting}
+%
+Throughout a given source program, this function may be called at a whole number
+of different types, e.g. \spl{id(42)}, \spl{id(42:[])}, or \spl{id((40,2))}. For
+translating such a function to SSM, we have two general approaches we can choose
+between:
+\begin{enumerate}[label={(\arabic*)}]
+  \item \textbf{Monomorphisation.} We could generate a monomorphic instance of
+        the \spl{id} function for each type at which the function is called. For
+        the example calls above, we would then need instances for $\Int$,
+        $\TList{\Int}$, as well as $\TProd{\Int}{\Int}$.
+        Such an approach would allow us to use e.g. a multi-register
+        representation of tuples on the stack. Since we generate a specific
+        instance of \spl{id} for the tuple type $\TProd{\Int}{\Int}$, the
+        monomorphic instance can account for the tuple argument spanning
+        multiple registers, and handle it accordingly.
+  %
+  \item \textbf{Boxing.} Alternatively, we can choose to represent lists and
+        tuples such that they can be treated uniformly with the single-register
+        base types $\Int$, $\Bool$ and $\Char$.
+        This approach involves \emph{boxing} all tuple and list values, that is,
+        storing them entirely on the heap, and passing the location on the heap
+        to the function as the argument.
+        As a result, we can treat all types uniformly, and rather than
+        generating a whole host of specialised monomorphic instances, we require
+        only one instance of the \spl{id} function in SSM, which simply returns
+        the value in the register for the first argument, without needing to
+        consider the argument type in any way.
+\end{enumerate}
+
+One downside of (2) is that boxing tuples and lists results in a slight
+performance decrease whenever we actually construct or destruct tuple and list
+instances. In particular, instances of these types are always pointers to the
+heap, so we must always first load from the heap when accessing the data.
+
+A larger disadvantage of storing all tuples and lists on the heap is an increase
+in memory usage. For instance, we might call a function which constructs and
+returns a nested tuple value from which we select just one of the entries and
+discard the rest.
+In such a scenario, the entire tuple remains stored on the heap, and freeing the
+occupied registers would require us to implement some form of memory management,
+that is, moving around entries on the heap such that we can decrement the heap
+pointer and free up registers whose data is no longer needed.
+
+On the other hand, an issue with the monomorphisation approach of (1) is that it
+may lead to a combinatorial explosion of specialised function instances.
+Take, for example, the following function, which converts left-deep tuples into
+right-deep tuples:
+\begin{lstlisting}[language=spl]
+  renest(t) :: ((a,b),c) -> (a,(b,c)) {
+    var t1 = t.fst;
+    return (t1.fst, (t1.snd, t.snd));
+  }
+\end{lstlisting}
+%
+The programmer may define such a polymorphic function and use it with numerous
+unique combinations of types for the type variables \spl{a}, \spl{b} and
+\spl{c}. If each type variable is instantiated with e.g. three different types,
+we may already need up to 27 monomorphic function instances to cover all calls
+to the \spl{renest} function.
+We could of course mitigate this combinatorial increase somewhat by e.g.
+treating at least all single-register base types uniformly, though even then
+there would still be cases where we get many specialised instances, albeit for
+slightly more contrived examples.
 
 
+\subsection{Copy Semantics of Lists and Tuples}
+Beyond the considerations regarding the representation of lists and tuples
+covered so far, we must also pay attention to how our choices may
+(inadvertently) affect the semantics of lists and tuples.
+If we chose the monomorphisation approach for tuples and allocated all tuples on
+the stack, then loading a tuple from e.g. a local or global variable would
+result in a full copy, i.e. the entries (fields) are copied to
+the top of the stack.
 
+Consider the following function, which allocates a tuple in a local variable,
+which it then passes to the function \spl{g}.
+%
+\begin{lstlisting}[language=spl]
+  f(x) :: Int -> Int {
+    (Int,Bool) t = (x,True);
+    g(t);
+    return t.fst;
+  }
 
+  g(t) :: (Int,a) -> Void {
+    t.fst = t.fst + 1;
+    return;
+  }
+\end{lstlisting}
+%
+In the first approach, loading a tuple results in both fields being placed on
+the stack, such that \spl{g} is called with the \emph{data} of the tuple.
+Modifications to the tuple performed in \spl{g} are thus not reflected in \spl{f}. Here, \spl{g} increments the first entry of its argument,
+but \spl{g} is operating on a copy, while in the scope of \spl{f}, the variable
+\spl{t} refers to the original tuple data.
+As such, the function call \spl{g(t)} in \spl{f} cannot affect the output of
+\spl{f}. This behaviour is commonly referred to as \emph{pass-by-value}, since
+the \emph{value} of \spl{t} (in this case, the $\Int$ and $\Bool$ field) is
+passed to the function.
+
+Pass-by-value stands in contrast to a \emph{pass-by-reference} semantics, where
+\spl{g} instead receives a reference to \spl{t}, that is, the location of the
+original data, rather than a copy.
+We obtain such a semantics with the boxing approach, since the local variable
+\spl{t} then stores the heap location of the tuple data. In the call \spl{g(t)},
+the \emph{location} of \spl{t} is passed to \spl{g}, rather than the data itself,
+and the incrementation performed in \spl{g} will thus also be reflected in the
+scope of \spl{f}, since the original data on the heap is modified.
+For example, the following \spl{main} function would print \spl{43} with
+pass-by-reference, while for pass-by-value semantics it would print \spl{42}.
+%
+\begin{lstlisting}[language=spl]
+  main() {
+    print(f(42));
+  }
+\end{lstlisting}
 
 
 
