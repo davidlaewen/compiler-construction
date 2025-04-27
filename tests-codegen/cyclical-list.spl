@@ -1,0 +1,20 @@
+// Constructing a cyclical list
+
+printIntList(l) {
+  if (isEmpty(l)) {
+    print('[');
+    print(']');
+  } else {
+    print(l.hd + 0);
+    print(':');
+    printIntList(l.tl);
+  }
+  return;
+}
+
+main() {
+  [Int] l = 1:[];
+  l.tl = l;
+
+  printIntList(l);
+}

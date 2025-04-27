@@ -168,13 +168,56 @@ Despite this, we chose the linked representation in SSM for the following reason
         from the perspective of the programmer.
 \end{itemize}
 
-Overall, we think that it would be more worthwhile to extend SPL with a vector
-type distinct from the list type $\TList{\tau}$, as well as syntax for
-index-based lookup in a vector, e.g. with $\code{.(}i\code{)}$ as a new
-selector, where $i$ is an expression of type $\Int$.
+Based on the points above, we chose to translate SPL lists to a linked
+representation in SSM, rather than a representation using blocks of registers.
+Overall, we think it makes more sense to use an encoding that matches the lists
+of SPL, and that for applications where constant-time list lookups are required,
+the language could still be extended with a vector type distinct from the list
+type $\TList{\tau}$, as well as syntax for index-based lookup in a vector, e.g.
+with $\code{.(}i\code{)}$ as a new selector, where $i$ is an expression of type
+$\Int$.
 
 
-\subsection{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
+\subsection{Mutating Lists}
+While SPL features functional-style lists (defined recursively as consisting of
+a head element and remaining list), SPL also features mutable state, or more
+specifically, mutable variables.
+The combination of these two languages features allows mutating list instances
+and the sublists of which they are composed, which has some noteworthy and
+potentially undesirable consequences.
+For instance, consider the following program, which updates the tail of a list
+using a variable assignment:
+%
+\begin{lstlisting}[language=spl]
+  main() {
+    [Int] l = 1:[];
+    l.tl = l;
+    $\ldots$
+  }
+\end{lstlisting}
+
+Variable \spl{l} initially refers to the singleton list \spl{1:[]}, but then the
+tail of \spl{l} is updated such that it refers to \spl{l} itself, causing the
+list to become cyclically defined in terms of itself.
+Creating a cyclical definition in this way is similar to the interaction of
+anonymous functions and mutable references in a language such as OCaml, which
+allow recursive fixed points to be defined by storing an anonymous function to a
+mutable reference \code{r} and then updating the reference with a function that
+uses \code{r} in its body, as in the following ML-style pseudocode:
+\begin{lstlisting}
+  let r := ref($\lambda$x.x) in
+    r $\leftarrow$ $\lambda$x.((!r) x);
+\end{lstlisting}
+
+Returning to our list example: updating the tail of \spl{l} to refer to \spl{l}
+itself effectively results in an infinite list, e.g. a recursive function which
+prints all elements of a list would just repeatedly print \spl{1} when called
+with \spl{l}.
+
+
+
+
+\section{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
 
 As pointed out in the previous section, our choice of representation for lists
 and tuples in SSM is also informed by the code generation for polymorphic
@@ -252,17 +295,23 @@ there would still be cases where we get many specialised instances, albeit for
 slightly more contrived examples.
 
 
-\subsection{Copy Semantics of Lists and Tuples}
-Beyond the considerations regarding the representation of lists and tuples
-covered so far, we must also pay attention to how our choices may
-(inadvertently) affect the semantics of lists and tuples.
+\section{Parameter Passing}
+Beyond the considerations regarding the representation for values of various
+data types covered so far, we must also pay attention to how our choices may
+(inadvertently) affect the semantics resulting from our code generation.
+In particular, the choice between the monomorphisation or boxing approach
+covered in \cref{sec:polymorphism-boxing} naturally leads to two different
+behaviours when passing tuples as function parameters, as we will illustrate
+with the following example.
+
+\subsection{Example: Tuple Parameter}
 If we chose the monomorphisation approach for tuples and allocated all tuples on
 the stack, then loading a tuple from e.g. a local or global variable would
 result in a full copy, i.e. the entries (fields) are copied to
 the top of the stack.
 
-Consider the following function, which allocates a tuple in a local variable,
-which it then passes to the function \spl{g}.
+Let us consider the following function, which allocates a tuple in a local
+variable, which it then passes to the function \spl{g}.
 %
 \begin{lstlisting}[language=spl]
   f(x) :: Int -> Int {
@@ -278,10 +327,11 @@ which it then passes to the function \spl{g}.
 \end{lstlisting}
 %
 In the first approach, loading a tuple results in both fields being placed on
-the stack, such that \spl{g} is called with the \emph{data} of the tuple.
-Modifications to the tuple performed in \spl{g} are thus not reflected in \spl{f}. Here, \spl{g} increments the first entry of its argument,
-but \spl{g} is operating on a copy, while in the scope of \spl{f}, the variable
-\spl{t} refers to the original tuple data.
+the stack, such that \spl{g} is called with the \emph{data} from the tuple entries.
+Modifications to the tuple performed in \spl{g} are thus not reflected in
+\spl{f}. In the example above, \spl{g} increments the first entry of its
+argument, but \spl{g} is operating on a copy of the tuple while in the scope of
+\spl{f}, the variable \spl{t} refers to the original tuple data.
 As such, the function call \spl{g(t)} in \spl{f} cannot affect the output of
 \spl{f}. This behaviour is commonly referred to as \emph{pass-by-value}, since
 the \emph{value} of \spl{t} (in this case, the $\Int$ and $\Bool$ field) is
@@ -304,15 +354,43 @@ pass-by-reference, while for pass-by-value semantics it would print \spl{42}.
   }
 \end{lstlisting}
 
+While the two approaches described in \cref{sec:polymorphism-boxing} lend
+themselves better to either a pass-by-value or pass-by-reference behaviour, it's
+important to note that these two design choices are not directly related.
+In principle, we could also combine polymorphism through boxing with
+pass-by-value behaviour for tuples, or vice versa with monomorphisation and
+pass-by-reference.
+
+However, if we choose to store values of a certain type on the heap, there are
+also practical reasons for using pass-by-reference, since it avoids copying all
+the data at each function call.
+This is especially relevant for lists, as a single list instance may contain
+many elements, and thus require a large amount of heap memory.
 
 
-\begin{itemize}
-	\item Compilation scheme?
-	\item How is data represented? Lists, tuples
-	\item Semantics style, call-by-reference, call-by-value?
-	\item How did you solve overloaded functions?
-	\item Polymorphism?
-	\item Printing?
-	\item Problems?
-	\item\ldots
-\end{itemize}
+\subsection{Lists}
+Since we represent lists using linked segments on the heap, we think it is more
+natural for lists to be (implicitly) passed as reference parameters, that is, a
+heap location referring to the head segment of the list.
+Of course, a consequence of this is that when passing a list to a function, the
+function can modify the original list instance, as well as its sublists.
+
+
+
+
+
+
+
+
+\begin{todoenv}
+  \begin{itemize}
+    \item Compilation scheme?
+    \item How is data represented? Lists, tuples
+    \item Semantics style, call-by-reference, call-by-value?
+    \item How did you solve overloaded functions?
+    \item Polymorphism?
+    \item Printing?
+    \item Problems?
+    \item\ldots
+  \end{itemize}
+\end{todoenv}

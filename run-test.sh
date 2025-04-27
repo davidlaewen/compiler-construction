@@ -2,6 +2,6 @@
 
 stack build
 
-file=tests-codegen/tuple-passing.spl;
+file=$1; # Take file path as command line arg
 stack run -- codegen $file > output.ssm;
-java -jar ./../ssm/ssm.jar $* --file output.ssm --cli;
+java -jar ./../ssm/ssm.jar --file output.ssm --cli;
