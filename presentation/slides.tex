@@ -118,11 +118,11 @@ data FunMutDecl a b = MutualDecls Loc [FunDecl a b] | SingleDecl (FunDecl a b)
 data FunDecl a b =
   FunDecl Loc T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
 
-data Stmt a = Assign VarLookup (Expr a) | FunCall FunName [Expr a] | ...
+data Stmt a = Assign Loc VarLookup a (Expr a) | FunCall Loc FunName [Expr a] | ...
 
-data VarLookup = VarId T.Text | VarField VarLookup Field
+data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
 
-data Expr a = Ident Loc T.Text a | ... | FunCallE FunName [Expr a] a
+data Expr a = Ident Loc T.Text a | ... | FunCallE Loc FunName [Expr a] a
 \end{minted}
 
 \end{frame}
@@ -237,6 +237,33 @@ codegenStmt (While _ cond loopStmts) = do
 \end{frame}
 
 
+\begin{frame}[fragile]{Pass-by-Value vs Pass-by-Reference}
+
+  \begin{itemize}
+    \item Single-register types (\texttt{Int}, \texttt{Char}, \texttt{Bool})
+          passed to functions as value itself
+    \item Multi-register types (tuples and lists) passed as heap address
+          in a single register
+  \end{itemize}
+
+\begin{lstlisting}[language=spl]
+  f(x) :: Int -> Int {
+    (Int,Bool) t = (x,True);
+    g(t);
+    return t.fst;
+  }
+
+  g(t) :: (Int,a) -> Void {
+    t.fst = t.fst + 1;
+    return;
+  }
+\end{lstlisting}\vspace{-6mm}
+%
+\begin{itemize}
+  \item \emph{Boxing} allows uniform code generation for polymorphic functions
+\end{itemize}
+
+\end{frame}
 
 % \begin{frame}{Limitations of Hindley-Milner}
 
