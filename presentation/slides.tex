@@ -4,7 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[libertine]{newtxmath}
 \usepackage[tt=false]{libertine}
-\usepackage[varqu]{zi4}
+\usepackage[varqu,varl,scale=0.9]{zi4}
 \usepackage{sfmath}
 
 \usepackage[utf8]{inputenc} % oder was auch immer
@@ -38,22 +38,22 @@
 }
 
 
-\title[Phase 2 -- Semantic Analyses]% (optional, nur bei langen Titeln nötig)
-{Phase 2 -- Semantic Analyses}
+\title[Phase 3 -- Code Generation]% (optional, nur bei langen Titeln nötig)
+{Phase 3 -- Code Generation}
 
 \subtitle
 {}
 
 \author% (optional, nur bei vielen Autoren)
-{Simcha van Collem \& David Läwen}
+{David Läwen}
 
 \institute[]% (optional, aber oft nötig)
 {Compiler Construction}
 
-\date[April 11th, 2023] % (optional, sollte der abgekürzte Konferenzname sein)
-{April 11th, 2023}
+\date[May 8th, 2025] % (optional, sollte der abgekürzte Konferenzname sein)
+{May 8th, 2025}
 
-\subject{Later Credits}
+\subject{SPL Compiler Code Generation Phase}
 % Dies wird lediglich in den PDF Informationskatalog eingefügt. Kann gut
 % weggelassen werden.
 
@@ -73,7 +73,7 @@
 \end{frame}
 
 % INTRODUCTION
-\begin{frame}{General Information}
+\begin{frame}{General Setup}
 
   \begin{minipage}{.6\textwidth}
 
@@ -81,7 +81,8 @@
       \item Implementation language: Haskell
       \item AST represented as \emph{rose tree} consisting of algebraic data
             types and lists
-      \item Type checking proceeds by traversing the AST structure
+      \item Type checking stage produces a \emph{typed} AST, annotated with the
+            inferred/checked types
     \end{itemize}
 
   \end{minipage}\hfill
@@ -92,119 +93,217 @@
 \end{frame}
 
 
-\begin{frame}[fragile]{Desugaring}
+% \begin{frame}[fragile]{Desugaring}
+
+% \begin{minted}{haskell}
+% desugar :: P.Program -> T.Program ()
+% \end{minted}
+
+% \begin{itemize}
+%   \item First step: Desugar parse AST to type checking AST
+%   \item Desugar operations and selectors to function calls
+%   \item Allows uniform treatment as ordinary function calls
+% \end{itemize}
+
+% \end{frame}
+
+
+\begin{frame}[fragile]{Output of Type Checking Phase}
+
+  \begin{minted}{haskell}
+data Program varTy funTy = Program [VarDecl varTy] [FunMutDecl varTy funTy]
+
+data VarDecl a = VarDecl Loc (Maybe UType) T.Text (Expr a) a
+data FunMutDecl a b = MutualDecls Loc [FunDecl a b] | SingleDecl (FunDecl a b)
+data FunDecl a b =
+  FunDecl Loc T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
+
+data Stmt a = Assign VarLookup (Expr a) | FunCall FunName [Expr a] | ...
+
+data VarLookup = VarId T.Text | VarField VarLookup Field
+
+data Expr a = Ident Loc T.Text a | ... | FunCallE FunName [Expr a] a
+\end{minted}
+
+\end{frame}
+
+% Things to mention in the presentation:
+% - Show & briefly explain Register and Instr data types
+% - Show & explain the CodeGen monad, as well as the map/state for global and
+%   local identifiers (variable and argument locations)
+% - Discuss assignments with field selectors on the left, e.g.
+%   x.fst.hd.snd.tl = 42;
+%   and how to deal with these
+% - Pass-by-value vs pass-by-reference, reuse examples from report
+% - Interaction of recursive lists with mutability, e.g. in
+%   var l = 1:[];
+%   l.tl = l;
+
+
+\begin{frame}[fragile]{Output of Type Checking Phase}
+
+  Function calls are represented using \mintinline{haskell}|FunName|:
+
+  \begin{minted}{haskell}
+  data FunName = Name T.Text
+    | Not | Neg | Add | Sub | Mul | Div | Mod | ... | Cons | IsEmpty
+    | HeadFun | TailFun | FstFun | SndFun
+    | Print
+  \end{minted}
+
+  \begin{itemize}
+    \item Either a user-defined function, a built-in operator, a field selector,
+          or \texttt{print}
+    \item Allows uniform treatment of all the above, where the signature of
+          built-ins is hard-coded, and the signature of user functions is found
+          in the typed AST.
+  \end{itemize}
+
+\end{frame}
+
+
+% REGISTERS & INSTRUCTIONS
+
+\begin{frame}[fragile]{Registers \& Instructions}
+
+  \begin{minted}{haskell}
+data Register = ProgCounter | StackPointer | MarkPointer | HeapPointer
+              | RetReg | HeapLowReg | Scratch2 | Scratch3
+
+data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
+  | LoadReg Register | StoreReg Register
+  | ...
+  | NegOp | AddOp | SubOp | MulOp | DivOp | ModOp
+  | TrapInt | TrapChar
+
+instance Show Instr where
+  show (Label t) = T.unpack t <> ":"
+  show Ret = tab <> "ret"
+  show Halt = tab <> "halt"
+  show (Link i) = tab <> "link" <+> show i
+  ...
+\end{minted}
+
+\end{frame}
+
+
+% CODE GEN MONAD
+
+\begin{frame}[fragile]{Code Generation Monad}
 
 \begin{minted}{haskell}
-desugar :: P.Program -> T.Program ()
+type LocationMap = M.Map T.Text Int
+
+data CodegenState = CodegenState {
+  labelCounter :: Int,
+  offsets :: LocationMap,
+  heapLocs :: LocationMap
+}
+
+type Codegen = State CodegenState
+
+runCodegen :: Codegen a -> a
+runCodegen = flip evalState (CodegenState 0 M.empty M.empty)
 \end{minted}
 
 \begin{itemize}
-  \item First step: Desugar parse AST to type checking AST
-  \item Desugar operations and selectors to function calls
-  \item Allows uniform treatment as ordinary function calls
+  \item State monad allows incrementing label counter for unique label names,
+        and resetting \mintinline{haskell}|offsets| map for arguments and local variables
 \end{itemize}
 
 \end{frame}
 
 
-\begin{frame}[fragile]{Type Checking AST}
+\begin{frame}[fragile]{Statement Code Gen Example}
 
-  \begin{minted}{haskell}
-data Program a = Program [VarDecl a] [FunDecl a]
+  \begin{itemize}
+    \item Example of code generation for \texttt{while} statement
+  \end{itemize}
 
-data VarDecl a = VarDecl (Maybe UType) T.Text (Expr a) a
+\begin{minted}{haskell}
+codegenStmt :: Stmt UType -> Codegen [Instr]
 
-data FunDecl a = FunDecl T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] a
-
-data Stmt a = Assign VarLookup (Expr a)
-            | FunCall FunName [Expr a]
-            | ...
-
-data VarLookup = VarId T.Text | VarField VarLookup Field
-
-data Expr a = FunCallE FunName [Expr a] a
-            | ...
+codegenStmt (While _ cond loopStmts) = do
+  condProgram <- codegenExpr cond
+  loopProgram <- concatMapM codegenStmt loopStmts
+  topLabel <- freshLabel "while"
+  endLabel <- freshLabel "endwhile"
+  pure $
+    [Label topLabel] ++ condProgram ++ [BranchFalse endLabel]
+    ++ loopProgram ++ [BranchAlways topLabel]
+    ++ [Label endLabel]
 \end{minted}
 
 \end{frame}
 
 
-\begin{frame}{Limitations of Hindley-Milner}
 
-  Classic Hindley-Milner:
-  \begin{itemize}
-    \item Traverse AST
-    \item Solve constraints immediately upon encountering them
-    \item Accumulate substitution
-  \end{itemize}
+% \begin{frame}{Limitations of Hindley-Milner}
 
-  Limitation: Constraints must be solved in the order they are encountered in
+%   Classic Hindley-Milner:
+%   \begin{itemize}
+%     \item Traverse AST
+%     \item Solve constraints immediately upon encountering them
+%     \item Accumulate substitution
+%   \end{itemize}
 
-\end{frame}
+%   Limitation: Constraints must be solved in the order they are encountered in
 
-
-\begin{frame}{``French-style'' Type Inference (Pottier \& Rémy)}
-
-  Type inference in GHC:
-  \begin{itemize}
-    \item Traverse AST, generate constraint set and \emph{elaborated} AST with
-          metavariable annotations
-    \item Solve the constraint set
-    \item Resulting substitution is applied to the elaborated AST (``\emph{zonking}'')
-    \item Due to François Pottier and Didier Rémy~\footfullcite{PottierRemy2005}
-  \end{itemize}
-
-\end{frame}
+% \end{frame}
 
 
-\begin{frame}[fragile]{Type Checker Monad}
+% \begin{frame}{``French-style'' Type Inference (Pottier \& Rémy)}
 
-  \begin{minted}{haskell}
-  type Environment = M.Map Id UType
+%   Type inference in GHC:
+%   \begin{itemize}
+%     \item Traverse AST, generate constraint set and \emph{elaborated} AST with
+%           metavariable annotations
+%     \item Solve the constraint set
+%     \item Resulting substitution is applied to the elaborated AST (``\emph{zonking}'')
+%     \item Due to François Pottier and Didier Rémy~\footfullcite{PottierRemy2005}
+%   \end{itemize}
 
-  data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
-
-  type CGen a = (StateT CGenState (Except T.Text)) a
-
-  data UType = Int | ... | List UType | Fun [UType] UType
-             | UVar Int
-  \end{minted}
-
-\end{frame}
+% \end{frame}
 
 
-\begin{frame}[fragile]{Type Checker Monad}
+% \begin{frame}[fragile]{Type Checker Monad}
 
-  \begin{minted}{haskell}
-  type Environment = M.Map Id UType
+%   \begin{minted}{haskell}
+%   type Environment = M.Map Id UType
 
-  data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
+%   data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
 
-  type CGen a = (StateT CGenState (Except T.Text)) a
-  \end{minted}
+%   type CGen a = (StateT CGenState (Except T.Text)) a
 
-  Why \mintinline{haskell}|StateT|? \vspace*{-4mm}
-  \begin{itemize}
-    \item Consider the \mintinline{haskell}|Program| node:
-    \begin{minted}{haskell}
-  data Program a = Program [VarDecl a] [FunDecl a]
-  \end{minted}
-    \item Bindings from first list are used in second list
-    \item Allows restoring environment after checking function body
-  \end{itemize}
+%   data UType = Int | ... | List UType | Fun [UType] UType
+%              | UVar Int
+%   \end{minted}
 
-\end{frame}
+% \end{frame}
 
 
+% \begin{frame}[fragile]{Type Checker Monad}
+
+%   \begin{minted}{haskell}
+%   type Environment = M.Map Id UType
+
+%   data CGenState = CGenState{ env :: Environment, nextUVar :: Int }
+
+%   type CGen a = (StateT CGenState (Except T.Text)) a
+%   \end{minted}
+
+%   Why \mintinline{haskell}|StateT|? \vspace*{-4mm}
+%   \begin{itemize}
+%     \item Consider the \mintinline{haskell}|Program| node:
+%     \begin{minted}{haskell}
+%   data Program a = Program [VarDecl a] [FunDecl a]
+%   \end{minted}
+%     \item Bindings from first list are used in second list
+%     \item Allows restoring environment after checking function body
+%   \end{itemize}
+
+% \end{frame}
 
 
-
-\section<presentation*>{References}
-
-\begin{frame}{References}
-  \nocite{*}
-  \AtNextBibliography{\small}
-  \printbibliography
-\end{frame}
 
 \end{document}
