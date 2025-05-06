@@ -46,7 +46,13 @@ Testing & Debugging:
 ## Useful docs & tutorials
 [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/GUIDE/)
 
+[Hoogle](https://hoogle.haskell.org/)
+
+[SSM instruction overview](https://gitlab.science.ru.nl/compilerconstruction/ssm/-/blob/master/HELP.md)
+
 [Megaparsec tutorial blogpost](https://markkarpov.com/tutorial/megaparsec.html)
+
+[Data.Graph documentation](https://hackage-content.haskell.org/package/containers-0.8/docs/Data-Graph.html)
 
 [Duo Lang parser module](https://github.com/duo-lang/duo-lang/tree/main/src/Parser)
 
