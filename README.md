@@ -1,6 +1,17 @@
 # SPL Compiler
 
 ## To Do
+Parsing:
+- [ ] Prevent function calls in global variable declarations(?)
+- [ ] Alternatively, allow function calls in global var decls, but then we need
+      to allow them to be interspersed with the function decls, and include them
+      in the call graph analysis
+- [ ] What if global variables and functions are mutually defined? That is, the
+      variable declaration calls a function which refers to the variable in the
+      function body.
+- [ ] Remove `mutual { ... }` syntax, since mutually defined groups are now
+      automatically determined by the call graph analysis
+
 Code gen:
 - [ ] Equality and printing
 - [ ] Prelude with printing and comparison implementations
@@ -9,16 +20,16 @@ Code gen:
 Extension:
 - [ ] Anonymous functions (lambda notation)
 - [ ] Custom algebraic data types?
-- [ ] Custom typeclasses
+- [ ] Custom typeclasses with dictionary passing
 - [ ] Further ideas
 
 Pretty printing:
 - [ ] Printer helpers for parentheses, brackets and braces
 - [ ] Possibly refactor with `Prettyprinter` library
-- [ ] Add pretty printer for `TypeAST`
+- [x] Add pretty printer for `TypeAST`
 
 QoL:
-- [ ] Tarjan's algorithm for fun decl ordering and grouping for mutual recursion
+- [x] Tarjan's algorithm for fun decl ordering and grouping for mutual recursion
 - [ ] Automatic insertion of `return` statements for Void functions
 - [ ] Improve parser errors
 - [x] Location data in AST for use in errors
