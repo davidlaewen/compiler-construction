@@ -237,6 +237,34 @@ codegenStmt (While _ cond loopStmts) = do
 \end{frame}
 
 
+\begin{frame}[fragile]{Multi-Register Types}
+  \begin{itemize}
+    \item Instances of \texttt{Int}, \texttt{Bool} and \texttt{Char} stored in
+          one register
+    \item For e.g. \texttt{[Int]}, the size of a value can be arbitrarily large
+    \item Use linked list representation, storing segments on the heap, e.g.
+  \end{itemize}\vspace{-6mm}
+
+  \[ \texttt{[Int] l = 1:2:3:[];} \]
+
+  \begin{table}[]
+    \begin{tabular}{>{\ttfamily}l| >{\ttfamily}l|l}
+      \textbf{\textsf{Address}} & \textbf{\textsf{Value}} & \textbf{Structure} \\
+      \hline
+      0x0007D0 & 0x000003 & begin \\
+      0x0007D1 & 0xF0F0F0F0 & end \\
+      \hline
+      0X0007D2 & 0X000002 & begin \\
+      0X0007D3 & 0X0007D1 & end \\
+      \hline
+      0X0007D4 & 0X000001 & begin \\
+      0X0007D5 & 0X0007D3 & end
+    \end{tabular}
+  \end{table}
+
+\end{frame}
+
+
 \begin{frame}[fragile]{Pass-by-Value vs Pass-by-Reference}
 
   \begin{itemize}
@@ -260,7 +288,7 @@ codegenStmt (While _ cond loopStmts) = do
 \end{lstlisting}\vspace{-6mm}
 %
 \begin{itemize}
-  \item \emph{Boxing} allows uniform code generation for polymorphic functions
+  \item Interaction with polymorphism: \emph{Monomorphisation} vs \emph{boxing}
 \end{itemize}
 
 \end{frame}
