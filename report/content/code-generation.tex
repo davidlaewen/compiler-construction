@@ -34,6 +34,7 @@ complicated memory management involving the storing and loading of arbitrary
 expressions.
 
 
+
 \section{Code Generation Monad} \label{sec:codegen-monad}
 
 Our code generation stage makes use of the state monad, where the state consists
@@ -131,7 +132,6 @@ top and bottom of the \spl{while} loop.
 
 
 
-
 \section{Instructions}
 
 We defined algebraic data types \haskell{Register} and \haskell{Instr} for the
@@ -213,6 +213,59 @@ location maps means that we have failed to discover a scoping error during the
 typing stage, or that we have bugs in our code generation stage.
 
 
+
+\section{Initialisation} \label{sec:codegen-initialisation}
+
+Since the global variables can be accessed from anywhere in the program, we
+choose to allocate them on the heap rather than the stack. Since we can compute
+the size of the variable data statically, we can find them by adding an offset
+to the heap location of the first global variable.
+At the start of our compiled program, we include instructions for computing the
+values of the global variables and storing them to the heap.
+
+However, the global variables may themselves allocate data on the heap, e.g. if
+we define a global variable as a list:
+\begin{lstlisting}[language=spl]
+  [Int] l = 1:2:3:[];
+\end{lstlisting}
+%
+As a result, the location of the first global variable is not, in general, the
+first address on the heap, and can in fact not be determined statically, since
+the global variables may include arbitrary expressions which affect how many
+heap registers are allocated.
+Our solution is to first compute the values of \emph{all} global variables on
+the stack, and subsequently storing the heap pointer to the first scratch
+register \texttt{R5}, which we use simply for holding this `HeapLow' address.
+We then store all global variables with a single \texttt{stmh} instruction,
+ensuring that the data is allocated at the offsets from `HeapLow' that we
+computed statically.
+
+After the instruction for storing the global variables, we include a jump to the
+\texttt{main} label, denoting the entry point of the actual program, followed by
+the result of compiling all function declarations, and finally the \texttt{halt}
+instruction:
+%
+\begin{minted}{haskell}
+  codegen :: TA.Program UType UScheme -> Codegen Program
+  codegen (TA.Program varDecls funDecls) = do
+    let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
+    let varOffsets = computeOffsets varSizes 0
+    varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
+    funDeclsProgram <- concatMapM codegenFunMutDecl funDecls
+    pure $ varDeclsProgram ++
+      -- HP now at start of global vars, copy to R5
+      [LoadReg HeapPointer, StoreReg HeapLowReg] ++
+      -- Store all global vars to heap, adjust SP
+      StoreHeapMulti (sum varSizes) : Adjust (-1) :
+        BranchAlways "main" : funDeclsProgram ++ [Halt]
+\end{minted}
+
+% When compiling for a physical processor, it would likely be advantageous to
+% allocate the global variables on the stack, rather than the heap, using a
+% similar approach to the above. That is, we could again compute the values of all
+% global variables on the stack, and then simply keep the address for the top (or
+% bottom) of the block in one of the scratch registers, so that we can use it to
+% compute the addresses of the global variables to load from and store to.
 
 
 \section{Multi-Register Values} \label{sec:multi-reg-vals}
@@ -355,6 +408,22 @@ Returning to our list example: updating the tail of \spl{l} to refer to \spl{l}
 itself effectively results in an infinite list, e.g. a recursive function which
 prints all elements of a list would just repeatedly print \spl{1} when called
 with \spl{l}.
+Such behaviour could be desirable, as it allows us to effectively model
+(infinite) streams. For instance, if we want to \emph{zip} a given list with the
+list of alternating zeroes and ones using
+\begin{center}
+  \spl{zip :: [a] -> [b] -> [(a,b)]},
+\end{center}
+we could supply as the second argument cyclical list containing 0 and 1 in
+alternation infinitely often, constructed similarly as above:
+\begin{lstlisting}[language=spl]
+  [Int] l = 0:1:[];
+  l.tl = l;
+\end{lstlisting}
+%
+Since the list of the zipped list is determined by the shorter of the two lists
+given as inputs, the resulting list will be finite, even if one of the two
+arguments is a self-referential, infinite list.
 
 
 
