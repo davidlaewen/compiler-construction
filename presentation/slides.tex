@@ -81,7 +81,7 @@
       \item Implementation language: Haskell
       \item AST represented as \emph{rose tree} consisting of algebraic data
             types and lists
-      \item Type checking stage produces a \emph{typed} AST, annotated with the
+      \item Typing stage produces a \emph{typed} AST, annotated with the
             inferred/checked types
     \end{itemize}
 
@@ -289,6 +289,33 @@ codegenStmt (While _ cond loopStmts) = do
 %
 \begin{itemize}
   \item Interaction with polymorphism: \emph{Monomorphisation} vs \emph{boxing}
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Monomorphisation vs Boxing}
+
+  Two ways to deal with polymorphic functions:
+  \begin{itemize}
+    \item Generate monomorphic instances
+    \item Use \emph{boxing} on multi-register data (e.g. tuples)
+  \end{itemize}
+
+Example:
+
+\begin{lstlisting}[language=spl]
+  renest(t) :: ((a,b),c) -> (a,(b,c)) {
+    var t1 = t.fst;
+    return (t1.fst, (t1.snd, t.snd));
+  }
+\end{lstlisting}\vspace{-4mm}
+
+\begin{itemize}
+  \item Monomorphisation: For just \texttt{Int}, \texttt{Bool} and
+        \texttt{Char}, we could get up to 27 combinations
+  \item Boxing: One instance only, but with small performance
+        cost and use of heap memory
 \end{itemize}
 
 \end{frame}
