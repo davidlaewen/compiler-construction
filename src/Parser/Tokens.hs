@@ -15,6 +15,7 @@ import qualified Data.Text as T
 
 data Token = IntLit Int | BoolLit Bool | CharLit Char
            | IdToken T.Text
+           | NameToken T.Text
            | Symbol Symbol
            | Keyword Keyword
   deriving (Eq, Ord)
@@ -24,6 +25,7 @@ instance Show Token where
   show (BoolLit b) = if b then "True" else "False"
   show (CharLit c) = ['\'', c, '\'']
   show (IdToken t) = T.unpack t
+  show (NameToken t) = T.unpack t
   show (Symbol s) = show s
   show (Keyword k) = show k
 

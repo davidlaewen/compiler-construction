@@ -35,13 +35,13 @@ varDeclP = do
 dataDeclP :: TokenParser DataDecl
 dataDeclP = do
   (_,startPos,_) <- keywordP KwData
-  (name,_,_) <- idP
+  (name,_,_) <- nameP
   (constrs,_,endPos) <- bracesP $ dataConstrP `sepBy` symbolP SymComma
   pure $ DataDecl (Loc startPos endPos) name constrs
 
 dataConstrP :: TokenParser DataConstr
 dataConstrP = do
-  (name,startPos,_) <- idP
+  (name,startPos,_) <- nameP
   (args,_,endPos) <- parensP $ many constrArgP
   pure $ DataConstr (Loc startPos endPos) name args
   where
@@ -100,10 +100,12 @@ baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
     charTypeP = keywordP KwChar >>= (\(_,start,end) -> pure $ CharT (Loc start end))
 
 typeP :: TokenParser Type
-typeP = baseTypeP <|> tyVarP <|> prodTypeP <|> listTypeP
+typeP = baseTypeP <|> tyVarP <|> tyNameP <|> prodTypeP <|> listTypeP
   where
     tyVarP = idP >>= \(ident,start,end) ->
       pure $ TyVar (Loc start end) ident
+    tyNameP = nameP >>= \(name,start,end) ->
+      pure $ DataT (Loc start end) name
     prodTypeP = do
       (_,start,_) <- symbolP SymParenLeft
       ty1 <- typeP <|> customFailure ProdTypeMissingEntry
@@ -443,6 +445,12 @@ idP :: TokenParser (WithPos T.Text)
 idP = token test S.empty
   where
     test (Positioned start end _ _ (IdToken i)) = Just (i,start,end)
+    test _ = Nothing
+
+nameP :: TokenParser (WithPos T.Text)
+nameP = token test S.empty
+  where
+    test (Positioned start end _ _ (NameToken name)) = Just (name,start,end)
     test _ = Nothing
 
 isKeyword :: Keyword -> Positioned Parser.Tokens.Token -> Bool

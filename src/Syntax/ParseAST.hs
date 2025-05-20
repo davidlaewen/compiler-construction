@@ -54,6 +54,7 @@ data Type = IntT Loc
           | List Loc Type
           | Void Loc
           | Fun Loc [Type] Type
+          | DataT Loc T.Text
           | TyVar Loc T.Text
           | GarbageType
   deriving (Show, Eq)
@@ -135,6 +136,7 @@ instance HasLoc Type where
   getLoc (List loc _) = loc
   getLoc (Void loc) = loc
   getLoc (Fun loc _ _) = loc
+  getLoc (DataT loc _) = loc
   getLoc (TyVar loc _) = loc
   getLoc GarbageType = defaultLoc
 

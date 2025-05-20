@@ -4,7 +4,7 @@ data MaybeBool {
 }
 
 data PeanoNat {
-  Zero(), Succ(pred : Int)
+  Zero(), Succ(pred : PeanoNat)
 }
 
 data EitherIntBool {
@@ -12,7 +12,7 @@ data EitherIntBool {
   Right(val : Bool)
 }
 
-f(x) :: Int -> Int {
+f(x) :: MaybeBool -> MaybeBool {
   return x;
 }
 

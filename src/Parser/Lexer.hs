@@ -85,8 +85,13 @@ charL = do
 -- | Parses an identifer without trailing whitespace
 identL :: Lexer Token
 identL = do
-  name <- T.cons <$> letterChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
+  name <- T.cons <$> lowerChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
   pure $ IdToken name
+
+nameL :: Lexer Token
+nameL = do
+  tyName <- T.cons <$> upperChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
+  pure $ NameToken tyName
 
 -- | Parses a keyword followed by whitespace
 keywordL :: Lexer Token
@@ -102,7 +107,7 @@ symbolL = choice $ (\sym -> string (T.pack (show sym)) >> pure (Symbol sym)) <$>
 
 
 lex1 :: Lexer Token
-lex1 = intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> withRecovery recover (hidden identL)
+lex1 = intL <|> symbolL <|> try boolL <|> charL <|> try keywordL <|> nameL <|> withRecovery recover (hidden identL)
   where
     recover e = do
       registerParseError e
