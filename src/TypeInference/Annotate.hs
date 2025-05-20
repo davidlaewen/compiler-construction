@@ -16,8 +16,11 @@ annotateFunMutDecl s (T.SingleDecl funDecl) = T.SingleDecl $ annotateFunDecl s f
 annotateFunMutDecl s (T.MutualDecls loc funDecls) = T.MutualDecls loc $ annotateFunDecl s <$> funDecls
 
 annotateFunDecl :: Subst -> T.FunDecl UType UScheme -> T.FunDecl UType UScheme
-annotateFunDecl s (T.FunDecl loc name params mTy varDecls stmts ty) =
-  T.FunDecl loc name params mTy (annotateVarDecl s <$> varDecls) (annotateStmt s <$> stmts) (subst s ty)
+annotateFunDecl s (T.FunDecl loc name params mTy varDecls stmts (UScheme _ ty)) =
+  T.FunDecl loc name params mTy (annotateVarDecl s <$> varDecls) (annotateStmt s <$> stmts) funScheme
+  where
+    funTy = subst s ty
+    funScheme = UScheme (freeUVars funTy) funTy
 
 annotateStmt :: Subst -> T.Stmt UType -> T.Stmt UType
 annotateStmt s (T.If loc condExpr thenStmts elseStmts) =

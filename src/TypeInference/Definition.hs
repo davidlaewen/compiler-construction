@@ -1,8 +1,7 @@
 {-# LANGUAGE LambdaCase, OverloadedRecordDot, InstanceSigs, OverloadedStrings #-}
 
 module TypeInference.Definition (
-  UVar,
-  UType(..),
+  TVar, UVar, UType(..),
   UScheme(..),
   Subst(Subst),
   CGen,
@@ -12,7 +11,8 @@ module TypeInference.Definition (
   applySubst,
   runCgen,
   freshVar,
-  replaceTVars,
+  substTVars,
+  freeTVars,
   envInsertVar,
   envInsertRetType,
   envLocalInsertFun,
@@ -120,18 +120,30 @@ freshVar = do
   pure i
 
 -- | Replace type variables in user types with fresh unification variables
-replaceTVars :: UType -> CGen UType
-replaceTVars (TVar _) = UVar <$> freshVar
-replaceTVars (Prod ty1 ty2) = do
-  ty1' <- replaceTVars ty1
-  ty2' <- replaceTVars ty2
-  pure $ Prod ty1' ty2'
-replaceTVars (List ty) = replaceTVars ty >>= \ty' -> pure (List ty')
-replaceTVars (Fun argTys retTy) = do
-  argTys' <- mapM replaceTVars argTys
-  retTy' <- replaceTVars retTy
-  pure $ Fun argTys' retTy'
-replaceTVars ty = pure ty
+substTVars :: M.Map TVar UVar -> UType -> UType
+substTVars s (TVar t) =
+  case M.lookup t s of
+    Nothing -> TVar t
+    Just i -> UVar i
+substTVars _ Int = Int
+substTVars _ Bool = Bool
+substTVars _ Char = Char
+substTVars _ Void = Void
+substTVars s (Prod t1 t2) = Prod (substTVars s t1) (substTVars s t2)
+substTVars s (List t) = List (substTVars s t)
+substTVars s (Fun ts t) = Fun (substTVars s <$> ts) (substTVars s t)
+substTVars _ (UVar i) = UVar i
+
+freeTVars :: UType -> S.Set TVar
+freeTVars Int = S.empty
+freeTVars Bool = S.empty
+freeTVars Char = S.empty
+freeTVars Void = S.empty
+freeTVars (Prod t1 t2) = freeTVars t1 `S.union` freeTVars t2
+freeTVars (List t) = freeTVars t
+freeTVars (Fun ts t) = foldMap freeTVars ts `S.union` freeTVars t
+freeTVars (UVar _) = S.empty
+freeTVars (TVar t) = S.singleton t
 
 instance Types UType where
   subst :: Subst -> UType -> UType
@@ -161,7 +173,10 @@ instance Types UType where
 
 instance Types UScheme where
   subst :: Subst -> UScheme -> UScheme
-  subst (Subst s) (UScheme binders ty) = UScheme binders (subst (Subst $ M.withoutKeys s binders) ty)
+  -- subst (Subst s) (UScheme binders ty) = UScheme binders (subst (Subst $ M.withoutKeys s binders) ty)
+  -- Substituting under the ∀ is fine, since all unification variables are unique.
+  -- However, we need to update the bound variables to match the new body of the ∀-type.
+  subst s (UScheme binders ty) = UScheme binders (subst s ty)
 
   freeUVars :: UScheme -> S.Set UVar
   freeUVars (UScheme binders ty) = freeUVars ty \\ binders
@@ -173,7 +188,6 @@ instance (Types b) => Types (FunDecl a b) where
 
   freeUVars :: FunDecl a b -> S.Set UVar
   freeUVars (FunDecl _ _ _ _ _ _ uScheme) = freeUVars uScheme
-
 
 instance Semigroup Subst where
   Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1

@@ -92,11 +92,11 @@ checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
   (varDecls',varDeclsSubst) <- checkVarDecls LocalLevel varDecls
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
-  -- TODO: Check user-specified type against inferred type
+  -- Check user-specified type against inferred type
   tySubst <- case mTy of
     Nothing -> pure mempty
     Just userTy -> do
-      userTy' <- replaceTVars userTy
+      userTy' <- instantiateUserType userTy -- replaceTVars userTy
       unify funTy userTy' loc
   applySubst tySubst
   let s = stmtsSubst <> varDeclsSubst <> tySubst
@@ -104,6 +104,13 @@ checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
   let funScheme = UScheme S.empty ty
   envGlobalInsertFun name funScheme
   pure (T.FunDecl loc name params mTy varDecls' stmts' funScheme, s)
+
+instantiateUserType :: UType -> CGen UType
+instantiateUserType ty = do
+  let tVars = freeTVars ty
+  s <- sequence $ M.fromSet (const freshVar) tVars
+  pure $ substTVars s ty
+
 
 checkStmts :: [T.Stmt ()] -> CGen ([T.Stmt UType], Subst)
 checkStmts = checkList checkStmt
