@@ -19,7 +19,7 @@ Code gen:
 
 Extension:
 - [ ] Anonymous functions (lambda notation)
-- [ ] Custom algebraic data types?
+- [ ] Custom algebraic data types (records with field selectors)
 - [ ] Custom typeclasses with dictionary passing
 - [ ] Further ideas
 

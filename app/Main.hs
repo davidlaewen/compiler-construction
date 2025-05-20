@@ -16,7 +16,7 @@ import Text.Megaparsec (errorBundlePretty)
 import System.IO (hPutStrLn, stderr)
 import Control.Exception (try, IOException)
 import Syntax.Desugar (desugar)
-import TypeInference.Definition (UType, UScheme, runCgen)
+import TypeInference.Definition (UType, UScheme, runCGen)
 import TypeInference.ConstraintGen (checkProgram)
 import TypeInference.Annotate (annotateProgram)
 import CodeGen.CodeGen (codegen, runCodegen)
@@ -60,7 +60,7 @@ sccStage = Stage $ \_ p@(TypeAST.Program varDecls _) ->
 
 typecheckStage :: Stage (TypeAST.Program () ()) (TypeAST.Program UType UScheme)
 typecheckStage = Stage $ \_ p ->
-  case runCgen (checkProgram p) of
+  case runCGen (checkProgram p) of
     Left err -> Left $ hPutStrLn stderr $ T.unpack err
     Right (p', s) -> Right $ annotateProgram s p'
 

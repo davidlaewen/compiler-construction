@@ -4,8 +4,7 @@ module TypeInference.Unify (
   Subst,
   unify,
   UType(..),
-  UScheme(..),
-  runCgen
+  UScheme(..)
 ) where
 import TypeInference.Definition
 import qualified Data.Map as M

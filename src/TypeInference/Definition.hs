@@ -9,7 +9,7 @@ module TypeInference.Definition (
   Types(..),
   throwLocError,
   applySubst,
-  runCgen,
+  runCGen,
   freshVar,
   substTVars,
   freeTVars,
@@ -109,8 +109,8 @@ envLookupFun name =
 envLookupRetType :: CGen (Maybe UType)
 envLookupRetType = gets (M.lookup RetType . localEnv)
 
-runCgen :: CGen a -> Either T.Text a
-runCgen x = fst <$> runExcept (runStateT
+runCGen :: CGen a -> Either T.Text a
+runCGen x = fst <$> runExcept (runStateT
   x CGenState{ globalEnv = M.empty, localEnv = M.empty, varState = 0 })
 
 freshVar :: CGen UVar
