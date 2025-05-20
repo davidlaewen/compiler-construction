@@ -32,6 +32,26 @@ varDeclP = do
   (_,_,endPos) <- symbolP SymSemicolon <|> registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
   pure $ VarDecl (Loc startPos endPos) mty name expr
 
+dataDeclP :: TokenParser DataDecl
+dataDeclP = do
+  (_,startPos,_) <- keywordP KwData
+  (name,_,_) <- idP
+  (constrs,_,endPos) <- bracesP $ many dataConstrP
+
+  pure $ DataDecl (Loc startPos endPos) name constrs
+
+dataConstrP :: TokenParser DataConstr
+dataConstrP = do
+  (name,startPos,_) <- idP
+  (args,_,endPos) <- parensP $ many constrArgP
+  pure $ DataConstr (Loc startPos endPos) name args
+  where
+    constrArgP :: TokenParser (T.Text,Type)
+    constrArgP = do
+      (selector,_,_) <- idP
+      _ <- symbolP SymColon
+      ty <- typeP
+      pure (selector,ty)
 
 funDeclP :: TokenParser FunDecl
 funDeclP = do
@@ -355,9 +375,10 @@ stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
 programP :: TokenParser Program
 programP = do
   -- All varDecls must appear before all funDecls
+  dataDecls <- many dataDeclP
   varDecls <- many (try isVarDeclLookAhead >> varDeclP)
   funDecls <- many funOrMutualDeclP
-  Program varDecls funDecls <$ eof
+  Program dataDecls varDecls funDecls <$ eof
   where
     -- Disallow generic variables on top level
     isVarDeclLookAhead :: TokenParser ()

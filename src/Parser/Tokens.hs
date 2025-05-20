@@ -40,6 +40,7 @@ data Keyword where
   KwReturn  :: Keyword
 
   KwMutual  :: Keyword
+  KwData    :: Keyword
 
   KwInt     :: Keyword
   KwBool    :: Keyword
@@ -62,6 +63,7 @@ instance Show Keyword where
   show KwReturn  = "return"
 
   show KwMutual  = "mutual"
+  show KwData    = "data"
 
   show KwInt     = "Int"
   show KwBool    = "Bool"

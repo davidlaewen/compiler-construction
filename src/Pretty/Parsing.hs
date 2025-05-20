@@ -8,7 +8,7 @@ import Pretty.Common
 
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
-prettyPrintProgram _ (Program varDecls funDecls) = do
+prettyPrintProgram _ (Program _ varDecls funDecls) = do
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" (prettyPrintFunMutDecl 0) funDecls

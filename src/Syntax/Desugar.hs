@@ -14,7 +14,7 @@ class Desugar a b where
 
 instance Desugar P.Program (T.Program () ()) where
   desugar :: P.Program -> T.Program () ()
-  desugar (P.Program varDecls funDecls) =
+  desugar (P.Program _ varDecls funDecls) =
     T.Program (desugar <$> varDecls) (desugar <$> funDecls)
 
 

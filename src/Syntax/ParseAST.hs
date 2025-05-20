@@ -2,6 +2,8 @@
 
 module Syntax.ParseAST (
   Program(..),
+  DataDecl(..),
+  DataConstr(..),
   VarDecl(..),
   FunDecl(..),
   FunMutDecl(..),
@@ -20,7 +22,12 @@ import Utils.Loc ( Loc(..), HasLoc(..), defaultLoc )
 import Parser.Tokens (Symbol(..))
 
 
-data Program = Program [VarDecl] [FunMutDecl]
+data Program = Program [DataDecl] [VarDecl] [FunMutDecl]
+  deriving Show
+
+data DataDecl = DataDecl Loc T.Text [DataConstr]
+  deriving Show
+data DataConstr = DataConstr Loc T.Text [(T.Text, Type)]
   deriving Show
 
 data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
