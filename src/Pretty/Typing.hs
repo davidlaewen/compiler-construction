@@ -31,6 +31,7 @@ printFunMutDecl :: (Show a, Show b) => Indentation -> FunMutDecl a b -> IO ()
 printFunMutDecl i (SingleDecl funDecl) = printFunDecl i funDecl
 printFunMutDecl i (MutualDecls _ funDecls) = do
   putShow KwMutual
+  putChar ' '
   printBlock i $
     sepBy "\n" (printFunDecl $ i + tabWidth) funDecls
 

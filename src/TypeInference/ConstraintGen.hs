@@ -5,6 +5,7 @@ module TypeInference.ConstraintGen (checkProgram) where
 
 import TypeInference.Definition
 import TypeInference.Unify
+import TypeInference.Annotate (annotateFunDecl)
 import qualified Syntax.TypeAST as T
 import Control.Monad.State
 import Data.Text (pack)
@@ -54,7 +55,8 @@ checkFunMutDecl (T.MutualDecls loc funDecls) = do
   -- Check fun decls in order without generalising
   (fds,ss) <- checkList checkFunDecl funDecls
   -- Substitute and generalise all function schemes
-  let fds' = map (subst ss) fds
+  let fds' = map (annotateFunDecl ss) fds
+  -- let fds' = map (subst ss) fds
   fds'' <- forM fds' generaliseFunScheme
   pure (T.MutualDecls loc fds'', ss)
 
