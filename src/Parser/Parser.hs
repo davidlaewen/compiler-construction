@@ -36,8 +36,7 @@ dataDeclP :: TokenParser DataDecl
 dataDeclP = do
   (_,startPos,_) <- keywordP KwData
   (name,_,_) <- idP
-  (constrs,_,endPos) <- bracesP $ many dataConstrP
-
+  (constrs,_,endPos) <- bracesP $ dataConstrP `sepBy` symbolP SymComma
   pure $ DataDecl (Loc startPos endPos) name constrs
 
 dataConstrP :: TokenParser DataConstr

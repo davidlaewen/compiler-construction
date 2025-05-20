@@ -8,11 +8,26 @@ import Pretty.Common
 
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
-prettyPrintProgram _ (Program _ varDecls funDecls) = do
+prettyPrintProgram _ (Program dataDecls varDecls funDecls) = do
+  sepBy "\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" (prettyPrintFunMutDecl 0) funDecls
   putStrLn ""
+
+prettyPrintDataDecl :: Indentation -> DataDecl -> IO ()
+prettyPrintDataDecl i (DataDecl _ name constrs) = do
+  printIndentation i
+  putShow KwData
+  spaces (T.putStr name)
+  printBlock i $ sepBy ",\n" (prettyPrintConstr (i + tabWidth)) constrs
+  where
+    prettyPrintConstr :: Indentation -> DataConstr -> IO ()
+    prettyPrintConstr i' (DataConstr _ cName args) = do
+      printIndentation i'
+      T.putStr cName >> putChar ' '
+      parens $ sepBy ", " (\(cid,ty) ->
+        T.putStr cid >> putShow SymComma >> prettyPrintType ty) args
 
 prettyPrintVarDecl :: Indentation -> VarDecl -> IO ()
 prettyPrintVarDecl i (VarDecl _ typeM ident e) = do

@@ -1,0 +1,8 @@
+data MaybeBool {
+  Nothing(),
+  Just(bool : Bool)
+}
+
+main() {
+  print(42);
+}
