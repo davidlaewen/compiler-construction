@@ -9,7 +9,7 @@ import Pretty.Common
 
 prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program dataDecls varDecls funDecls) = do
-  sepBy "\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
+  sepBy "\n\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" (prettyPrintFunMutDecl 0) funDecls
@@ -25,9 +25,9 @@ prettyPrintDataDecl i (DataDecl _ name constrs) = do
     prettyPrintConstr :: Indentation -> DataConstr -> IO ()
     prettyPrintConstr i' (DataConstr _ cName args) = do
       printIndentation i'
-      T.putStr cName >> putChar ' '
+      T.putStr cName
       parens $ sepBy ", " (\(cid,ty) ->
-        T.putStr cid >> putShow SymComma >> prettyPrintType ty) args
+        T.putStr cid >> putShow SymColon >> prettyPrintType ty) args
 
 prettyPrintVarDecl :: Indentation -> VarDecl -> IO ()
 prettyPrintVarDecl i (VarDecl _ typeM ident e) = do

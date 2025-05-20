@@ -3,6 +3,19 @@ data MaybeBool {
   Just(bool : Bool)
 }
 
+data PeanoNat {
+  Zero(), Succ(pred : Int)
+}
+
+data EitherIntBool {
+  Left(val : Int),
+  Right(val : Bool)
+}
+
+f(x) :: Int -> Int {
+  return x;
+}
+
 main() {
   print(42);
 }
