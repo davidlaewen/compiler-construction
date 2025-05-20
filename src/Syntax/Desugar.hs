@@ -6,7 +6,7 @@ module Syntax.Desugar (
 
 import qualified Syntax.ParseAST as P
 import qualified Syntax.TypeAST as T
-import qualified TypeInference.Definition as U
+import qualified TypeInference.Types as U ( UType(..) )
 import Utils.Loc (Loc)
 
 class Desugar a b where

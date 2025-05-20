@@ -18,8 +18,8 @@ module CodeGen.Definition (
 ) where
 
 import CodeGen.Instructions (Instr(..))
-import TypeInference.Definition (UScheme,UType)
-import qualified TypeInference.Definition as TI
+import TypeInference.Types (UScheme, UType)
+import qualified TypeInference.Types as TI (UScheme(..), UType(..))
 
 import Control.Monad.State (State, evalState, modify, gets)
 import qualified Data.Map as M
@@ -56,7 +56,7 @@ freshLabel t = do
 modifyOffsets :: (LocationMap -> LocationMap) -> Codegen ()
 modifyOffsets f = modify (\s -> s { offsets = f (offsets s) })
 
-modifyHeapLocs :: (M.Map T.Text Int -> M.Map T.Text Int) -> Codegen ()
+modifyHeapLocs :: (LocationMap -> LocationMap) -> Codegen ()
 modifyHeapLocs f = modify (\s -> s { heapLocs = f (heapLocs s) })
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]

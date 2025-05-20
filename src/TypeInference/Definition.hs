@@ -12,6 +12,7 @@ module TypeInference.Definition (
   applySubst,
   runCgen,
   freshVar,
+  replaceTVars,
   envInsertVar,
   envInsertRetType,
   envLocalInsertFun,
@@ -117,6 +118,20 @@ freshVar = do
   i <- gets varState
   modify (\s -> s{ varState = i+1 })
   pure i
+
+-- | Replace type variables in user types with fresh unification variables
+replaceTVars :: UType -> CGen UType
+replaceTVars (TVar _) = UVar <$> freshVar
+replaceTVars (Prod ty1 ty2) = do
+  ty1' <- replaceTVars ty1
+  ty2' <- replaceTVars ty2
+  pure $ Prod ty1' ty2'
+replaceTVars (List ty) = replaceTVars ty >>= \ty' -> pure (List ty')
+replaceTVars (Fun argTys retTy) = do
+  argTys' <- mapM replaceTVars argTys
+  retTy' <- replaceTVars retTy
+  pure $ Fun argTys' retTy'
+replaceTVars ty = pure ty
 
 instance Types UType where
   subst :: Subst -> UType -> UType

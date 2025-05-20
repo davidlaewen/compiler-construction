@@ -87,7 +87,7 @@ parseArgs ("desugar" : filePath : _) =
 parseArgs ("sccs" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> sccStage >-> printStage))
 parseArgs ("typecheck" : filePath : _) =
-  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> typecheckStage >-> printStage))
+  Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> sccStage >-> typecheckStage >-> printStage))
 parseArgs ("typeprint" : filePath : _) =
   Just (Args filePath (lexStage >-> parseStage >-> desugarStage >-> sccStage >-> typecheckStage >-> typePrintStage))
 parseArgs ("codegen" : filePath : _) =

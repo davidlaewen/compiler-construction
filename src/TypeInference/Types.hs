@@ -31,6 +31,6 @@ instance Show UType where
 data UScheme = UScheme (S.Set UVar) UType
 
 instance Show UScheme where
-  show (UScheme vars ty) = "∀" <> unwords (showUVar <$> S.toList vars) <> ". " <> show ty
+  show (UScheme vars ty) = "∀ " <> unwords (showUVar <$> S.toList vars) <> ". " <> show ty
     where
       showUVar i = "u" <> show i

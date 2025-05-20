@@ -82,19 +82,26 @@ genFunDeclTypes name params = do
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
   -- Generate uvars for params and return type, add to environment
-  (uVarsParams,retTy) <- genFunDeclTypes name params
+  (uVarsParams,uVarRet) <- genFunDeclTypes name params
+  let funTy = Fun uVarsParams uVarRet
   forM_ (zip params uVarsParams) $
     uncurry (envInsertVar LocalLevel)
-  envInsertRetType retTy
-  envLocalInsertFun name (Fun uVarsParams retTy)
+  envInsertRetType uVarRet
+  envLocalInsertFun name funTy
   -- Check var decls and statements
   (varDecls',varDeclsSubst) <- checkVarDecls LocalLevel varDecls
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- TODO: Check user-specified type against inferred type
-  let s = stmtsSubst <> varDeclsSubst
-  let funTy = subst s $ Fun uVarsParams retTy
-  let funScheme = UScheme S.empty funTy
+  tySubst <- case mTy of
+    Nothing -> pure mempty
+    Just userTy -> do
+      userTy' <- replaceTVars userTy
+      unify funTy userTy' loc
+  applySubst tySubst
+  let s = stmtsSubst <> varDeclsSubst <> tySubst
+  let ty = subst s $ Fun uVarsParams uVarRet
+  let funScheme = UScheme S.empty ty
   envGlobalInsertFun name funScheme
   pure (T.FunDecl loc name params mTy varDecls' stmts' funScheme, s)
 
