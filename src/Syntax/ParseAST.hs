@@ -76,6 +76,7 @@ data Expr = Ident Loc T.Text
           | UnOp Loc UnaryOp Expr
           | BinOp Loc BinaryOp Expr Expr
           | FunCallE Loc T.Text [Expr]
+          | ConstrCall Loc T.Text [Expr]
           | EmptyList Loc
           | Tuple Loc Expr Expr
           | GarbageExpr
@@ -154,6 +155,7 @@ instance HasLoc Expr where
   getLoc (Char loc _) = loc
   getLoc (UnOp loc _ _) = loc
   getLoc (BinOp loc _ _ _) = loc
+  getLoc (ConstrCall loc _ _) = loc
   getLoc (FunCallE loc _ _) = loc
   getLoc (EmptyList loc) = loc
   getLoc (Tuple loc _ _) = loc

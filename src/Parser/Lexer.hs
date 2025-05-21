@@ -60,7 +60,7 @@ intL = IntLit <$> decimal <* withRecovery recovery (notFollowedBy letterChar)
       void $ some alphaNumChar
 
 boolL :: Lexer Token
-boolL = BoolLit <$> (trueP <|> falseP) <* notFollowedBy alphaNumChar
+boolL = BoolLit <$> (trueP <|> falseP) <* notFollowedBy (alphaNumChar <|> char '_')
   where
     trueP = symbol "True" >> pure True
     falseP = symbol "False" >> pure False
@@ -98,7 +98,7 @@ keywordL :: Lexer Token
 keywordL = choice $ keyword <$> keywords
   where
     keyword kw = do
-      _ <- string (T.pack $ show kw) <* notFollowedBy alphaNumChar
+      _ <- string (T.pack $ show kw) <* notFollowedBy (alphaNumChar <|> char '_')
       pure $ Keyword kw
 
 -- | Parses a symbol

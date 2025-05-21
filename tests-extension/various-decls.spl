@@ -13,9 +13,10 @@ data EitherIntBool {
 }
 
 f(x) :: MaybeBool -> MaybeBool {
+  var y = Nothing();
   return x;
 }
 
 main() {
-  print(42);
+  f(Just());
 }

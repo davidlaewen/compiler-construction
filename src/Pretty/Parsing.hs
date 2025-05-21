@@ -54,6 +54,7 @@ prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   spaces (putShow SymRightArrow)
   prettyPrintType retType
+prettyPrintType (DataT _ name) = T.putStr name
 prettyPrintType GarbageType = putShow GarbageType
 
 prettyPrintExpr :: Expr -> IO ()
@@ -66,7 +67,10 @@ prettyPrintExpr = go 0
     go _ (Char _ c) = putShow (CharLit c)
     go _ (Bool _ b) = putShow (BoolLit b)
     go _ (EmptyList _) = putShow SymBracketLeft >> putShow SymBracketRight
-    go _ (FunCallE _ name args) = do
+    go _ (FunCallE _ funId args) = do
+      T.putStr funId
+      parens $ sepBy ", " (go 0) args
+    go _ (ConstrCall _ name args) = do
       T.putStr name
       parens $ sepBy ", " (go 0) args
     go _ (Tuple _ e1 e2) = do

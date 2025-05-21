@@ -153,6 +153,13 @@ funCallEP = do
   ((funId,args),start,end) <- funCallP
   pure $ FunCallE (Loc start end) funId args
 
+constrCallP :: TokenParser Expr
+constrCallP = do
+  (name,start,_) <- nameP
+  (args,_,end) <- parensP $ exprP `sepBy` symbolP SymComma
+  pure $ ConstrCall (Loc start end) name args
+
+
 parenOrTupleP :: TokenParser Expr
 parenOrTupleP = do
   (_,start,_) <- symbolP SymParenLeft
@@ -175,6 +182,7 @@ atomP :: TokenParser Expr
 atomP = parenOrTupleP <|>
         intP <|> boolP <|> charP <|>
         emptyListP <|>
+        constrCallP <|>
         try funCallEP <|> identP
   where
     emptyListP = do

@@ -1,0 +1,20 @@
+/*
+  We treat `True` and `False` as reserved keywords, much like `var`, `if`, `while`, etc.
+  These are already handled in the lexer, hence we disallow e.g. a user-defined constructor
+  `True()`, but this restriction prevents us needing to backtrack when parsing a name, i.e.
+  an uppercase ADT or constructor name.
+  This is also the case for the built-in types `Int`, `Char` and `Bool`, which are lexed by
+  the keyword lexer, hence the user can't redefine them as ADTs or constructors, but if a
+  name like `BoolFoo` or `Bool_` is lexed and parsed just fine. */
+
+data Bool_ {
+  True_(),
+  False_()
+}
+
+var x = True;
+var y = True1();
+
+main() {
+  return;
+}
