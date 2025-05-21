@@ -25,19 +25,19 @@ exprToGraph _ Char{} = pure ()
 exprToGraph _ EmptyList{} = pure ()
 
 stmtToGraph :: Vertex -> Stmt () -> GraphGen ()
-stmtToGraph declVtx (If loc condExpr thenStmts elseStmts) = do
+stmtToGraph declVtx (If _ condExpr thenStmts elseStmts) = do
   exprToGraph declVtx condExpr
   mapM_ (stmtToGraph declVtx) thenStmts
   mapM_ (stmtToGraph declVtx) elseStmts
 
-stmtToGraph declVtx (While loc condExpr stmts) = do
+stmtToGraph declVtx (While _ condExpr stmts) = do
   exprToGraph declVtx condExpr
   mapM_ (stmtToGraph declVtx) stmts
 
-stmtToGraph declVtx (Assign _ varLookup ty expr) =
+stmtToGraph declVtx (Assign _ _ _ expr) =
   exprToGraph declVtx expr
 
-stmtToGraph declVtx (FunCall loc funName args) = do
+stmtToGraph declVtx (FunCall _ funName args) = do
   case funName of -- Again, insert edge only for user-defined functions
     Name name -> insertEdge declVtx name
     _ -> pure ()
@@ -49,11 +49,11 @@ stmtToGraph declVtx (Return _ mExpr) = do
 -- | Only to be called for var decls at the start of a function decl, not the
 -- global var declarations, which we don't include in the SCC analysis
 varDeclToGraph :: Vertex -> VarDecl () -> GraphGen ()
-varDeclToGraph declVtx (VarDecl loc mty varName expr ty) = do
+varDeclToGraph declVtx (VarDecl _ _ _ expr _) = do
   exprToGraph declVtx expr
 
 funDeclToGraph :: FunDecl () () -> GraphGen ()
-funDeclToGraph funDecl@(FunDecl _ funName argNames mty varDecls stmts ty) = do
+funDeclToGraph funDecl@(FunDecl _ funName _ _ varDecls stmts _) = do
   declVtx <- nameToVertex funName -- Get existing or new vertex ID
   insertDecl declVtx funDecl -- Insert into fun decl map
   mapM_ (varDeclToGraph declVtx) varDecls
@@ -66,5 +66,5 @@ funMutDeclToGraph (MutualDecls _ funDecls) = do
   mapM_ funDeclToGraph funDecls
 
 programToGraph :: Program () () -> GraphGen ()
-programToGraph (Program varDecls funMutDecls) = do
+programToGraph (Program _ _ funMutDecls) = do
   mapM_ funMutDeclToGraph funMutDecls

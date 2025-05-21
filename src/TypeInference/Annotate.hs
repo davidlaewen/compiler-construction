@@ -4,8 +4,8 @@ import TypeInference.Definition
 import qualified Syntax.TypeAST as T
 
 annotateProgram :: Subst -> T.Program UType UScheme -> T.Program UType UScheme
-annotateProgram s (T.Program varDecls funDecls) =
-  T.Program (annotateVarDecl s <$> varDecls) (annotateFunMutDecl s <$> funDecls)
+annotateProgram s (T.Program _ varDecls funDecls) =
+  T.Program [] (annotateVarDecl s <$> varDecls) (annotateFunMutDecl s <$> funDecls)
 
 annotateVarDecl :: Subst -> T.VarDecl UType -> T.VarDecl UType
 annotateVarDecl s (T.VarDecl loc mTy name expr ty) =

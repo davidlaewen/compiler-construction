@@ -15,10 +15,11 @@ import qualified Data.Text as Text
 import Utils.Loc (Loc)
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
-checkProgram (T.Program varDecls funDecls) = do
+checkProgram (T.Program dataDecls varDecls funDecls) = do
+  dds <- mapM checkDataDecl dataDecls
   (vds,s1) <- checkVarDecls GlobalLevel varDecls
   (fds,s2) <- checkList checkFunMutDecl funDecls
-  pure (T.Program vds fds, s1 <> s2)
+  pure (T.Program dds vds fds, s1 <> s2)
 
 checkList :: (a -> CGen (b, Subst)) -> [a] -> CGen ([b], Subst)
 checkList _ [] = pure ([], mempty)
@@ -26,6 +27,18 @@ checkList f (x:xs) = do
   (x',s) <- f x
   (xs',ss) <- checkList f xs
   pure (x':xs', ss <> s)
+
+checkDataDecl :: T.DataDecl -> CGen T.DataDecl
+checkDataDecl decl@(T.DataDecl _ name constrs) = do
+  mapM_ (checkDataConstr name) constrs
+  pure decl
+
+checkDataConstr :: Text.Text -> T.DataConstr -> CGen ()
+checkDataConstr declName (T.DataConstr _ cName args) = do
+  -- Quantify over type variables to support polymorphism
+  envInsertConstr cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
+  forM_ args (\(selName,ty) -> -- Insert selector schemes
+    envInsertSelector selName $ UScheme S.empty (Fun [Data declName] ty))
 
 checkVarDecls :: EnvLevel -> [T.VarDecl ()] -> CGen ([T.VarDecl UType], Subst)
 checkVarDecls envLevel = checkList $ checkVarDecl envLevel
@@ -83,7 +96,7 @@ genFunDeclTypes name params = do
 
 checkFunDecl :: T.FunDecl () () -> CGen (T.FunDecl UType UScheme, Subst)
 checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
-  -- Generate uvars for params and return type, add to environment
+  -- Generate uvars for params and return type, add to local environment
   (uVarsParams,uVarRet) <- genFunDeclTypes name params
   let funTy = Fun uVarsParams uVarRet
   forM_ (zip params uVarsParams) $
@@ -97,8 +110,8 @@ checkFunDecl (T.FunDecl loc name params mTy varDecls stmts _) = do
   -- Check user-specified type against inferred type
   tySubst <- case mTy of
     Nothing -> pure mempty
-    Just userTy -> do
-      userTy' <- instantiateUserType userTy -- replaceTVars userTy
+    Just userTy -> do -- Substitute uvars for tvars in annotated type
+      userTy' <- instantiateUserType userTy
       unify funTy userTy' loc
   applySubst tySubst
   let s = stmtsSubst <> varDeclsSubst <> tySubst
@@ -235,32 +248,36 @@ instantiateScheme (UScheme tVars ty) = do
   pure $ subst (Subst s) ty
 
 getFunType :: T.FunName -> Loc -> CGen UScheme
-getFunType funName loc = do
-  case funName of
-    T.Name name -> do
-      mFunType <- envLookupFun name
-      case mFunType of
-        Nothing -> throwLocError loc $ "No declaration for function `" <> name <> "`"
-        Just funType -> pure funType
-    T.Not -> pure $ UScheme S.empty (Fun [Bool] Bool)
-    T.Neg -> pure $ UScheme S.empty (Fun [Int] Int)
-    T.Add -> pure $ UScheme S.empty (Fun [Int, Int] Int)
-    T.Sub -> pure $ UScheme S.empty (Fun [Int, Int] Int)
-    T.Mul -> pure $ UScheme S.empty (Fun [Int, Int] Int)
-    T.Div -> pure $ UScheme S.empty (Fun [Int, Int] Int)
-    T.Mod -> pure $ UScheme S.empty (Fun [Int, Int] Int)
-    T.Eq -> pure $ UScheme (S.singleton 0) (Fun [UVar 0, UVar 0] Bool) -- TODO: We probably want an Eq type class for this
-    T.Neq -> pure $ UScheme (S.singleton 0) (Fun [UVar 0, UVar 0] Bool) -- Same here
-    T.Lt -> pure $ UScheme S.empty (Fun [Int,Int] Bool)
-    T.Gt -> pure $ UScheme S.empty (Fun [Int,Int] Bool)
-    T.Lte -> pure $ UScheme S.empty (Fun [Int,Int] Bool)
-    T.Gte -> pure $ UScheme S.empty (Fun [Int,Int] Bool)
-    T.And -> pure $ UScheme S.empty (Fun [Bool,Bool] Bool)
-    T.Or -> pure $ UScheme S.empty (Fun [Bool,Bool] Bool)
-    T.Cons -> pure $ UScheme (S.singleton 0) (Fun [UVar 0, List (UVar 0)] (List (UVar 0)))
-    T.IsEmpty -> pure $ UScheme (S.singleton 0) (Fun [List (UVar 0)] Bool)
-    T.Print -> pure $ UScheme (S.singleton 0) (Fun [UVar 0] Void)
-    T.HeadFun -> pure $ UScheme (S.singleton 0) (Fun [List $ UVar 0] $ UVar 0)
-    T.TailFun -> pure $ UScheme (S.singleton 0) (Fun [List $ UVar 0] (List (UVar 0)))
-    T.FstFun -> pure $ UScheme (S.fromList [0, 1]) (Fun [Prod (UVar 0) (UVar 1)] (UVar 0))
-    T.SndFun -> pure $ UScheme (S.fromList [0, 1]) (Fun [Prod (UVar 0) (UVar 1)] (UVar 1))
+getFunType (T.Name name) loc = do
+    mFunType <- envLookupFun name
+    case mFunType of
+      Nothing -> throwLocError loc $ "No declaration for function `" <> name <> "`"
+      Just funType -> pure funType
+getFunType (T.Constr name) loc = envLookupConstr name >>= \case
+    Just constrTy -> pure constrTy
+    Nothing -> throwLocError loc $ "No declaration for constructor `" <> name <> "`"
+getFunType (T.Selector name) loc = envLookupSelector name >>= \case
+    Just selTy -> pure selTy
+    Nothing -> throwLocError loc $ "No declaration for selector `" <> name <> "`"
+getFunType T.Not     _ = pure $ UScheme S.empty (Fun [Bool] Bool)
+getFunType T.Neg     _ = pure $ UScheme S.empty (Fun [Int] Int)
+getFunType T.Add     _ = pure $ UScheme S.empty (Fun [Int, Int] Int)
+getFunType T.Sub     _ = pure $ UScheme S.empty (Fun [Int, Int] Int)
+getFunType T.Mul     _ = pure $ UScheme S.empty (Fun [Int, Int] Int)
+getFunType T.Div     _ = pure $ UScheme S.empty (Fun [Int, Int] Int)
+getFunType T.Mod     _ = pure $ UScheme S.empty (Fun [Int, Int] Int)
+getFunType T.Eq      _ = pure $ UScheme (S.singleton 0) (Fun [UVar 0, UVar 0] Bool) -- TODO: We probably want an Eq type class for this
+getFunType T.Neq     _ = pure $ UScheme (S.singleton 0) (Fun [UVar 0, UVar 0] Bool) -- Same here
+getFunType T.Lt      _ = pure $ UScheme S.empty (Fun [Int,Int] Bool)
+getFunType T.Gt      _ = pure $ UScheme S.empty (Fun [Int,Int] Bool)
+getFunType T.Lte     _ = pure $ UScheme S.empty (Fun [Int,Int] Bool)
+getFunType T.Gte     _ = pure $ UScheme S.empty (Fun [Int,Int] Bool)
+getFunType T.And     _ = pure $ UScheme S.empty (Fun [Bool,Bool] Bool)
+getFunType T.Or      _ = pure $ UScheme S.empty (Fun [Bool,Bool] Bool)
+getFunType T.Cons    _ = pure $ UScheme (S.singleton 0) (Fun [UVar 0, List (UVar 0)] (List (UVar 0)))
+getFunType T.IsEmpty _ = pure $ UScheme (S.singleton 0) (Fun [List (UVar 0)] Bool)
+getFunType T.Print   _ = pure $ UScheme (S.singleton 0) (Fun [UVar 0] Void)
+getFunType T.HeadFun _ = pure $ UScheme (S.singleton 0) (Fun [List $ UVar 0] $ UVar 0)
+getFunType T.TailFun _ = pure $ UScheme (S.singleton 0) (Fun [List $ UVar 0] (List (UVar 0)))
+getFunType T.FstFun  _ = pure $ UScheme (S.fromList [0, 1]) (Fun [Prod (UVar 0) (UVar 1)] (UVar 0))
+getFunType T.SndFun  _ = pure $ UScheme (S.fromList [0, 1]) (Fun [Prod (UVar 0) (UVar 1)] (UVar 1))

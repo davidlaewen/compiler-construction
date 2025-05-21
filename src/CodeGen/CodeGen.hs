@@ -50,7 +50,7 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 -- Code generation
 
 codegen :: TA.Program UType UScheme -> Codegen Program
-codegen (TA.Program varDecls funDecls) = do
+codegen (TA.Program _ varDecls funDecls) = do
   let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
   let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)

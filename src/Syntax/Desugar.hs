@@ -8,15 +8,25 @@ import qualified Syntax.ParseAST as P
 import qualified Syntax.TypeAST as T
 import qualified TypeInference.Types as U ( UType(..) )
 import Utils.Loc (Loc)
+import qualified Control.Arrow as Data.Bifunctor
 
 class Desugar a b where
   desugar :: a -> b
 
 instance Desugar P.Program (T.Program () ()) where
   desugar :: P.Program -> T.Program () ()
-  desugar (P.Program _ varDecls funDecls) =
-    T.Program (desugar <$> varDecls) (desugar <$> funDecls)
+  desugar (P.Program dataDecls varDecls funDecls) =
+    T.Program (desugar <$> dataDecls) (desugar <$> varDecls) (desugar <$> funDecls)
 
+instance Desugar P.DataDecl T.DataDecl where
+  desugar :: P.DataDecl -> T.DataDecl
+  desugar (P.DataDecl loc name constrs) =
+    T.DataDecl loc name (desugar <$> constrs)
+
+instance Desugar P.DataConstr T.DataConstr where
+  desugar :: P.DataConstr -> T.DataConstr
+  desugar (P.DataConstr loc name args) =
+    T.DataConstr loc name $ Data.Bifunctor.second desugar <$> args
 
 instance Desugar P.VarDecl (T.VarDecl ()) where
   desugar :: P.VarDecl -> T.VarDecl ()
@@ -72,6 +82,7 @@ instance Desugar P.Expr (T.Expr ()) where
   desugar (P.FunCallE loc "print" args) = T.FunCallE loc T.Print (desugar <$> args) ()
   desugar (P.FunCallE loc "isEmpty" args) = T.FunCallE loc T.IsEmpty (desugar <$> args) ()
   desugar (P.FunCallE loc name args) = T.FunCallE loc (T.Name name) (desugar <$> args) ()
+  desugar (P.ConstrCall loc name args) = T.FunCallE loc (T.Constr name) (desugar <$> args) ()
   desugar (P.EmptyList loc) = T.EmptyList loc ()
   desugar (P.Tuple loc e1 e2) = T.Tuple loc (desugar e1) (desugar e2) ()
   desugar P.GarbageExpr = error "Attempted to desugar garbage Expr node!"
@@ -117,7 +128,6 @@ instance Desugar P.Type U.UType where
   desugar (P.List _ t) = U.List (desugar t)
   desugar (P.Void _) = U.Void
   desugar (P.Fun _ ts t) = U.Fun (desugar <$> ts) (desugar t)
-  -- TODO: We probably want to replace named type variables with
-  -- de Bruijn indices here
+  desugar (P.DataT _ name) = U.Data name
   desugar (P.TyVar _ name) = U.TVar name
   desugar P.GarbageType = error "Attempted to desugar garbage Type node!"

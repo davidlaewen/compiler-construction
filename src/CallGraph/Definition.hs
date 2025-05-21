@@ -97,5 +97,5 @@ funMutDeclFromSCC :: SCC (FunDecl () ()) -> FunMutDecl () ()
 funMutDeclFromSCC (AcyclicSCC funDecl) = SingleDecl funDecl
 funMutDeclFromSCC (CyclicSCC funDecls) = MutualDecls defaultLoc funDecls
 
-programFromSCCs :: [VarDecl ()] -> [SCC (FunDecl () ())] -> Program () ()
-programFromSCCs varDecls sccs = Program varDecls (funMutDeclFromSCC <$> sccs)
+programFromSCCs :: [DataDecl] -> [VarDecl ()] -> [SCC (FunDecl () ())] -> Program () ()
+programFromSCCs dataDecls varDecls sccs = Program dataDecls varDecls (funMutDeclFromSCC <$> sccs)

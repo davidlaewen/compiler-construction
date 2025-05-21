@@ -1,5 +1,7 @@
 module Syntax.TypeAST (
   Program(..),
+  DataDecl(..),
+  DataConstr(..),
   VarDecl(..),
   FunDecl(..),
   FunMutDecl(..),
@@ -15,7 +17,13 @@ import qualified Data.Text as T
 import TypeInference.Types ( UType )
 import Utils.Loc (Loc, HasLoc(..))
 
-data Program varAnnot funAnnot = Program [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
+data Program varAnnot funAnnot = Program [DataDecl] [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
+  deriving Show
+
+data DataDecl = DataDecl Loc T.Text [DataConstr]
+  deriving Show
+
+data DataConstr = DataConstr Loc T.Text [(T.Text,UType)]
   deriving Show
 
 data VarDecl a = VarDecl Loc (Maybe UType) T.Text (Expr a) a
@@ -42,6 +50,8 @@ data Field = Head | Tail | Fst | Snd
   deriving Show
 
 data FunName = Name T.Text
+             | Constr T.Text
+             | Selector T.Text
              | Not | Neg
              | Add | Sub | Mul | Div | Mod
              | Eq | Neq | Lt | Gt | Lte | Gte
@@ -72,6 +82,8 @@ getTypeExpr (Tuple _ _ _ ty) = ty
 
 instance Show FunName where
   show (Name t) = T.unpack t
+  show (Constr t) = T.unpack t
+  show (Selector t) = T.unpack t
   show Not = "_not"
   show Neg = "_neg"
   show Add = "_add"

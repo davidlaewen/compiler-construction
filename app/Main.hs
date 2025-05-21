@@ -53,10 +53,10 @@ desugarStage :: Stage ParseAST.Program (TypeAST.Program () ())
 desugarStage = Stage $ \_ p -> Right $ desugar p
 
 sccStage :: Stage (TypeAST.Program () ()) (TypeAST.Program () ())
-sccStage = Stage $ \_ p@(TypeAST.Program varDecls _) ->
+sccStage = Stage $ \_ p@(TypeAST.Program dataDecls varDecls _) ->
   case runGraphGen (programToGraph p) of
     Left err -> Left $ hPutStrLn stderr $ T.unpack err
-    Right graphGenState -> Right $ programFromSCCs varDecls (findSCCs graphGenState)
+    Right graphGenState -> Right $ programFromSCCs dataDecls varDecls (findSCCs graphGenState)
 
 typecheckStage :: Stage (TypeAST.Program () ()) (TypeAST.Program UType UScheme)
 typecheckStage = Stage $ \_ p ->

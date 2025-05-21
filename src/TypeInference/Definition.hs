@@ -10,16 +10,12 @@ module TypeInference.Definition (
   throwLocError,
   applySubst,
   runCGen,
-  freshVar,
-  substTVars,
-  freeTVars,
-  envInsertVar,
-  envInsertRetType,
-  envLocalInsertFun,
-  envGlobalInsertFun,
+  freshVar, substTVars, freeTVars,
+  envInsertVar, envInsertRetType,
+  envLocalInsertFun, envGlobalInsertFun,
+  envInsertConstr, envInsertSelector,
   clearLocalEnv,
-  envLookupVar,
-  envLookupFun,
+  envLookupVar, envLookupFun, envLookupConstr, envLookupSelector,
   envLookupRetType,
 ) where
 
@@ -42,6 +38,7 @@ data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
   deriving (Eq, Ord)
 
 data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
+              | GlobalConstr T.Text | GlobalSelector T.Text
   deriving (Eq, Ord)
 
 data EnvLevel = GlobalLevel | LocalLevel
@@ -81,6 +78,12 @@ envLocalInsertFun ident ty = modifyLocalEnv (M.insert (LocalFunName ident) ty)
 envGlobalInsertFun :: T.Text -> UScheme -> CGen ()
 envGlobalInsertFun ident scheme = modifyGlobalEnv (M.insert (GlobalFunName ident) scheme)
 
+envInsertConstr :: T.Text -> UScheme -> CGen ()
+envInsertConstr name scheme = modifyGlobalEnv (M.insert (GlobalConstr name) scheme)
+
+envInsertSelector :: T.Text -> UScheme -> CGen ()
+envInsertSelector name scheme = modifyGlobalEnv (M.insert (GlobalSelector name) scheme)
+
 envInsertRetType :: UType -> CGen ()
 envInsertRetType ty = modifyLocalEnv (M.insert RetType ty)
 
@@ -95,16 +98,23 @@ envLookupVar name =
       gets (M.lookup (GlobalTermVar name) . globalEnv) >>= \case
         Just (UScheme binders ty) ->
           if S.null binders
-            then pure (Just ty)
-            else error "Found a variable with binders!!!"
+          then pure (Just ty)
+          else error "Found a variable with binders!!!"
         Nothing -> pure Nothing
 
 envLookupFun :: T.Text -> CGen (Maybe UScheme)
-envLookupFun name =
-  gets (M.lookup (LocalFunName name) . localEnv) >>= \case
+envLookupFun ident =
+  gets (M.lookup (LocalFunName ident) . localEnv) >>= \case
     Just ty -> pure (Just (UScheme S.empty ty))
     Nothing ->
-      gets (M.lookup (GlobalFunName name) . globalEnv)
+      gets (M.lookup (GlobalFunName ident) . globalEnv)
+
+envLookupConstr :: T.Text -> CGen (Maybe UScheme)
+envLookupConstr name = gets (M.lookup (GlobalConstr name) . globalEnv)
+
+envLookupSelector :: T.Text -> CGen (Maybe UScheme)
+envLookupSelector name = gets (M.lookup (GlobalSelector name) . globalEnv)
+
 
 envLookupRetType :: CGen (Maybe UType)
 envLookupRetType = gets (M.lookup RetType . localEnv)
@@ -132,7 +142,8 @@ substTVars _ Void = Void
 substTVars s (Prod t1 t2) = Prod (substTVars s t1) (substTVars s t2)
 substTVars s (List t) = List (substTVars s t)
 substTVars s (Fun ts t) = Fun (substTVars s <$> ts) (substTVars s t)
-substTVars _ (UVar i) = UVar i
+substTVars _ d@(Data _) = d
+substTVars _ u@(UVar _) = u
 
 freeTVars :: UType -> S.Set TVar
 freeTVars Int = S.empty
@@ -142,6 +153,7 @@ freeTVars Void = S.empty
 freeTVars (Prod t1 t2) = freeTVars t1 `S.union` freeTVars t2
 freeTVars (List t) = freeTVars t
 freeTVars (Fun ts t) = foldMap freeTVars ts `S.union` freeTVars t
+freeTVars (Data _) = S.empty
 freeTVars (UVar _) = S.empty
 freeTVars (TVar t) = S.singleton t
 
@@ -158,7 +170,8 @@ instance Types UType where
   subst s (Prod t1 t2) = Prod (subst s t1) (subst s t2)
   subst s (List t) = List (subst s t)
   subst s (Fun ts t) = Fun (subst s <$> ts) (subst s t)
-  subst _ (TVar t) = TVar t
+  subst _ d@(Data _) = d
+  subst _ tv@(TVar _) = tv
 
   freeUVars :: UType -> S.Set UVar
   freeUVars Int = S.empty
@@ -168,6 +181,7 @@ instance Types UType where
   freeUVars (Prod t1 t2) = freeUVars t1 `S.union` freeUVars t2
   freeUVars (List t) = freeUVars t
   freeUVars (Fun ts t) = foldMap freeUVars ts `S.union` freeUVars t
+  freeUVars (Data _) = S.empty
   freeUVars (UVar i) = S.singleton i
   freeUVars (TVar _) = S.empty
 

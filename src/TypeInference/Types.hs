@@ -12,6 +12,7 @@ type TVar = T.Text
 data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType
            | Fun [UType] UType
+           | Data T.Text
            | UVar UVar
            | TVar TVar
   deriving Eq
@@ -25,6 +26,7 @@ instance Show UType where
   show (Prod ty1 ty2) = "(" <> show ty1 <> "," <> show ty2 <> ")"
   show (List ty) = "[" <> show ty <> "]"
   show (Fun argTys retTy) = unwords (show <$> argTys) <> " -> " <> show retTy
+  show (Data t) = T.unpack t
   show (UVar i) = "u" <> show i
   show (TVar t) = T.unpack t
 

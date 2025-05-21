@@ -9,11 +9,26 @@ import TypeInference.Types as Ty
 
 
 printProgram :: (Show va, Show fa) => Program va fa -> IO ()
-printProgram (Program varDecls funDecls) = do
+printProgram (Program dataDecls varDecls funDecls) = do
+  sepBy "\n\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
   sepBy "\n" (printVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn "\n"
   sepBy "\n\n" (printFunMutDecl 0) funDecls
   putChar '\n'
+
+prettyPrintDataDecl :: Indentation -> DataDecl -> IO ()
+prettyPrintDataDecl i (DataDecl _ name constrs) = do
+  printIndentation i
+  putShow KwData
+  spaces (T.putStr name)
+  printBlock i $ sepBy ",\n" (prettyPrintConstr (i + tabWidth)) constrs
+  where
+    prettyPrintConstr :: Indentation -> DataConstr -> IO ()
+    prettyPrintConstr i' (DataConstr _ cName args) = do
+      printIndentation i'
+      T.putStr cName
+      parens $ sepBy ", " (\(sel,ty) ->
+        T.putStr sel >> putShow SymColon >> printUType ty) args
 
 printVarDecl :: Show a => Indentation -> VarDecl a -> IO ()
 printVarDecl i (VarDecl _ typeM ident e ty) = do
@@ -112,6 +127,7 @@ printUType (Ty.Fun argTys retTy) = do
   sepBy " " printUType argTys
   spaces $ putShow SymRightArrow
   printUType retTy
+printUType (Ty.Data t) = T.putStr t
 printUType (Ty.UVar i) = putChar 'u' >> putShow i
 printUType (Ty.TVar t) = T.putStr t
 
