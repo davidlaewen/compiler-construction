@@ -35,6 +35,7 @@ unify (Prod s1 s2) (Prod t1 t2) loc = do
   subst2 <- unify s2' t2' loc
   pure $ subst2 <> subst1
 unify (Fun ts1 t1) (Fun ts2 t2) loc = unifyFunTypes (ts1,t1) (ts2,t2) mempty loc
+unify (Data t1) (Data t2) _ | t1 == t2 = pure mempty
 unify ty1 ty2 loc = throwLocError loc $
   "Cannot unify `" <> T.pack (show ty1) <> "` with `" <> T.pack (show ty2) <> "`"
 

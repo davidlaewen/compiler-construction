@@ -16,10 +16,10 @@ import Utils.Loc (Loc)
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program dataDecls varDecls funDecls) = do
-  dds <- mapM checkDataDecl dataDecls
+  mapM_ checkDataDecl dataDecls
   (vds,s1) <- checkVarDecls GlobalLevel varDecls
   (fds,s2) <- checkList checkFunMutDecl funDecls
-  pure (T.Program dds vds fds, s1 <> s2)
+  pure (T.Program dataDecls vds fds, s1 <> s2)
 
 checkList :: (a -> CGen (b, Subst)) -> [a] -> CGen ([b], Subst)
 checkList _ [] = pure ([], mempty)
@@ -28,10 +28,9 @@ checkList f (x:xs) = do
   (xs',ss) <- checkList f xs
   pure (x':xs', ss <> s)
 
-checkDataDecl :: T.DataDecl -> CGen T.DataDecl
-checkDataDecl decl@(T.DataDecl _ name constrs) = do
+checkDataDecl :: T.DataDecl -> CGen ()
+checkDataDecl (T.DataDecl _ name constrs) = do
   mapM_ (checkDataConstr name) constrs
-  pure decl
 
 checkDataConstr :: Text.Text -> T.DataConstr -> CGen ()
 checkDataConstr declName (T.DataConstr _ cName args) = do

@@ -18,5 +18,6 @@ f(x) :: MaybeBool -> MaybeBool {
 }
 
 main() {
-  f(Just());
+  var mb = f(Just(True));
+  return;
 }

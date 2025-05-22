@@ -205,8 +205,10 @@ codegenExpr e = error $ "Found expression " <> show e <>
 -- Primitive operations
 
 funName2Program :: FunName -> [UType] -> Program
-funName2Program (Name name) _ =
-  error $ "funName2Instr was called with Name " <> T.unpack name
+funName2Program (Name ident) _ =
+  error $ "funName2Program was called with Name " <> T.unpack ident
+funName2Program (Constr name) _ = error $ "Code gen missing for constructor `" <> T.unpack name <> "`"
+funName2Program (Selector name) _ = error $ "Code gen missing for selector `" <> T.unpack name <> "`"
 funName2Program Not _ = [NotOp]
 funName2Program Neg _ = [NegOp]
 funName2Program Add _ = [AddOp]

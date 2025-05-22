@@ -28,7 +28,7 @@ prettyPrintDataDecl i (DataDecl _ name constrs) = do
       printIndentation i'
       T.putStr cName
       parens $ sepBy ", " (\(sel,ty) ->
-        T.putStr sel >> putShow SymColon >> printUType ty) args
+        T.putStr sel >> spaces (putShow SymColon) >> printUType ty) args
 
 printVarDecl :: Show a => Indentation -> VarDecl a -> IO ()
 printVarDecl i (VarDecl _ typeM ident e ty) = do
@@ -51,11 +51,11 @@ printFunMutDecl i (MutualDecls _ funDecls) = do
     sepBy "\n" (printFunDecl $ i + tabWidth) funDecls
 
 printFunDecl :: (Show a, Show b) => Indentation -> FunDecl a b -> IO ()
-printFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts ty) = do
+printFunDecl i (FunDecl _ funName argNames funTyM varDecls stmts ty) = do
   printIndentation i
   T.putStr funName
   parens $ sepBy ", " T.putStr argNames
-  case retTypeM of
+  case funTyM of
     Nothing -> pure ()
     Just retType -> do
       spaces $ putShow SymColonColon
@@ -125,7 +125,8 @@ printUType (Ty.Prod ty1 ty2) =
 printUType (Ty.List ty) = brackets $ printUType ty
 printUType (Ty.Fun argTys retTy) = do
   sepBy " " printUType argTys
-  spaces $ putShow SymRightArrow
+  unless (null argTys) $ putChar ' '
+  putShow SymRightArrow >> putChar ' '
   printUType retTy
 printUType (Ty.Data t) = T.putStr t
 printUType (Ty.UVar i) = putChar 'u' >> putShow i

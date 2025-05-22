@@ -1,0 +1,29 @@
+// Monomorphic `Either` type
+
+data Colour {
+  Red(), Green(), Blue()
+}
+
+data EitherCharColour {
+  Left(char : Char),
+  Right(col : Colour)
+}
+
+true() :: -> Bool {
+  return True;
+}
+
+returnEither(col,char) :: Colour Char -> EitherCharColour {
+  var left = Left(char);
+  var right = Right(col);
+  if (true()) {
+    return left;
+  } else {
+    return right;
+  }
+}
+
+main() :: -> Void {
+  var e = returnEither(Red(),'R');
+  return;
+}

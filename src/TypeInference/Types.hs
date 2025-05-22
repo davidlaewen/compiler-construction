@@ -25,7 +25,8 @@ instance Show UType where
   show Void = show KwVoid
   show (Prod ty1 ty2) = "(" <> show ty1 <> "," <> show ty2 <> ")"
   show (List ty) = "[" <> show ty <> "]"
-  show (Fun argTys retTy) = unwords (show <$> argTys) <> " -> " <> show retTy
+  show (Fun argTys retTy) = unwords (show <$> argTys) <>
+    (if null argTys then "-> " else " -> ") <> show retTy
   show (Data t) = T.unpack t
   show (UVar i) = "u" <> show i
   show (TVar t) = T.unpack t
