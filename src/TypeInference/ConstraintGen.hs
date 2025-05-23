@@ -13,6 +13,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as Text
 import Utils.Loc (Loc)
+import qualified Data.Text as T
 
 checkProgram :: T.Program () () -> CGen (T.Program UType UScheme, Subst)
 checkProgram (T.Program dataDecls varDecls funDecls) = do
@@ -148,11 +149,11 @@ checkStmt (T.While loc condExpr loopStmts) = do
 
 checkStmt (T.Assign loc varLookup _ expr) = do
   (expr', exprType, exprSubst) <- checkExpr expr
-  (varTy,s) <- foo varLookup exprType
+  (varTy,s) <- go varLookup exprType
   pure (T.Assign loc varLookup varTy expr', s <> exprSubst)
   where
-    foo :: T.VarLookup -> UType -> CGen (UType, Subst)
-    foo (T.VarId loc' name) exprType = do
+    go :: T.VarLookup -> UType -> CGen (UType, Subst)
+    go (T.VarId loc' name) exprType = do
       mVarType <- envLookupVar name
       case mVarType of
         Nothing -> throwLocError loc' $ "No variable declaration matching `" <> name <> "`"
@@ -160,24 +161,31 @@ checkStmt (T.Assign loc varLookup _ expr) = do
           s <- unify exprType varType loc
           applySubst s
           pure (varType,s)
-    foo (T.VarField _ varLkp field) exprType = do
+    go (T.VarField loc' varLkp field) exprType = do
       case field of
-        T.Head -> foo varLkp (List exprType)
-        T.Tail -> foo varLkp exprType
+        T.Head -> go varLkp (List exprType)
+        T.Tail -> go varLkp exprType
         T.Fst -> do
           uVarSnd <- UVar <$> freshVar
-          foo varLkp (Prod exprType uVarSnd)
+          go varLkp (Prod exprType uVarSnd)
         T.Snd -> do
           uVarFst <- UVar <$> freshVar
-          foo varLkp (Prod uVarFst exprType)
+          go varLkp (Prod uVarFst exprType)
+        (T.SelField name) -> do
+          (inTy,outTy) <- envLookupSelector name >>= \case
+            Nothing -> throwLocError loc' $ "Could not find selector `" <> name <> "`"
+            Just (UScheme _ (Fun [dataTy@(Data _)] outputTy)) -> pure (dataTy,outputTy)
+            Just _ -> error $ "Selector `" <> T.unpack name <> "` does not map out of data type!"
+          s <- unify exprType outTy loc'
+          (varTy,s') <- go varLkp inTy
+          pure (varTy, s <> s')
 
 checkStmt (T.FunCall loc funName args) = do
   (args',_,s) <- checkFunCall funName args loc
   pure (T.FunCall loc funName args', s)
 
 checkStmt (T.Return loc mExpr) = do
-  mRetType <- envLookupRetType
-  case mRetType of
+  envLookupRetType >>= \case
     Nothing -> error "RetType not found in environment!"
     Just retType -> do
       case mExpr of

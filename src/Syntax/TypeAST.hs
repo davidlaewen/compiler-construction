@@ -46,7 +46,7 @@ data Stmt a = If Loc (Expr a) [Stmt a] [Stmt a]
 data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
   deriving Show
 
-data Field = Head | Tail | Fst | Snd
+data Field = Head | Tail | Fst | Snd | SelField T.Text
   deriving Show
 
 data FunName = Name T.Text

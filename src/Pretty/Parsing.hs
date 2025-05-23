@@ -1,6 +1,7 @@
 module Pretty.Parsing (prettyPrinter) where
 
 import qualified Data.Text.IO as T
+import qualified Data.Text as T
 import Syntax.ParseAST
 import Control.Monad (unless)
 import Parser.Tokens (Keyword(..), Token(..), Symbol (..))
@@ -182,13 +183,14 @@ prettyPrintExprLookup (ExprField expr field) =
   prettyPrintExpr expr >> prettyPrintField field
 
 prettyPrintField :: Field -> IO ()
-prettyPrintField f = putShow SymDot >> putStr (field2Kw f)
+prettyPrintField f = putShow SymDot >> putStr (showField f)
   where
-    field2Kw Head = show KwHead
-    field2Kw Tail = show KwTail
-    field2Kw Fst = show KwFst
-    field2Kw Snd = show KwSnd
-    field2Kw GarbageField = show GarbageField
+    showField Head = show KwHead
+    showField Tail = show KwTail
+    showField Fst = show KwFst
+    showField Snd = show KwSnd
+    showField (Selector t) = T.unpack t
+    showField GarbageField = show GarbageField
 
 
 prettyPrinter :: Program -> IO ()

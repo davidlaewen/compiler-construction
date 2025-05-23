@@ -138,12 +138,13 @@ funTypeP = do
 -- Fields & Identifiers
 
 fieldP :: TokenParser (WithPos Field)
-fieldP = headP <|> tailP <|> fstP <|> sndP
+fieldP = headP <|> tailP <|> fstP <|> sndP <|> selectorP
   where
     headP = keywordP KwHead >>= \(_,s,e) -> pure (Head,s,e)
     tailP = keywordP KwTail >>= \(_,s,e) -> pure (Tail,s,e)
     fstP = keywordP KwFst >>= \(_,s,e) -> pure (Fst,s,e)
     sndP = keywordP KwSnd >>= \(_,s,e) -> pure (Snd,s,e)
+    selectorP = idP >>= \(t,s,e) -> pure (Selector t,s,e)
 
 -------------------------
 -- Expressions

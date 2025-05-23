@@ -6,6 +6,7 @@ import Parser.Tokens (Keyword(..), Token(..), Symbol (..))
 import Pretty.Common
 import Control.Monad (unless)
 import TypeInference.Types as Ty
+import qualified Data.Text as T
 
 
 printProgram :: (Show va, Show fa) => Program va fa -> IO ()
@@ -54,7 +55,7 @@ printFunDecl :: (Show a, Show b) => Indentation -> FunDecl a b -> IO ()
 printFunDecl i (FunDecl _ funName argNames funTyM varDecls stmts ty) = do
   printIndentation i
   T.putStr funName
-  parens $ sepBy ", " T.putStr argNames
+  parens $ sepBy "," T.putStr argNames
   case funTyM of
     Nothing -> pure ()
     Just retType -> do
@@ -141,9 +142,10 @@ printVarLookup (VarField _ varLookup field) =
   printVarLookup varLookup >> printField field
 
 printField :: Field -> IO ()
-printField f = putShow SymDot >> putStr (show $ field2Kw f)
+printField f = putShow SymDot >> putStr (showField f)
   where
-    field2Kw Head = KwHead
-    field2Kw Tail = KwTail
-    field2Kw Fst = KwFst
-    field2Kw Snd = KwSnd
+    showField Head = show KwHead
+    showField Tail = show KwTail
+    showField Fst  = show KwFst
+    showField Snd  = show KwSnd
+    showField (SelField t) = T.unpack t

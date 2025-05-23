@@ -27,6 +27,7 @@ data Program = Program [DataDecl] [VarDecl] [FunMutDecl]
 
 data DataDecl = DataDecl Loc T.Text [DataConstr]
   deriving Show
+
 data DataConstr = DataConstr Loc T.Text [(T.Text, Type)]
   deriving Show
 
@@ -65,7 +66,7 @@ data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
 data ExprLookup = ExprField Expr Field
   deriving Show
 
-data Field = Head | Tail | Fst | Snd | GarbageField
+data Field = Head | Tail | Fst | Snd | Selector T.Text | GarbageField
   deriving Show
 
 data Expr = Ident Loc T.Text

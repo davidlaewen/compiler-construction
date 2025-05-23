@@ -1,0 +1,26 @@
+// Destructive updates to ADT fields using selector lookups
+
+data MaybeInt {
+  Just(val : Int),
+  Nothing()
+}
+
+data PairOfLists {
+  POL(pol : ([Int],[Bool]))
+}
+
+f(x,y) {
+  // var y = Just(42):[]; // y : [MaybeInt]
+  y.hd.val = x; // Should constrain type of `x` to `Int`
+  return y;
+}
+
+g(x,y) {
+  x.fst.hd.pol.snd.tl.hd = y;
+  x.snd = 'c';
+  return x;
+}
+
+main() {
+  return;
+}

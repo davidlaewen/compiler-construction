@@ -70,6 +70,7 @@ instance Desugar P.Field T.Field where
   desugar P.Tail = T.Tail
   desugar P.Fst = T.Fst
   desugar P.Snd = T.Snd
+  desugar (P.Selector t) = T.SelField t
   desugar P.GarbageField = error "Attempted to desugar garbage Field node!"
 
 instance Desugar P.Expr (T.Expr ()) where
@@ -112,10 +113,11 @@ instance Desugar P.Expr (T.Expr ()) where
 
 instance Desugar (P.ExprLookup, Loc) (T.Expr ()) where
   desugar :: (P.ExprLookup, Loc) -> T.Expr ()
-  desugar (P.ExprField expr P.Head, loc) = T.FunCallE loc T.HeadFun [desugar expr] ()
-  desugar (P.ExprField expr P.Tail, loc) = T.FunCallE loc T.TailFun [desugar expr] ()
-  desugar (P.ExprField expr P.Fst, loc)  = T.FunCallE loc T.FstFun  [desugar expr] ()
-  desugar (P.ExprField expr P.Snd, loc)  = T.FunCallE loc T.SndFun  [desugar expr] ()
+  desugar (P.ExprField e P.Head, loc) = T.FunCallE loc T.HeadFun [desugar e] ()
+  desugar (P.ExprField e P.Tail, loc) = T.FunCallE loc T.TailFun [desugar e] ()
+  desugar (P.ExprField e P.Fst, loc)  = T.FunCallE loc T.FstFun  [desugar e] ()
+  desugar (P.ExprField e P.Snd, loc)  = T.FunCallE loc T.SndFun  [desugar e] ()
+  desugar (P.ExprField e (P.Selector t), loc) = T.FunCallE loc (T.Selector t) [desugar e] ()
   desugar (P.ExprField _ P.GarbageField, _) = error "Attempted to desugar garbage Field lookup!"
 
 
