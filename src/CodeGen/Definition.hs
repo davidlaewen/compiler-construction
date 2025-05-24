@@ -73,8 +73,8 @@ insertCtorData name cd = modify (\s ->
   s { ctorMap = M.insert name cd s.ctorMap })
 
 lookupCtorData :: T.Text -> Codegen CtorData
-lookupCtorData name = gets (M.lookup name . ctorMap) >>= \case
-  Nothing -> error $ "Couldn't find constructor `" <> T.unpack name <> "`!"
+lookupCtorData cName = gets (M.lookup cName . ctorMap) >>= \case
+  Nothing -> error $ "Couldn't find constructor `" <> T.unpack cName <> "`!"
   Just ctorData -> pure ctorData
 
 insertSelector :: T.Text -> Int -> Codegen ()

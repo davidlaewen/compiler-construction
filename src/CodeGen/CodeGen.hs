@@ -45,7 +45,7 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 
 codegen :: Program UType UScheme -> Codegen SSMProgram
 codegen (Program dataDecls varDecls funDecls) = do
-  forM_ dataDecls codegenDataDecl
+  predicatesProgram <- concatMapM codegenDataDecl dataDecls
   let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
   -- TODO: All entries are single-register, simplify this
   let varOffsets = computeOffsets varSizes 0
@@ -56,25 +56,32 @@ codegen (Program dataDecls varDecls funDecls) = do
     [LoadReg HeapPointer, StoreReg HeapLowReg] ++
     -- Store all global vars to heap, adjust SP
     StoreHeapMulti (sum varSizes) : -- Adjust (-1) :
-      BranchSubr "main" : Halt : funDeclsProgram ++ [Halt]
+      BranchSubr "main" : Halt : predicatesProgram ++ funDeclsProgram ++ [Halt]
 
-codegenDataDecl :: DataDecl -> Codegen ()
+codegenDataDecl :: DataDecl -> Codegen SSMProgram
 codegenDataDecl (DataDecl _ _ ctors) = do
   -- Enumerate all constructors, starting at 0
   let ctorLabels = zip ctors [(0::Int)..]
   -- Map each ctor name to its label and field count
-  forM_ ctorLabels codegenCtor
+  concatMapM codegenCtor ctorLabels
 
-codegenCtor :: (Ctor,Int) -> Codegen ()
-codegenCtor (Ctor _ cName args, cLabel) = do
+codegenCtor :: (Ctor,Int) -> Codegen SSMProgram
+codegenCtor (ctor@(Ctor _ cName args), cLabel) = do
   -- The offsets for n fields are -n, ..., -1 (in that order), since the stack
   -- entry points to the label, which is the last entry (offset 0).
   let fieldOffsets = zip (reverse (fst <$> args)) [(-1::Int),-2..]
   forM_ fieldOffsets codegenSelector
   insertCtorData cName $ CtorData cLabel (length args)
+  codegenPredicate ctor cLabel
   where
     codegenSelector :: (T.Text,Int) -> Codegen ()
     codegenSelector (name,offset) = insertSelector name offset
+
+codegenPredicate :: Ctor -> Int -> Codegen SSMProgram
+codegenPredicate (Ctor _ cName _) cLabel = do
+  -- Arguments at positive offsets from MP, pointing to top
+  let predicateProgram = [LoadLocal 1, LoadHeap 0, LoadConst cLabel, EqOp]
+  pure $ Label ("is" <> cName) : predicateProgram ++ [StoreReg RetReg, Ret]
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
 codegenGlobalVarDecl (i, VarDecl _ _ ident e _) = do
@@ -82,7 +89,6 @@ codegenGlobalVarDecl (i, VarDecl _ _ ident e _) = do
   modifyOffsets (M.insert ident i) -- Local offset for use in subsequent decls
   modifyHeapLocs (M.insert ident i)
   pure program
-  -- pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
 
 codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
 codegenLocalVarDecl (i, VarDecl _ _ ident e _) = do
@@ -136,31 +142,34 @@ codegenStmt (While _ cond loopStmts) = do
     ++ loopProgram ++ [BranchAlways topLabel]
     ++ [Label endLabel]
 
-codegenStmt (Assign _ varLookup varType expr) = do
+codegenStmt (Assign _ varLookup _ expr) = do
   exprProgram <- codegenExpr expr
-  (addrProgram,_,_) <- go varLookup varType
+  (addrProgram,_) <- go varLookup
   pure $ exprProgram ++ addrProgram ++ [StoreAddress 0]
   where
     -- Traverse field selectors "inside-out", i.e. on recursive ascent
-    go :: VarLookup -> UType -> Codegen (SSMProgram, UType, T.Text)
-    go (VarId _ ident) varTy = do
+    go :: VarLookup -> Codegen (SSMProgram, T.Text)
+    go (VarId _ ident) = do
       location <- lookupLoc ident
       case location of
-        Offset offset -> pure ([LoadReg MarkPointer, AddOffset offset], varTy, ident)
-        HeapLoc loc -> pure ([LoadConst loc], varTy, ident)
-    go (VarField _ varLkp field) varTy = do
-      (program,ty,ident) <- go varLkp varTy
-      case (field,ty) of
-        (Head, TI.List elemTy) -> -- Load segment address, move pointer to head
-          pure (program ++ [LoadAddress 0, AddOffset $ -1], elemTy, ident)
-        (Tail, TI.List _) -> -- Load segment address, pointer already at tail
-          pure (program ++ [LoadAddress 0], ty, ident)
-        (Fst, TI.Prod ty1 _) -> -- Load tuple address, move to first component
-          pure (program ++ [LoadAddress 0, AddOffset $ -1], ty1, ident)
-        (Snd, TI.Prod _ ty2) -> -- Load tuple address, alread at second component
-          pure (program ++ [LoadAddress 0], ty2, ident)
-        (_,_) -> error $ "Cannot assign to field " <> show field <>
-          " of variable " <> show ident <> " with type " <> show ty
+        -- Offset offset -> pure ([LoadReg MarkPointer, AddOffset offset], varTy, ident)
+        Offset offset -> pure ([LoadLocalAddress offset], ident)
+        HeapLoc loc -> pure ([LoadReg HeapLowReg, AddOffset loc], ident)
+    go (VarField _ varLkp field) = do
+      (program,ident) <- go varLkp
+      case field of
+        Head -> -- Load segment address, move pointer to head
+          pure (program ++ [LoadAddress 0, AddOffset $ -1], ident)
+        Tail -> -- Load segment address, pointer already at tail
+          pure (program ++ [LoadAddress 0], ident)
+        Fst -> -- Load tuple address, move to first component
+          pure (program ++ [LoadAddress 0, AddOffset $ -1], ident)
+        Snd -> -- Load tuple address, alread at second component
+          pure (program ++ [LoadAddress 0], ident)
+        (SelField name) -> do
+          offset <- lookupSelector name
+          let loadProgram = LoadAddress 0 : [AddOffset offset | offset /= 0]
+          pure (program ++ loadProgram, ident)
 
 codegenStmt (FunCall _ funName args) = do
   argsProgram <- concatMapM codegenExpr args

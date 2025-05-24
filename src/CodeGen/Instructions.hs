@@ -24,7 +24,7 @@ data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
   | LoadHeap Int | StoreHeap | LoadHeapMulti Int Int | StoreHeapMulti Int
   | LoadAddress Int | LoadAddressMulti Int Int
   | StoreAddress Int | StoreAddressMulti Int Int
-  | LoadConst Int | AddOffset Int
+  | LoadConst Int | AddOffset Int | LoadLocalAddress Int
   | BranchSubr T.Text | BranchAlways T.Text | BranchFalse T.Text
   | NotOp | AndOp | OrOp | XorOp
   | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
@@ -68,6 +68,7 @@ instance Show Instr where
 
   show (LoadConst c) = tab <> "ldc" <+> show c
   show (AddOffset o) = tab <> "ldaa" <+> show o
+  show (LoadLocalAddress o) = tab <> "ldla" <+> show o
 
   show (BranchSubr t) = tab <> "bsr" <+> T.unpack t
   show (BranchAlways t) = tab <> "bra" <+> T.unpack t
