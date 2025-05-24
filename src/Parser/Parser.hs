@@ -42,7 +42,7 @@ dataDeclP = do
 dataConstrP :: TokenParser DataConstr
 dataConstrP = do
   (name,startPos,_) <- nameP
-  (args,_,endPos) <- parensP $ many constrArgP
+  (args,_,endPos) <- parensP $ constrArgP `sepBy` symbolP SymComma
   pure $ DataConstr (Loc startPos endPos) name args
   where
     constrArgP :: TokenParser (T.Text,Type)

@@ -1,0 +1,34 @@
+data MaybeBool {
+  None(), Just(val:Bool)
+}
+
+data Colour {
+  Red(), Green(), Blue()
+}
+
+data IntList {
+  Nil(), Cons(head:Int,tail:IntList)
+}
+
+main() {
+  var l = Cons(1, Cons(2, Cons(3, Nil())));
+  var test = isCons(l);
+  var c = col2Char(Blue());
+
+  l.tail.tail.tail = Cons(4,Nil());
+
+  return;
+}
+
+
+col2Char(col) {
+  if (isRed(col)) {
+    return 'R';
+  } else {
+    if (isGreen(col)) {
+      return 'G';
+    } else {
+      return 'B';
+    }
+  }
+}

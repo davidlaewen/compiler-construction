@@ -35,8 +35,11 @@ checkDataDecl (T.DataDecl _ name constrs) = do
 
 checkDataConstr :: Text.Text -> T.DataConstr -> CGen ()
 checkDataConstr declName (T.DataConstr _ cName args) = do
-  -- Quantify over type variables to support polymorphism
+  -- TODO: Quantify over type variables here to support polymorphism
   envInsertConstr cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
+  -- Insert constructor predicate function of the form `is<CName>` with type
+  -- `<DataType> -> Bool`
+  envGlobalInsertFun ("is" <> cName) $ UScheme S.empty (Fun [Data declName] Bool)
   forM_ args (\(selName,ty) -> -- Insert selector schemes
     envInsertSelector selName $ UScheme S.empty (Fun [Data declName] ty))
 
