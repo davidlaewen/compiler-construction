@@ -1,0 +1,14 @@
+data IntTree {
+  Leaf(), Node(left : IntTree, val : Int, right : IntTree)
+}
+
+var res = -10;
+
+main() {
+  var t = Node(Leaf(),1,Leaf());
+  t.left = Node(Leaf(),2,Leaf());
+
+  res = t.left.val;
+  print(res);
+  return;
+}

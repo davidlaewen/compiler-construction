@@ -1,0 +1,28 @@
+// Arithmetic expression on integers in two variables
+
+data AExp {
+  Add(ladd : AExp, radd : AExp),
+  Mul(lmul : AExp, rmul : AExp),
+  Neg(neg : AExp),
+  Lit(lit : Int),
+  VarX(), VarY()
+}
+
+var fortytwo = Mul(Add(Lit(20), Lit(1)), Lit(2));
+
+// Evaluate arithmetic expression with valuation given by inputs `x` and `y`
+// Use nested if-then-else due to missing switch/case syntax
+evaluate(a,x,y) :: AExp Int Int -> Int {
+  if (isAdd(a)) { return evaluate(a.ladd,x,y) + evaluate(a.radd,x,y); } else {
+  if (isMul(a)) { return evaluate(a.lmul,x,y) * evaluate(a.rmul,x,y); } else {
+  if (isNeg(a)) { return -1 * evaluate(a.neg,x,y); } else {
+  if (isLit(a)) { return a.lit; } else {
+  if (isVarX(a)) { return x; } else { return y; }}}}}
+}
+
+main() {
+  var res = 0;
+  res = evaluate(fortytwo,0,0);
+  print(res);
+  return;
+}

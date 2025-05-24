@@ -10,11 +10,6 @@ data AExp {
 
 var fortytwo = Mul(Add(Lit(20), Lit(1)), Lit(2));
 
-// Evaluate arithmetic expression with valuation given by inputs `x` and `y`
-evaluate(aexp,x,y) :: AExp Int Int -> Int {
-  return x;
-}
-
 printLit(aexp) {
   print(aexp.lit);
   return;

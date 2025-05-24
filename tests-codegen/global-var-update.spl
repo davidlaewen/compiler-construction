@@ -1,0 +1,8 @@
+var l = 1:2:3:[];
+
+main() {
+  l.tl.tl.tl = 3:[];
+  l.tl.tl.tl.hd = 4;
+  print(38 + l.tl.tl.tl.hd);
+  return;
+}
