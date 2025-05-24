@@ -1,6 +1,6 @@
 data MaybeBool {
   Nothing(),
-  Just(bool : Bool)
+  Just(fromJust : Bool)
 }
 
 data PeanoNat {
@@ -12,6 +12,8 @@ data EitherIntBool {
   Right(rval : Bool)
 }
 
+var left = Left(42);
+
 f(x) :: MaybeBool -> MaybeBool {
   var y = Nothing();
   return x;
@@ -19,5 +21,11 @@ f(x) :: MaybeBool -> MaybeBool {
 
 main() {
   var mb = f(Just(True));
+
+  if (mb.fromJust) {
+    print(left.lval);
+  } else {
+    print(0);
+  }
   return;
 }

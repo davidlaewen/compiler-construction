@@ -1,0 +1,30 @@
+// Arithmetic expression on integers in two variables
+
+data AExp {
+  Add(ladd : AExp, radd : AExp),
+  Mul(lmul : AExp, rmul : AExp),
+  Neg(neg : AExp),
+  Lit(lit : Int),
+  VarX(), VarY()
+}
+
+var fortytwo = Mul(Add(Lit(20), Lit(1)), Lit(2));
+
+// Evaluate arithmetic expression with valuation given by inputs `x` and `y`
+evaluate(aexp,x,y) :: AExp Int Int -> Int {
+  return x;
+}
+
+printLit(aexp) {
+  print(aexp.lit);
+  return;
+}
+
+main() {
+  var twenty = fortytwo.lmul.ladd;
+  AExp val42 = Lit(40 + fortytwo.rmul);
+  printLit(val42);
+  print(' ');
+  print(twenty.lit * 2 + Lit(2).lit);
+  return;
+}
