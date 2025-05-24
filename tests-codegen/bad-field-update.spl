@@ -1,0 +1,22 @@
+// Attempt to access fields of empty list
+
+printIntList(l) {
+  if (isEmpty(l)) {
+    print('[');
+    print(']');
+  } else {
+    print(l.hd + 0);
+    print(':');
+    printIntList(l.tl);
+  }
+  return;
+}
+
+main() {
+  [Int] l = [];
+  var x = l.hd;
+  var l1 = l.tl;
+  l.hd = 42;
+
+  printIntList(l);
+}
