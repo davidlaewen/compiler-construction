@@ -1,13 +1,17 @@
 // Constructing a cyclical list
 
-printIntList(l) {
+printListN(l,n) {
+  if (n == 0) {
+    return;
+  } else {
+  }
   if (isEmpty(l)) {
     print('[');
     print(']');
   } else {
     print(l.hd + 0);
     print(':');
-    printIntList(l.tl);
+    printListN(l.tl,n-1);
   }
   return;
 }
@@ -16,5 +20,8 @@ main() {
   [Int] l = 1:[];
   l.tl = l;
 
-  printIntList(l);
+  // After 470 recursive calls `printListN` starts printing random data, likely
+  // because each recursive iteration allocates a stack frame, causing the stack
+  // to eventually overflow.
+  printListN(l,471);
 }

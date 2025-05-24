@@ -81,9 +81,6 @@ concatMapM f (x : xs) = do
   ys <- concatMapM f xs
   pure $ y ++ ys
 
-uSchemeSize :: UScheme -> Int
-uSchemeSize (TI.UScheme _ ty) = uTypeSize ty
-
 uTypeSize :: UType -> Int
 uTypeSize TI.Int = 1
 uTypeSize TI.Bool = 1
@@ -92,8 +89,3 @@ uTypeSize (TI.Prod _ _) = 1
 uTypeSize (TI.List _) = 1
 uTypeSize (TI.UVar _) = 1
 uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
-
-uTypeSizeHeap :: UType -> Int
-uTypeSizeHeap (TI.List ty) = uTypeSize ty + 1
-uTypeSizeHeap (TI.Prod ty1 ty2) = uTypeSize ty1 + uTypeSize ty2
-uTypeSizeHeap ty = uTypeSize ty
