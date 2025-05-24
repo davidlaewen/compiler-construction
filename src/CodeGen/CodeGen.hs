@@ -4,16 +4,15 @@
 module CodeGen.CodeGen(
   codegen,
   runCodegen,
-  Program,
+  SSMProgram,
 ) where
 
 import qualified Data.Text as T
 import CodeGen.Definition
 import CodeGen.Instructions (Register(..), Instr(..))
-import Syntax.TypeAST (VarDecl(..), FunMutDecl(..), FunDecl(..), Expr(..), Stmt(..), FunName(..), VarLookup(..))
-import qualified Syntax.TypeAST as TA
-import TypeInference.Definition (UScheme, UType)
-import qualified TypeInference.Definition as TI
+import Syntax.TypeAST
+import TypeInference.Types (UScheme, UType)
+import qualified TypeInference.Types as TI ( UScheme(..), UType(..) )
 import Control.Monad.State (gets, forM_)
 import qualified Data.Map as M
 
@@ -27,7 +26,7 @@ lookupLoc ident = gets (M.lookup ident . offsets) >>= \case
     Just loc -> pure $ HeapLoc loc
   Just offset -> pure $ Offset offset
 
-loadIdent :: T.Text -> UType -> Codegen Program
+loadIdent :: T.Text -> UType -> Codegen SSMProgram
 loadIdent ident ty = let size = uTypeSize ty in
   lookupLoc ident >>= \case
     Offset offset -> pure [LoadLocalMulti offset size]
@@ -35,11 +34,14 @@ loadIdent ident ty = let size = uTypeSize ty in
     HeapLoc loc -> pure [ LoadReg HeapLowReg, AddOffset loc,
                           LoadHeapMulti (negate size + 1) size ]
 
-storeToAddress :: UType -> Program
+storeToAddress :: UType -> SSMProgram
 storeToAddress ty = [StoreAddressMulti 0 $ uTypeSize ty]
 
 loadComposite :: Int -> Instr
 loadComposite = LoadHeapMulti 0
+
+loadWithOffset :: Int -> Instr
+loadWithOffset = LoadHeap
 
 computeOffsets :: [Int] -> Int -> [Int]
 computeOffsets [] _ = []
@@ -49,8 +51,9 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 --------------------------
 -- Code generation
 
-codegen :: TA.Program UType UScheme -> Codegen Program
-codegen (TA.Program _ varDecls funDecls) = do
+codegen :: Program UType UScheme -> Codegen SSMProgram
+codegen (Program dataDecls varDecls funDecls) = do
+  forM_ dataDecls codegenDataDecl
   let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
   let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
@@ -62,7 +65,19 @@ codegen (TA.Program _ varDecls funDecls) = do
     StoreHeapMulti (sum varSizes) : Adjust (-1) :
       BranchAlways "main" : funDeclsProgram ++ [Halt]
 
-codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen Program
+codegenDataDecl :: DataDecl -> Codegen ()
+codegenDataDecl (DataDecl _ _ ctors) = do
+  -- Enumerate all constructors, starting at 0
+  let ctorLabels = zip ctors [(0::Int)..]
+  -- Map each ctor name to its label and field count
+  forM_ ctorLabels codegenCtor
+
+codegenCtor :: (Ctor,Int) -> Codegen ()
+codegenCtor (Ctor _ cName args, cLabel) = do
+  -- TODO: Selectors
+  insertCtorData cName $ CtorData cLabel (length args)
+
+codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
 codegenGlobalVarDecl (i, VarDecl _ _ ident e _) = do
   program <- codegenExpr e
   modifyOffsets (M.insert ident i) -- Local offset for use in subsequent decls
@@ -70,18 +85,18 @@ codegenGlobalVarDecl (i, VarDecl _ _ ident e _) = do
   pure program
   -- pure $ program ++ [StoreHeapMulti $ uTypeSize ty]
 
-codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen Program
+codegenLocalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
 codegenLocalVarDecl (i, VarDecl _ _ ident e ty) = do
   program <- codegenExpr e
   modifyOffsets (M.insert ident i)
   -- Store immediately, since subsequent local vars may refer to this decl
   pure $ program ++ [StoreLocalMulti i $ uTypeSize ty]
 
-codegenFunMutDecl :: FunMutDecl UType UScheme -> Codegen Program
+codegenFunMutDecl :: FunMutDecl UType UScheme -> Codegen SSMProgram
 codegenFunMutDecl (SingleDecl funDecl) = codegenFunDecl funDecl
 codegenFunMutDecl (MutualDecls _ funDecls) = concatMapM codegenFunDecl funDecls
 
-codegenFunDecl :: FunDecl UType UScheme -> Codegen Program
+codegenFunDecl :: FunDecl UType UScheme -> Codegen SSMProgram
 codegenFunDecl (FunDecl _ funName args _ varDecls stmts uScheme) = do
   -- TODO: Polymorphic function types
   let argTypes = case uScheme of
@@ -100,7 +115,7 @@ codegenFunDecl (FunDecl _ funName args _ varDecls stmts uScheme) = do
   stmtsProgram <- concatMapM codegenStmt stmts
   pure $ Label funName : Link (sum varSizes) : varDeclsProgram ++ stmtsProgram
 
-codegenStmt :: Stmt UType -> Codegen Program
+codegenStmt :: Stmt UType -> Codegen SSMProgram
 codegenStmt (If _ cond thenStmts elseStmts) = do
   conditionProgram <- codegenExpr cond
   thenProgram <- concatMapM codegenStmt thenStmts
@@ -128,7 +143,7 @@ codegenStmt (Assign _ varLookup varType expr) = do
   pure $ exprProgram ++ addrProgram ++ storeToAddress ty
   where
     -- Traverse field selectors "inside-out", i.e. on recursive ascent
-    go :: VarLookup -> UType -> Codegen (Program, UType, T.Text)
+    go :: VarLookup -> UType -> Codegen (SSMProgram, UType, T.Text)
     go (VarId _ ident) varTy = do
       location <- lookupLoc ident
       case location of
@@ -137,28 +152,28 @@ codegenStmt (Assign _ varLookup varType expr) = do
     go (VarField _ varLkp field) varTy = do
       (program,ty,ident) <- go varLkp varTy
       case (field,ty) of
-        (TA.Head, TI.List elemTy) -> -- Load segment address, move pointer to start of head
+        (Head, TI.List elemTy) -> -- Load segment address, move pointer to start of head
           pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize elemTy)], elemTy, ident)
-        (TA.Tail, TI.List _) -> -- Load segment address, pointer already at tail
+        (Tail, TI.List _) -> -- Load segment address, pointer already at tail
           pure (program ++ [LoadAddress 0], ty, ident)
-        (TA.Fst, TI.Prod ty1 _) -> -- Load tuple address, move to start of fst component
+        (Fst, TI.Prod ty1 _) -> -- Load tuple address, move to start of fst component
           pure (program ++ [LoadAddress 0, AddOffset $ negate (uTypeSize ty1)], ty1, ident)
-        (TA.Snd, TI.Prod _ ty2) -> -- Load tuple address, yields start of snd component
+        (Snd, TI.Prod _ ty2) -> -- Load tuple address, yields start of snd component
           pure (program ++ [LoadAddress 0], ty2, ident)
         (_,_) -> error $ "Cannot assign to field " <> show field <>
           " of variable " <> show ident <> " with type " <> show ty
 
 codegenStmt (FunCall _ funName args) = do
   argsProgram <- concatMapM codegenExpr args
-  let argsSize = sum $ uTypeSize . TA.getTypeExpr <$> args
+  let argsSize = sum $ uTypeSize . getTypeExpr <$> args
   pure $ argsProgram ++
     case funName of -- Relinquish args on stack after returning
       Name name -> [BranchSubr name, Adjust $ negate argsSize]
-      _ -> funName2Program funName (TA.getTypeExpr <$> args)
+      _ -> funName2Program funName (getTypeExpr <$> args)
 
 codegenStmt (Return _ Nothing) = pure [Unlink, Ret]
 codegenStmt (Return _ (Just expr)) = do
-  let retSize = uTypeSize $ TA.getTypeExpr expr
+  let retSize = uTypeSize $ getTypeExpr expr
   exprProgram <- codegenExpr expr
   let storeProgram = case retSize of
         1 -> []
@@ -166,16 +181,16 @@ codegenStmt (Return _ (Just expr)) = do
   pure $ exprProgram ++ storeProgram ++ [StoreReg RetReg, Unlink, Ret]
 
 
-codegenExpr :: Expr UType -> Codegen Program
-codegenExpr (TA.Ident _ ident ty) = loadIdent ident ty
-codegenExpr (TA.Int _ i TI.Int) = pure [LoadConst i]
-codegenExpr (TA.Char _ c TI.Char) = pure [LoadConst $ fromEnum c]
-codegenExpr (TA.Bool _ True TI.Bool) = pure [LoadConst (-1)]
-codegenExpr (TA.Bool _ False TI.Bool) = pure [LoadConst 0]
+codegenExpr :: Expr UType -> Codegen SSMProgram
+codegenExpr (Ident _ ident ty) = loadIdent ident ty
+codegenExpr (Int _ i TI.Int) = pure [LoadConst i]
+codegenExpr (Char _ c TI.Char) = pure [LoadConst $ fromEnum c]
+codegenExpr (Bool _ True TI.Bool) = pure [LoadConst (-1)]
+codegenExpr (Bool _ False TI.Bool) = pure [LoadConst 0]
 
 -- Call to subroutine
 codegenExpr (FunCallE _ (Name name) args retType) = do
-  let argsSize = sum $ uTypeSize . TA.getTypeExpr <$> args
+  let argsSize = sum $ uTypeSize . getTypeExpr <$> args
   let retSize = uTypeSize retType
   argsProgram <- concatMapM codegenExpr args
   let unboxProgram = [LoadHeapMulti 0 retSize | retSize > 1]
@@ -185,26 +200,26 @@ codegenExpr (FunCallE _ (Name name) args retType) = do
 -- Call to primitive operation
 codegenExpr (FunCallE _ funName args _) = do
   argsProgram <- concatMapM codegenExpr args
-  pure $ argsProgram ++ funName2Program funName (TA.getTypeExpr <$> args)
+  pure $ argsProgram ++ funName2Program funName (getTypeExpr <$> args)
 
 -- Empty list is represented by address 0xF0F0F0F0
 codegenExpr (EmptyList _ (TI.List _)) = pure [LoadConst nullPtr]
 
 -- Compute tuple entries, store to heap
-codegenExpr (TA.Tuple _ e1 e2 (TI.Prod ty1 ty2)) = do
+codegenExpr (Tuple _ e1 e2 (TI.Prod ty1 ty2)) = do
   e1Program <- codegenExpr e1
   e2Program <- codegenExpr e2
   pure $ e1Program ++ e2Program ++
     [StoreHeapMulti $ uTypeSize ty1 + uTypeSize ty2]
 
 codegenExpr e = error $ "Found expression " <> show e <>
-  " with invalid type " <> show (TA.getTypeExpr e)
+  " with invalid type " <> show (getTypeExpr e)
 
 
 --------------------------
 -- Primitive operations
 
-funName2Program :: FunName -> [UType] -> Program
+funName2Program :: FunName -> [UType] -> SSMProgram
 funName2Program (Name ident) _ =
   error $ "funName2Program was called with Name " <> T.unpack ident
 funName2Program (Constr name) _ = error $ "Code gen missing for constructor `" <> T.unpack name <> "`"
@@ -229,13 +244,9 @@ funName2Program Cons [ty, TI.List _] = [StoreHeapMulti $ uTypeSize ty + 1]
 funName2Program Cons _ = error "Called `:` with non-list"
 funName2Program IsEmpty _ = [LoadConst nullPtr, EqOp]
 -- Move SP to end of head
-funName2Program HeadFun [TI.List ty] = loadComposite size : [Adjust $ -1]
-  where size = uTypeSize ty + 1
+funName2Program HeadFun [TI.List _] = [loadWithOffset $ -1]
 funName2Program HeadFun _ = error "Called `hd` on non-list"
--- Shift tail upwards by size of head
-funName2Program TailFun [TI.List ty] =
-  loadComposite (size + 1) : [ StoreStack $ negate size, Adjust $ 1 - size ]
-  where size = uTypeSize ty
+funName2Program TailFun [TI.List _] = [loadWithOffset 0]
 funName2Program TailFun _ = error "Called `tl` on non-list"
 -- Move SP to end of first component
 funName2Program FstFun [TI.Prod ty1 ty2] =
