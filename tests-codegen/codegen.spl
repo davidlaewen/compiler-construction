@@ -1,5 +1,10 @@
 [Int] l = 1:2:3:[];
 
+double(n) {
+  return 2 * n;
+}
+
 main() {
+  print(double(21));
   return;
 }

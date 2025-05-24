@@ -34,12 +34,6 @@ loadIdent ident ty = let size = uTypeSize ty in
     HeapLoc loc -> pure [ LoadReg HeapLowReg, AddOffset loc,
                           LoadHeapMulti (negate size + 1) size ]
 
-storeToAddress :: UType -> SSMProgram
-storeToAddress ty = [StoreAddressMulti 0 $ uTypeSize ty]
-
-loadComposite :: Int -> Instr
-loadComposite = LoadHeapMulti 0
-
 loadWithOffset :: Int -> Instr
 loadWithOffset = LoadHeap
 
@@ -55,15 +49,16 @@ codegen :: Program UType UScheme -> Codegen SSMProgram
 codegen (Program dataDecls varDecls funDecls) = do
   forM_ dataDecls codegenDataDecl
   let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
+  -- TODO: All entries are single-register, simplify this
   let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
   funDeclsProgram <- concatMapM codegenFunMutDecl funDecls
   pure $ varDeclsProgram ++
-    -- HP now at start of global vars, copy to R5
+    -- HP now at start of global vars, copy value of HP to R5
     [LoadReg HeapPointer, StoreReg HeapLowReg] ++
     -- Store all global vars to heap, adjust SP
-    StoreHeapMulti (sum varSizes) : Adjust (-1) :
-      BranchAlways "main" : funDeclsProgram ++ [Halt]
+    StoreHeapMulti (sum varSizes) : -- Adjust (-1) :
+      BranchSubr "main" : Halt : funDeclsProgram ++ [Halt]
 
 codegenDataDecl :: DataDecl -> Codegen ()
 codegenDataDecl (DataDecl _ _ ctors) = do
@@ -74,8 +69,14 @@ codegenDataDecl (DataDecl _ _ ctors) = do
 
 codegenCtor :: (Ctor,Int) -> Codegen ()
 codegenCtor (Ctor _ cName args, cLabel) = do
-  -- TODO: Selectors
+  -- The offsets for n fields are -n, ..., -1 (in that order), since the stack
+  -- entry points to the label, which is the last entry (offset 0).
+  let fieldOffsets = zip (reverse (fst <$> args)) [(-1::Int),-2..]
+  forM_ fieldOffsets codegenSelector
   insertCtorData cName $ CtorData cLabel (length args)
+  where
+    codegenSelector :: (T.Text,Int) -> Codegen ()
+    codegenSelector (name,offset) = insertSelector name offset
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
 codegenGlobalVarDecl (i, VarDecl _ _ ident e _) = do
@@ -139,8 +140,8 @@ codegenStmt (While _ cond loopStmts) = do
 
 codegenStmt (Assign _ varLookup varType expr) = do
   exprProgram <- codegenExpr expr
-  (addrProgram,ty,_) <- go varLookup varType
-  pure $ exprProgram ++ addrProgram ++ storeToAddress ty
+  (addrProgram,_,_) <- go varLookup varType
+  pure $ exprProgram ++ addrProgram ++ [StoreAddress 0]
   where
     -- Traverse field selectors "inside-out", i.e. on recursive ascent
     go :: VarLookup -> UType -> Codegen (SSMProgram, UType, T.Text)
@@ -189,13 +190,11 @@ codegenExpr (Bool _ True TI.Bool) = pure [LoadConst (-1)]
 codegenExpr (Bool _ False TI.Bool) = pure [LoadConst 0]
 
 -- Call to subroutine
-codegenExpr (FunCallE _ (Name name) args retType) = do
+codegenExpr (FunCallE _ (Name name) args _) = do
   let argsSize = sum $ uTypeSize . getTypeExpr <$> args
-  let retSize = uTypeSize retType
   argsProgram <- concatMapM codegenExpr args
-  let unboxProgram = [LoadHeapMulti 0 retSize | retSize > 1]
   pure $ argsProgram ++ BranchSubr name :
-    [Adjust $ negate argsSize, LoadReg RetReg] ++ unboxProgram
+    [Adjust $ negate argsSize, LoadReg RetReg]
 
 -- Call to primitive operation
 codegenExpr (FunCallE _ funName args _) = do
@@ -249,17 +248,10 @@ funName2Program HeadFun _ = error "Called `hd` on non-list"
 funName2Program TailFun [TI.List _] = [loadWithOffset 0]
 funName2Program TailFun _ = error "Called `tl` on non-list"
 -- Move SP to end of first component
-funName2Program FstFun [TI.Prod ty1 ty2] =
-  loadComposite size : [Adjust $ negate $ uTypeSize ty2]
-  where size = uTypeSize ty1 + uTypeSize ty2
+funName2Program FstFun [TI.Prod _ _] = [loadWithOffset $ -1]
 funName2Program FstFun _ = error "Called `fst` on non-tuple"
 -- Shift second component upwards by size of first component
-funName2Program SndFun [TI.Prod ty1 ty2] =
-  let size1 = uTypeSize ty1
-      size2 = uTypeSize ty2
-      offset = negate $ size1 + size2 - 1 in
-  loadComposite (size1 + size2) :
-    [ StoreStackMulti offset size2, Adjust $ size2 - size1 ]
+funName2Program SndFun [TI.Prod _ _] = [loadWithOffset 0]
 funName2Program SndFun _ = error "Called `snd` on non-tuple"
 
 funName2Program Print [ty] = case ty of

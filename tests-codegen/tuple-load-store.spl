@@ -30,4 +30,5 @@ main() {
   // Should print 42 twice
   print(x.fst);
   print(x.snd);
+  return;
 }
