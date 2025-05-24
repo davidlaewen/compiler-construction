@@ -37,7 +37,7 @@ checkDataDecl (DataDecl _ name ctors) = do
 checkDataCtor :: Text.Text -> Ctor -> CGen ()
 checkDataCtor declName (Ctor _ cName args) = do
   -- TODO: Quantify over type variables here to support polymorphism
-  envInsertConstr cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
+  envInsertCtor cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
   -- Insert constructor predicate function of the form `is<CName>` with scheme
   -- `∀ . <DataType> -> Bool`
   envGlobalInsertFun ("is" <> cName) $ UScheme S.empty (Fun [Data declName] Bool)
@@ -264,8 +264,8 @@ getFunType (Name name) loc = do
     case mFunType of
       Nothing -> throwLocError loc $ "No declaration for function `" <> name <> "`"
       Just funType -> pure funType
-getFunType (Constr name) loc = envLookupConstr name >>= \case
-    Just constrTy -> pure constrTy
+getFunType (CtorCall name) loc = envLookupCtor name >>= \case
+    Just ctorTy -> pure ctorTy
     Nothing -> throwLocError loc $ "No declaration for constructor `" <> name <> "`"
 getFunType (Selector name) loc = envLookupSelector name >>= \case
     Just selTy -> pure selTy

@@ -13,9 +13,10 @@ module TypeInference.Definition (
   freshVar, substTVars, freeTVars,
   envInsertVar, envInsertRetType,
   envLocalInsertFun, envGlobalInsertFun,
-  envInsertConstr, envInsertSelector,
+  envInsertCtor, envLookupCtor,
+  envLookupSelector, envInsertSelector,
   clearLocalEnv,
-  envLookupVar, envLookupFun, envLookupConstr, envLookupSelector,
+  envLookupVar, envLookupFun,
   envLookupRetType,
 ) where
 
@@ -38,7 +39,7 @@ data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
   deriving (Eq, Ord)
 
 data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
-              | GlobalConstr T.Text | GlobalSelector T.Text
+              | GlobalCtor T.Text | GlobalSelector T.Text
   deriving (Eq, Ord)
 
 data EnvLevel = GlobalLevel | LocalLevel
@@ -78,8 +79,8 @@ envLocalInsertFun ident ty = modifyLocalEnv (M.insert (LocalFunName ident) ty)
 envGlobalInsertFun :: T.Text -> UScheme -> CGen ()
 envGlobalInsertFun ident scheme = modifyGlobalEnv (M.insert (GlobalFunName ident) scheme)
 
-envInsertConstr :: T.Text -> UScheme -> CGen ()
-envInsertConstr name scheme = modifyGlobalEnv (M.insert (GlobalConstr name) scheme)
+envInsertCtor :: T.Text -> UScheme -> CGen ()
+envInsertCtor name scheme = modifyGlobalEnv (M.insert (GlobalCtor name) scheme)
 
 envInsertSelector :: T.Text -> UScheme -> CGen ()
 envInsertSelector name scheme = modifyGlobalEnv (M.insert (GlobalSelector name) scheme)
@@ -109,8 +110,8 @@ envLookupFun ident =
     Nothing ->
       gets (M.lookup (GlobalFunName ident) . globalEnv)
 
-envLookupConstr :: T.Text -> CGen (Maybe UScheme)
-envLookupConstr name = gets (M.lookup (GlobalConstr name) . globalEnv)
+envLookupCtor :: T.Text -> CGen (Maybe UScheme)
+envLookupCtor name = gets (M.lookup (GlobalCtor name) . globalEnv)
 
 envLookupSelector :: T.Text -> CGen (Maybe UScheme)
 envLookupSelector name = gets (M.lookup (GlobalSelector name) . globalEnv)

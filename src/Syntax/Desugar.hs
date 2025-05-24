@@ -83,7 +83,7 @@ instance Desugar P.Expr (T.Expr ()) where
   desugar (P.FunCallE loc "print" args) = T.FunCallE loc T.Print (desugar <$> args) ()
   desugar (P.FunCallE loc "isEmpty" args) = T.FunCallE loc T.IsEmpty (desugar <$> args) ()
   desugar (P.FunCallE loc name args) = T.FunCallE loc (T.Name name) (desugar <$> args) ()
-  desugar (P.ConstrCall loc name args) = T.FunCallE loc (T.Constr name) (desugar <$> args) ()
+  desugar (P.ConstrCall loc name args) = T.FunCallE loc (T.CtorCall name) (desugar <$> args) ()
   desugar (P.EmptyList loc) = T.EmptyList loc ()
   desugar (P.Tuple loc e1 e2) = T.Tuple loc (desugar e1) (desugar e2) ()
   desugar P.GarbageExpr = error "Attempted to desugar garbage Expr node!"

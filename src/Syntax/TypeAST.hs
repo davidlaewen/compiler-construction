@@ -50,7 +50,7 @@ data Field = Head | Tail | Fst | Snd | SelField T.Text
   deriving Show
 
 data FunName = Name T.Text
-             | Constr T.Text
+             | CtorCall T.Text
              | Selector T.Text
              | Not | Neg
              | Add | Sub | Mul | Div | Mod
@@ -82,7 +82,7 @@ getTypeExpr (Tuple _ _ _ ty) = ty
 
 instance Show FunName where
   show (Name t) = T.unpack t
-  show (Constr t) = T.unpack t
+  show (CtorCall t) = T.unpack t
   show (Selector t) = T.unpack t
   show Not = "_not"
   show Neg = "_neg"
