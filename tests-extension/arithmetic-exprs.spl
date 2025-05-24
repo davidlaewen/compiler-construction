@@ -22,7 +22,7 @@ printLit(aexp) {
 
 main() {
   var twenty = fortytwo.lmul.ladd;
-  AExp val42 = Lit(40 + fortytwo.rmul);
+  AExp val42 = Lit(40 + fortytwo.rmul.lit);
   printLit(val42);
   print(' ');
   print(twenty.lit * 2 + Lit(2).lit);

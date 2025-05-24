@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
+{-# LANGUAGE LambdaCase #-}
 
 module CodeGen.Definition (
   SSMProgram,
@@ -7,14 +8,15 @@ module CodeGen.Definition (
   nullPtr,
   CodegenState(..), Codegen, runCodegen,
   freshLabel, modifyOffsets, modifyHeapLocs,
-  insertCtorData, insertSelector,
+  insertCtorData, lookupCtorData,
+  insertSelector, lookupSelector,
   concatMapM,
   uTypeSize
 ) where
 
 import CodeGen.Instructions (Instr(..))
-import TypeInference.Types (UScheme, UType)
-import qualified TypeInference.Types as TI (UScheme(..), UType(..))
+import TypeInference.Types (UType)
+import qualified TypeInference.Types as TI (UType(..))
 
 import Control.Monad.State (State, evalState, modify, gets)
 import qualified Data.Map as M
@@ -70,9 +72,19 @@ insertCtorData :: T.Text -> CtorData -> Codegen ()
 insertCtorData name cd = modify (\s ->
   s { ctorMap = M.insert name cd s.ctorMap })
 
+lookupCtorData :: T.Text -> Codegen CtorData
+lookupCtorData name = gets (M.lookup name . ctorMap) >>= \case
+  Nothing -> error $ "Couldn't find constructor `" <> T.unpack name <> "`!"
+  Just ctorData -> pure ctorData
+
 insertSelector :: T.Text -> Int -> Codegen ()
 insertSelector name offset = modify (\s ->
   s { selectorMap = M.insert name offset s.selectorMap })
+
+lookupSelector :: T.Text -> Codegen Int
+lookupSelector name = gets (M.lookup name . selectorMap) >>= \case
+  Nothing -> error $ "Couldn't find selector `" <> T.unpack name <> "`!"
+  Just offset -> pure offset
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM _ [] = pure []
@@ -88,4 +100,7 @@ uTypeSize TI.Char = 1
 uTypeSize (TI.Prod _ _) = 1
 uTypeSize (TI.List _) = 1
 uTypeSize (TI.UVar _) = 1
-uTypeSize t = error $ "Called uTypeSize on illegal type: " <> show t
+uTypeSize (TI.Data _) = 1
+uTypeSize (TI.Fun _ _) = error "Called uTypeSize on function type"
+uTypeSize TI.Void = error "Called uTypeSize on type `Void`"
+uTypeSize (TI.TVar t) = error $ "Called uTypeSize on illegal type: " <> show t

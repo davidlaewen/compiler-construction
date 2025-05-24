@@ -30,8 +30,7 @@ loadIdent :: T.Text -> UType -> Codegen SSMProgram
 loadIdent ident _ =
   lookupLoc ident >>= \case
     Offset offset -> pure [LoadLocal offset]
-    -- ldmh extends upwards, offset direction upwards
-    HeapLoc loc -> pure [ LoadReg HeapLowReg, LoadHeap loc ]
+    HeapLoc loc -> pure [LoadReg HeapLowReg, LoadHeap loc]
 
 loadWithOffset :: Int -> Instr
 loadWithOffset = LoadHeap
@@ -184,17 +183,18 @@ codegenExpr (Char _ c TI.Char) = pure [LoadConst $ fromEnum c]
 codegenExpr (Bool _ True TI.Bool) = pure [LoadConst (-1)]
 codegenExpr (Bool _ False TI.Bool) = pure [LoadConst 0]
 
--- Call to subroutine
-codegenExpr (FunCallE _ (Name name) args _) = do
-  let argsSize = length args
+codegenExpr (FunCallE _ ident args _) = do
   argsProgram <- concatMapM codegenExpr args
-  pure $ argsProgram ++ BranchSubr name :
-    [Adjust $ negate argsSize, LoadReg RetReg]
-
--- Call to primitive operation
-codegenExpr (FunCallE _ funName args _) = do
-  argsProgram <- concatMapM codegenExpr args
-  pure $ argsProgram ++ funName2Program funName (getTypeExpr <$> args)
+  funProgram <- case ident of
+    (Name name) -> pure [BranchSubr name, Adjust (negate (length args)), LoadReg RetReg]
+    (CtorCall cName) -> do
+      (CtorData cLabel size) <- lookupCtorData cName
+      pure [LoadConst cLabel, StoreHeapMulti (size + 1)]
+    (Selector sName) -> do
+      offset <- lookupSelector sName
+      pure [LoadHeap offset]
+    funName -> pure $ funName2Program funName (getTypeExpr <$> args)
+  pure $ argsProgram ++ funProgram
 
 -- Empty list is represented by address 0xF0F0F0F0
 codegenExpr (EmptyList _ (TI.List _)) = pure [LoadConst nullPtr]
@@ -214,9 +214,11 @@ codegenExpr e = error $ "Found expression " <> show e <>
 
 funName2Program :: FunName -> [UType] -> SSMProgram
 funName2Program (Name ident) _ =
-  error $ "funName2Program was called with Name " <> T.unpack ident
-funName2Program (Constr name) _ = error $ "Code gen missing for constructor `" <> T.unpack name <> "`"
-funName2Program (Selector name) _ = error $ "Code gen missing for selector `" <> T.unpack name <> "`"
+  error $ "funName2Program was called with Name `" <> T.unpack ident <> "`!"
+funName2Program (CtorCall name) _ =
+  error $ "funName2Program was called with constructor `" <> T.unpack name <> "`!"
+funName2Program (Selector name) _ =
+  error $ "funName2Program was called with selector `" <> T.unpack name <> "`"
 funName2Program Not _ = [NotOp]
 funName2Program Neg _ = [NegOp]
 funName2Program Add _ = [AddOp]
