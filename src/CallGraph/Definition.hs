@@ -95,6 +95,7 @@ findSCCs s = stronglyConnComp (buildCallGraph s)
 
 funMutDeclFromSCC :: SCC (FunDecl () ()) -> FunMutDecl () ()
 funMutDeclFromSCC (AcyclicSCC funDecl) = SingleDecl funDecl
+funMutDeclFromSCC (CyclicSCC [funDecl]) = SingleDecl funDecl -- Self-reference is not mutual
 funMutDeclFromSCC (CyclicSCC funDecls) = MutualDecls defaultLoc funDecls
 
 programFromSCCs :: [DataDecl] -> [VarDecl ()] -> [SCC (FunDecl () ())] -> Program () ()
