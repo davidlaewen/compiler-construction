@@ -24,8 +24,8 @@ prettyPrintDataDecl i (DataDecl _ name constrs) = do
   spaces (T.putStr name)
   printBlock i $ sepBy ",\n" (prettyPrintConstr (i + tabWidth)) constrs
   where
-    prettyPrintConstr :: Indentation -> DataConstr -> IO ()
-    prettyPrintConstr i' (DataConstr _ cName args) = do
+    prettyPrintConstr :: Indentation -> Ctor -> IO ()
+    prettyPrintConstr i' (Ctor _ cName args) = do
       printIndentation i'
       T.putStr cName
       parens $ sepBy ", " (\(sel,ty) ->

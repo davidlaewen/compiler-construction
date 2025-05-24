@@ -1,7 +1,7 @@
 module Syntax.TypeAST (
   Program(..),
   DataDecl(..),
-  DataConstr(..),
+  Ctor(..),
   VarDecl(..),
   FunDecl(..),
   FunMutDecl(..),
@@ -20,10 +20,10 @@ import Utils.Loc (Loc, HasLoc(..))
 data Program varAnnot funAnnot = Program [DataDecl] [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show
 
-data DataDecl = DataDecl Loc T.Text [DataConstr]
+data DataDecl = DataDecl Loc T.Text [Ctor]
   deriving Show
 
-data DataConstr = DataConstr Loc T.Text [(T.Text,UType)]
+data Ctor = Ctor Loc T.Text [(T.Text,UType)]
   deriving Show
 
 data VarDecl a = VarDecl Loc (Maybe UType) T.Text (Expr a) a

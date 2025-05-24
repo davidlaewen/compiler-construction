@@ -23,10 +23,10 @@ instance Desugar P.DataDecl T.DataDecl where
   desugar (P.DataDecl loc name constrs) =
     T.DataDecl loc name (desugar <$> constrs)
 
-instance Desugar P.DataConstr T.DataConstr where
-  desugar :: P.DataConstr -> T.DataConstr
+instance Desugar P.DataConstr T.Ctor where
+  desugar :: P.DataConstr -> T.Ctor
   desugar (P.DataConstr loc name args) =
-    T.DataConstr loc name $ Data.Bifunctor.second desugar <$> args
+    T.Ctor loc name $ Data.Bifunctor.second desugar <$> args
 
 instance Desugar P.VarDecl (T.VarDecl ()) where
   desugar :: P.VarDecl -> T.VarDecl ()
