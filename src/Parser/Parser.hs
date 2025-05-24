@@ -230,7 +230,7 @@ formP = termP >>= opTermP
     opTermP :: Expr -> TokenParser Expr
     opTermP term = (try opP >>= \op -> do
       term' <- termP <|> registerError GarbageExpr (BinaryOpNoExpression op)
-      opTermP (BinOp (Loc (getStart term) (getEnd term)) op term term')) <|> pure term
+      opTermP (BinOp (Loc (getStart term) (getEnd term')) op term term')) <|> pure term
 
 listP :: TokenParser Expr
 listP = formP >>= opFormP
