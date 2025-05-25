@@ -18,12 +18,85 @@ skipping single and multiline comments.
 Secondly, this stage tokenises the input, converting the source file into a
 stream of tokens.
 %
-Tokens are one of:\vspace{-1mm}
+Tokens are one of either\vspace{-1mm}
 \begin{itemize}[itemsep=0mm]
   \item integer, Boolean, or character literals;
-  \item tokens for function/variable identifiers and constructor/data names; or
-  \item keywords and symbols, as defined in a keyword and symbol table.
-\end{itemize}\vspace{-4mm}
+  \item tokens for function/variable identifiers; or
+  \item keywords and symbols, as defined in our keyword and symbol table.
+\end{itemize}
+%
+The above is captured by the following data type:
+\begin{minted}{haskell}
+  data Token = IntLit Int | BoolLit Bool | CharLit Char
+             | IdToken T.Text
+             | NameToken T.Text
+             | Symbol Symbol
+             | Keyword Keyword
+    deriving (Eq, Ord)
+\end{minted}
+
+\paragraph{Keywords and symbols}
+All keywords and symbols are enumerated in the data types \haskell{Keyword} and
+\haskell{Symbol}, where \haskell{Keyword} includes the statement keywords
+\spl{if}, \spl{else}, \spl{while}, \spl{return}, the variable declaration
+keyword \spl{var}, the type names \spl{Int}, \spl{Bool}, \spl{Char}, \spl{Void},
+and the field selectors \spl{hd}, \spl{tl}, \spl{fst}, and \spl{snd}.
+
+The symbols cover all the unary and binary operators, including those consisting
+of two characters, such as \spl{\|\|}, \spl{&&}, \spl{=}\spl{=}, \spl{!=}, and
+other reserved symbols such as \spl{::} and \spl{->} for type signatures, or
+\spl{=}, \spl{;}, \spl{\{} and \spl{\}} for statements and code blocks.
+%
+\begin{minted}{haskell}
+  data Keyword = KwVar | KwIf | KwElse | ... | KwFst | KwSnd
+
+  instance Show Keyword where
+    show KwVar     = "var"
+    show KwIf      = "if"
+    show KwElse    = "else"
+    ...
+    show KwFst     = "fst"
+    show KwSnd     = "snd"
+
+  data Symbol = SymColonColon | SymRightArrow | ... | SymBraceLeft | SymBraceRight
+
+  instance Show Symbol where
+  show SymColonColon    = "::"
+  show SymRightArrow    = "->"
+  ...
+  show SymBraceLeft     = "{"
+  show SymBraceRight    = "}"
+\end{minted}
+
+We can then use the Enum library to obtain a list of all keywords/symbols
+instances in the data type, with which we can then define the corresponding
+lexer, e.g. in the case of symbols:
+%
+\begin{minted}{haskell}
+  symbols :: [Symbol]
+  symbols = enumFromTo minBound maxBound
+
+  symbolL :: Lexer Token
+  symbolL = choice $ (\sym -> string (T.pack (show sym)) >> pure (Symbol sym)) <$> symbols
+\end{minted}
+%
+The \code{choice} function will try the alternatives in the given list of lexers
+in order, returning immediately if one of them succeeds, and failing otherwise.
+For each symbol \code{sym}, the list we supply to \code{choice} includes a lexer
+that attempts to lex the output of \code{show sym}, and returns the token
+\haskell{Symbol sym} if it succeeds.
+
+Defining the symbol and keyword lexer in this way allows us to modify the
+symbols and keywords by simply updating the data type declarations and show
+instances, without needing to touch any code in the actual lexer.
+A slight caveat is that we need to pay attention to the order in which we
+declare the constructors of \haskell{Symbol} when
+symbols\footnote{The same is true for keywords, but our SPL implementation does not feature any keywords with
+overlapping prefixes.} have overlapping prefixes, as is the case for e.g.
+\spl{:} and \spl{::}, or \spl{[} and \spl{[]} (the empty list).
+We then need to ensure that we attempt to lex the longer symbol before its
+prefix, which we achieve by declaring it earlier in the data type definition.
+
 
 \paragraph{Source locations}
 During tokenisation, the lexer also annotates all tokens with their position in
@@ -31,16 +104,16 @@ the file. The lexer returns a list of \mintinline{haskell}{Positioned Token},
 where \mintinline{haskell}{Positioned a} is defined as follows:
 %
 \begin{minted}{haskell}
-data Positioned a = Positioned
-  { startPos :: SourcePos,
+  data Positioned a = Positioned {
+    startPos :: SourcePos,
     endPos :: SourcePos,
     startOffset :: Int,
     tokenLength :: Int,
     tokenVal :: a
   }
 
-data SourcePos = SourcePos
-  { sourceName :: FilePath,
+  data SourcePos = SourcePos {
+    sourceName :: FilePath,
     sourceLine :: !Pos,
     sourceColumn :: !Pos
   }
@@ -76,17 +149,17 @@ the input until we can successfully lex a token again.
 
 
 \section{Parsing}
+
+\subsection{Operator Precedence \& Associativity}
 In order to write parser functions corresponding to the provided grammar of SPL,
 we needed to transform the grammar such that we eliminate occurrences of left
 recursion and obtain the desired structure of the AST with respect to
 associativity and operator precedence.
-
-The main challenge when implementing the parser was the parsing of expressions.
-In particular, the rule
+This pertains especially to the parsing of expressions, where the rule
 \[ \NT{Exp} \Coloneqq \NT{Exp}\ \NT{Op2}\ \NT{Exp} \]
 is left-recursive and must be rewritten.
-In addition, it seems desirable to assign the various binary operators supported
-by SPL different precedence levels and treat them as either left-associative or
+In addition, it seems desirable to assign precedence levels for the various
+binary operators supported by SPL, and treat them as either left-associative or
 right-associative, depending on the operator.
 We must take this into consideration when designing the rules of our parser
 grammar, which we use as the basis for defining our monadic parser combinators.
@@ -190,7 +263,7 @@ contrast to e.g. exponentiation, which is usually taken to be right-associative.
 
 We obtain the correct AST through the grammar rule pattern
 $\NT{e}\ (\NT{op}\ \NT{e})^*$ discussed previously.
-Here, we first parse an instance of $\NT{e}$, which we then (possibly) combine
+Here, we first parse an instance of $\NT{e}$, which we then optionally combine
 repeatedly with another instance of $\NT{e}$. We can do so using an
 accumulator $a$, which we initialise with the leftmost subexpression
 $e_1$, then update by $a \leftarrow op\ e_1\ e_2$, then by
@@ -258,7 +331,7 @@ Our syntax tree can be found in \cref{fig:parse-ast}. Our top level node is
 \haskell{Program}. A \haskell{Program} consists of a
 list of variable declarations, and a list of function declarations.
 
-One thing to note is that at each parser level, we include a `garbage' AST node,
+At each parser level, we include a `garbage' AST node,
 such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
 expressions. In the case of a parse error, these nodes allow us to construct a
 valid AST and continue our parsing pass, while also clearly marking the AST as
