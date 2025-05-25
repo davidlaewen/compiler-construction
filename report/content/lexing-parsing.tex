@@ -21,8 +21,8 @@ stream of tokens.
 Tokens are one of either\vspace{-1mm}
 \begin{itemize}[itemsep=0mm]
   \item integer, Boolean, or character literals;
-  \item tokens for function/variable identifiers; or
-  \item keywords and symbols, as defined in our keyword and symbol table.
+  \item keywords and symbols, as defined in our keyword and symbol table; or
+  \item tokens for function/variable identifiers.
 \end{itemize}
 %
 The above is captured by the following data type:
@@ -34,6 +34,25 @@ The above is captured by the following data type:
              | Keyword Keyword
     deriving (Eq, Ord)
 \end{minted}
+
+
+\paragraph{Literals}
+The lexer tokenises integer, Boolean and character literals, converting them to
+instances of \haskell{IntLit Int}, \haskell{BoolLit Bool} or \haskell{CharLit Char},
+respectively.
+For integers, we attempt to read in a sequence of decimal characters,
+for Booleans we attempt to read one of the strings \haskell{"True"} or
+\haskell{"False"}, and for character literals we attempt to read an alphanumeric
+character, space or punctuation symbol between two single quotation marks
+\haskell{"\'"}.
+
+In each case, we require that the sequence is not followed by further
+alphanumeric characters or underscores (or just letters, in the case of
+integers), so e.g. the Boolean lexer would succeed if the next character is
+non-alphanumeric, e.g. \spl{True;} or \spl{True&}, but would fail on \spl{True1}
+or \spl{True_}, thereby allowing identifiers (for which lexing is attempted
+later) to have \spl{True} or \spl{False} as a prefix.
+
 
 \paragraph{Keywords and symbols}
 All keywords and symbols are enumerated in the data types \haskell{Keyword} and
@@ -96,6 +115,22 @@ overlapping prefixes.} have overlapping prefixes, as is the case for e.g.
 \spl{:} and \spl{::}, or \spl{[} and \spl{[]} (the empty list).
 We then need to ensure that we attempt to lex the longer symbol before its
 prefix, which we achieve by declaring it earlier in the data type definition.
+
+
+\paragraph{Identifiers}
+The last alternative in the lexer is that for identifiers, which can be any
+letter character\footnote{We actually reserve uppercase names for data constructors,
+further details on which we defer to \cref{chp:extension}.}
+followed by a sequence of alphanumeric characters or underscores.
+Identifiers cover global and local variable names, function names, and
+function parameter names.
+
+\begin{minted}{haskell}
+  identL :: Lexer Token
+  identL = do
+    name <- T.cons <$> letterChar <*> (T.pack <$> many (alphaNumChar <|> char '_'))
+    pure $ IdToken name
+\end{minted}
 
 
 \paragraph{Source locations}
