@@ -1,18 +1,35 @@
-\chapter{Lexing \& Parsing}
+\chapter{Lexing \& Parsing} \label{chp:lexing-parsing}
 
 In this chapter we discuss the lexing and parsing phases of our compiler.
-For both these phases we make use of Haskell's Megaparsec
-library\footnote{\url{https://hackage.haskell.org/package/megaparsec}}.
+For both these phases we make use of the Megaparsec
+library\footnote{\url{https://hackage.haskell.org/package/megaparsec}} for Haskell.
+%
+Our compiler has two separate phases for lexing and parsing.
+This is mainly to make the work of the parser easier through the preprocessing
+performed by the lexer.
+The two phases also constitute a separation of concerns, where the lexer
+tokenises the input, converting e.g. literals and keywords into corresponding
+tokens, while the parser deals with the program structure and the construction
+of the AST from the token stream returned by the lexer.
 
 \section{Lexing}
-Our compiler has separate lexing and parsing phases.
-This is mainly to make the work of the parser easier, thanks to the preprocessing
-performed by the lexer.
-Firstly, the lexer takes care of skipping whitespace tokens.
-This also includes skipping single and multiline comments.
-Second, it also annotates all tokens with their position in the file.
-The lexer returns a list of \mintinline{haskell}{Positioned Token},
+Firstly, the lexer deals with stripping whitespace and comments, which includes
+skipping single and multiline comments.
+Secondly, this stage tokenises the input, converting the source file into a
+stream of tokens.
+%
+Tokens are one of:\vspace{-1mm}
+\begin{itemize}[itemsep=0mm]
+  \item integer, Boolean, or character literals;
+  \item tokens for function/variable identifiers and constructor/data names; or
+  \item keywords and symbols, as defined in a keyword and symbol table.
+\end{itemize}\vspace{-4mm}
+
+\paragraph{Source locations}
+During tokenisation, the lexer also annotates all tokens with their position in
+the file. The lexer returns a list of \mintinline{haskell}{Positioned Token},
 where \mintinline{haskell}{Positioned a} is defined as follows:
+%
 \begin{minted}{haskell}
 data Positioned a = Positioned
   { startPos :: SourcePos,
@@ -28,22 +45,31 @@ data SourcePos = SourcePos
     sourceColumn :: !Pos
   }
 \end{minted}
-This will later make it possible to provide more informative error messages, as
-we can include the file, line and column range in which the error occurs,
-allowing the user to easily locate the error in their source code.
 
+These source locations are propagated through the stages of our compiler,
+allowing us to specify source code locations in error messages throughout the
+compilation process, which remain accurate even after translating our AST
+representation in the desugaring phase (\cref{sec:desugaring}).
+%
+All user errors result in error messages featuring a file name together with a
+line and column range, indicating the part of the program from which the error
+arose. Depending on the shell/terminal, these links are even clickable, allowing
+the user to immediately jump to the location of the error in their source code.
+
+\paragraph{Whitespace and comments}
 Our parsing library of choice, Megaparsec, makes dealing with whitespace quite
 straightforward. The library allows one to define a \emph{space consumer}, which
-can consume spaces, tabs, line breaks as well as line and block comments,
+can consume spaces, tabs, line breaks, line comments and block comments
 according to delimiters specified by the client.
 By defining the delimiters \code{//} as well as \code{/*} and \code{*/}, we can
 instruct Megaparsec to strip all line and block comments from the input.
-For block comments, Megaparsec even provides an option for correctly handling
-nested block comments.
+Megaparsec even features a built-in option for correctly
+handling nested block comments.
 
+\paragraph{Error recovery}
 The lexer has error recovery, which is quite easy to implement.
-There are basically two types of errors in our lexer.
-Either the lexer encounters an invalid integer (e.g. \verb|123ab|),
+There are essentially two types of errors in our lexer:
+either the lexer encounters an invalid integer (e.g. \verb|123ab|),
 or it encounters an unknown symbol not featured in the symbol table.
 In both cases we recover from the error by repeatedly discarding characters from
 the input until we can successfully lex a token again.
@@ -52,22 +78,31 @@ the input until we can successfully lex a token again.
 \section{Parsing}
 In order to write parser functions corresponding to the provided grammar of SPL,
 we needed to transform the grammar such that we eliminate occurrences of left
-recursion and to obtain the desired structure of the AST.
+recursion and obtain the desired structure of the AST with respect to
+associativity and operator precedence.
+
 The main challenge when implementing the parser was the parsing of expressions.
 In particular, the rule
 \[ \NT{Exp} \Coloneqq \NT{Exp}\ \NT{Op2}\ \NT{Exp} \]
 is left-recursive and must be rewritten.
-Additionally, when parsing expressions of this form, we must consider the
-associativity and precedence of the operators when designing the rules of our
-parser grammar in order to obtain the desired AST.
+In addition, it seems desirable to assign the various binary operators supported
+by SPL different precedence levels and treat them as either left-associative or
+right-associative, depending on the operator.
+We must take this into consideration when designing the rules of our parser
+grammar, which we use as the basis for defining our monadic parser combinators.
 
-To illustrate, let us think about the desired AST for the expression
+To illustrate, let us consider what AST our parser should generate for the
+expression
 \[ \code{2 == 1+1 \&\& 2 != 3-2} .\]
 One would expect this to denote a conjunction of two (in)equalities, rather than
 (for instance) an equality between \code{2} and everything right of the
-\code{==}, or an inequality between \code{2 == 1+1 \&\& 2} and \code{3-2}.
-The latter two options of course make no sense, and the programmer would not
-expect the expression to be parsed as such.
+`\code{==}', or an inequality between `\code{2 == 1+1 \&\& 2}' and `\code{3-2}'.
+%
+The latter two options of course make no sense, but more importantly, they do
+not match the operator precedence typically assumed in written formulas or other
+programming languages, so the programmer would not expect the expression to be
+parsed as such.
+
 Ideally, our parser should yield the desired AST without requiring the
 programmer to add parentheses, hence the precedence of \code{\&\&} must be lower
 than that of \code{==} and \code{!=}.
@@ -79,8 +114,14 @@ Boolean negation and unary minus.
 We achieve this behaviour using a recursive descent parser with multiple levels,
 shown in \cref{fig:new-expr-grammar}, where each non-terminal corresponds to a
 level in the precedence hierarchy of operators.
-
-\begin{figure}[h]
+%
+The parser thus begins at the lowest precedence level, featuring the Boolean
+operators \code{\&\&} and \code{||}.
+In the rule for $\NT{Expr}$, the leftmost non-terminal is $\NT{Prop}$ and not
+$\NT{Expr}$ itself, allowing us to avoid infinite parsing loops caused by left
+recursion.
+%
+\begin{figure}[t]
   \[
   \begin{array}{lcl}
 		%
@@ -106,15 +147,10 @@ level in the precedence hierarchy of operators.
   \caption{Parser grammar for expressions}
   \label{fig:new-expr-grammar}
 \end{figure}
-
-
-The parser thus begins at the lowest precedence level, featuring the Boolean
-operators \code{\&\&} and \code{||}.
-In the rule for $\NT{Expr}$, the leftmost non-terminal is $\NT{Prop}$ and not
-$\NT{Expr}$ itself, allowing us to avoid infinite parsing loops caused by left
-recursion. Below the expression level, denoted by $\NT{Expr}$, our grammar
-features the following levels, in increasing precedence level, where a few level
-names are somewhat arbitrary:
+%
+Below the expression level, denoted by $\NT{Expr}$, our grammar
+features the following levels, in increasing precedence level (where some level
+names are rather arbitrary):
 \begin{itemize}
   \item Propositions $\NT{Prop}$, which include the comparison operators;
   \item $\NT{List}$, with the \spl{:} (cons) operator on lists;
@@ -134,7 +170,7 @@ arguments of a function call \code{$f$($e_1$,$\dots$,$e_n$)}.
 In order to still parse arbitrarily many applications of \code{\&\&} or
 \code{||}, we use the pattern $((\code{\&\&} \mid \code{||})\ \NT{Prop})^*$,
 hence we can parse any expression of the form $\dots \code{\&\&} \dots \code{||} \dots$,
-and also simply a $\NT{Prop}$, since $*$ denotes zero or more occurrences of
+or just a single $\NT{Prop}$, since $*$ denotes zero or more occurrences of
 a pattern.
 
 For the following rules of the expression grammar, we proceed in much the same

@@ -5,6 +5,19 @@
 % To-do notes
 \newcommand{\todobox}[2][]{\todo[inline,#1]{#2}}
 
+% Patch \paragraph command to add a period
+\makeatletter
+\NewCommandCopy\latexparagraph\paragraph
+\RenewDocumentCommand{\paragraph}{sO{#3}m}{%
+  \IfBooleanTF{#1}
+    {\latexparagraph*{\maybe@addperiod{#3}}}
+    {\latexparagraph[#2]{\maybe@addperiod{#3}}}%
+}
+\newcommand{\maybe@addperiod}[1]{%
+  #1\@addpunct{.}%
+}
+\makeatother
+
 % Grammar
 \newcommand{\NT}[1]{\langle \textit{#1}\kern.7pt \rangle}
 \newcommand{\ruleSep}{\quad\mid\quad}

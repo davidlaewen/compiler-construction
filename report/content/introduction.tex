@@ -1,0 +1,188 @@
+\chapter{Introduction} \label{chp:introduction}
+
+SPL (\emph{Simple Programming Language}) is a simple (as the name would suggest)
+and high-level programming language, which combines imperative-style statements
+and mutable variables with an ML-style polymorphic type system characteristic of
+(pure) functional languages.
+
+In this report, we present a compiler from SPL to the SSM
+(\emph{Simple Stack Machine})\footnote{\url{https://gitlab.science.ru.nl/compilerconstruction/ssm}}
+instruction set, implemented in Haskell, and extended with support for
+user-defined algebraic data types.
+
+The following chapters discuss the various aspects of our compiler
+implementation in detail, following the stages of the compiler, from the lexing
+and parsing of source programs in \cref{chp:lexing-parsing}, to typing analysis
+and other semantic analyses in \cref{chp:semantic-analyses}, generating code for
+our target of SSM in \cref{chp:codegen}.
+We cover our extension of SPL with custom data types in \cref{chp:extension},
+and finish with some concluding remarks in \cref{chp:conclusion}.
+
+The remainder of the present chapter gives a high-level overview of SPL pointing
+out the main features of the language in \cref{sec:intro-spl}, followed by the
+motivation for choosing Haskell as our implementation language in
+\cref{sec:intro-lang-choice}.
+
+
+% TODO: Introductory paragraph
+
+% Contents:
+% - Motivate your language choice
+% - Introduce spl
+% - Give some nice examples.
+% - ...
+
+
+\section{A Brief Tour of SPL} \label{sec:intro-spl}
+
+There is no universal definition for SPL, as it is a general framework used for
+educational purposes which allows numerous (combinations of) design choices
+regarding the exact syntax and semantics.
+
+The syntax specific to our implementation is given as an EBNF grammar in
+\cref{chp:grammar}. This grammar includes our extension of the base syntax from
+the course materials with user-defined algebraic data types, that is, data
+declarations that define new data types.
+These consist of a collection of constructors, which each define a constructor
+predicate along with selectors for each of the constructor fields.
+
+
+\subsection{Data Types}
+SPL features as base data types Booleans, characters and integers, and the
+composite data types of lists and (in our case) tuples. Lists and tuples can
+contain entries of any type, though lists are uniform, meaning their entries
+must all be of the same type. By contrast, the left and right field of a tuple
+can contain entries of differing types.
+
+For the base data types, SPL supports integer arithmetic, Boolean conjunction
+and disjunction, as well as comparison operators.
+Lists are viewed as left-deep nested structures, much as in e.g. Haskell or
+OCaml. A list instance is either empty, or it is constructed from a head element
+and tail list, and can be destructed into those substituent components using
+projection functions.
+Tuples are constructed from a left and a right entry, which can similarly be
+extracted from the tuple using a left and right projection.
+
+
+\subsection{Program Structure}
+An SPL program has the following structure:
+\begin{itemize}
+  \item A (possibly empty) sequence of declarations for global variables;
+        followed by
+  \item a sequence of function declarations, which must include at least a
+        declaration for the function \spl{main()}, the entry point of the program.
+\end{itemize}
+
+Each function declaration features the name of the function, the parameter names,
+an optional type annotation, and the function body, which contains:
+\begin{itemize}
+  \item A (possibly empty) sequence of declarations for local variables, which
+        can be referred to in the remainder of the function body; followed by
+  \item a non-empty sequence of imperative-style statements, such as variable
+        assignments, if-then-else statements, while loops, function calls,
+        and return statements.
+\end{itemize}
+
+
+To illustrate the above, let us look at a short program to
+recursively compute the factorial of 5:
+
+\begin{lstlisting}[language=spl]
+  var x = 5;
+
+  fac(n) :: Int -> Int {
+    if (n < 2) {
+      return 1;
+    } else {
+      return n * fac(n-1);
+    }
+  }
+
+  main() :: -> Void {
+    var res = 0;
+    res = fac(x);
+    print(res);
+    return;
+  }
+\end{lstlisting}
+
+The first line defines a global variable \spl{x} with the value 5.
+This variable can be read and mutated from anywhere in the program, as in the
+second line of the \spl{main()} function.
+Aside from the variable declaration, the program consists of two function
+declarations, where \spl{main()} is the entry point of the program.
+The \spl{main()} function calls the function \spl{fac()}, which recursively
+calls itself when its argument \spl{n} is less than 2.
+In the body of \spl{fac()}, we see the imperative statement syntax, similar to
+the block statements in high-level imperative languages such as C or Java.
+
+An example of a local variable can be seen in the body of \spl{main()}, where
+\spl{res} is initialised with the value 0. This variable is only available
+inside the function body.
+It is destructively updated in the second line to store the result of calling
+the factorial function with \spl{x}, and subsequently used to print the result.
+
+For now, this concludes our high-level overview of SPL, as we will cover the
+various aspects of the language in more detail as they relate to the stages of
+our compiler in the following chapters.
+
+
+
+\section{Language Choice} \label{sec:intro-lang-choice}
+
+For my compiler, I chose Haskell as the implementation language. The choice
+of Haskell was motivated in part by my prior experience working with Haskell,
+e.g. through the Bachelor's course Functional Programming, which also covers e.g.
+monadic parser combinators.
+Beyond the Functional Programming course, I also used Haskell previously during
+my Bachelor's thesis, where I worked on extending the type system of the prototype
+programming language Duo\footnote{\url{https://github.com/duo-lang}}, which
+combines dual data and codata with the algebraic subtyping approach of
+\citet{Dolan2017}.
+
+Beyond my previous experience, the approach of writing lexers and parsers using
+monadic functions and combinators is elegant, and allows working at a high level
+of abstraction. In particular, the parser functions closely correspond to the
+rules of the grammar that they express, which makes the parser and its
+constituent parts easier to reason about.
+
+For representing and manipulating abstract syntax trees, the use of algebraic
+data types (\emph{ADTs}) is also an obvious choice. The syntax of both terms and
+types can be represented using ADTs, with different flavours for parsing, typing
+and code generation.
+We can even use a single representation for several stages of the compiler by
+making our data types (parametrically) polymorphic. This way, we can work with
+different instantiations of the same AST data types throughout desugaring,
+typing, and code generation, leveraging typeclass polymorphism to e.g.
+uniformly pretty-print different instantiations.
+
+Operations such as typing and code generation are naturally captured by
+recursive functions over ADTs representing such AST variants. In addition, the
+use of higher-order operations such as \emph{mapping} and \emph{folding} allow
+many operations on ASTs to be expressed in a concise and elegant way.
+
+In contrast to e.g. ML-style languages or the Simply-Typed Lambda Calculus, the
+syntax of SPL corresponds to a form of
+\emph{rose tree}\kern.1em\footnote{\url{https://en.wikipedia.org/wiki/Rose_tree}},
+based on the fact that several AST nodes allow an unbounded and variable number
+of child nodes.
+For instance, a function body in SPL consists of a (possibly empty) sequence of
+variable declarations, followed by a non-empty sequence of statements.
+We can elegantly capture such a data structure in Haskell using a combination of
+algebraic data types and lists to represent AST nodes, where a sequence of
+sub-nodes---sometimes referred to as a (sub)forest---is given by a list.
+
+In our semantic analyses and code generation, we use various monads and monad
+stacks for e.g. state and exceptions.
+The use of monads to emulate e.g. mutable state guarantees a consistent and
+predictable control flow based on how the state is threaded through the
+computation, while we can program under a monad (stack) more or less seamlessly
+thanks to Haskell's do-notation.
+Again, this makes code easier to reason about, since we can easily control and
+follow how the state is propagated through the AST representation during e.g.
+typing or code generation.
+
+Overall, Haskell is of course not uniquely suited to the implementation of a
+compiler, though the combination of recursive ADTs with recursive higher-order
+combinators is arguably a particularly elegant approach for working with syntax
+trees.

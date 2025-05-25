@@ -16,21 +16,14 @@
 
 \tableofcontents%
 
-\chapter{Introduction}
 % \begin{quote}
 % 	\it
 % 	This document is a mandatory skeleton for your report.
 % 	It gives by no means an exhaustive list of suggestions for content.
 % 	The report should be readable self-contained and readable without access to the source code.
 % \end{quote}
-% \begin{itemize}
-% 	\item Motivate your language choice
-% 	\item Introduce spl
-% 	\item Give some nice examples.
-% 	\item \ldots
-% \end{itemize}
 
-\input{content/lang-choice.tex}
+\input{content/introduction.tex}
 
 \input{content/lexing-parsing.tex}
 
@@ -38,13 +31,13 @@
 
 \input{content/code-generation.tex}
 
-\chapter{Extension}
+\chapter{Extension} \label{chp:extension}
 Describe your extension in detail
 
-\chapter{Conclusion}
-What does work, what does not etc.
+\chapter{Conclusion} \label{chp:conclusion}
+What does work, what does not, etc
 
-\section{Reflection}
+\section{Reflection} \label{chp:reflection}
 \begin{itemize}
 	\item What do you think of the project?
 	\item How did it work out?
@@ -59,7 +52,7 @@ What does work, what does not etc.
 \bibliography{references.bib}
 
 \appendix
-\chapter{Grammar}
+\chapter{Grammar} \label{chp:grammar}
 Change the grammar to the one you actually used
 
 \begin{verbatim}

@@ -1,18 +1,43 @@
-\chapter{Code Generation}
+\chapter{Code Generation} \label{chp:codegen}
 
 In the code generation stage, we use the type-annotated syntax tree from our
 typing stage to generate code for the \emph{Simple Stack Machine}
 (\emph{SSM})\footnote{\url{https://gitlab.science.ru.nl/compilerconstruction/ssm}}.
-The typing information we inferred and checked during the previous stage is
-vital to the code generation, as we need it to determine which data to store on
-the heap and the stack, and how much space we need to allocate.
-Of course, the semantic analyses also preclude many possible errors that might
-arise during code generation, or at runtime, due to e.g. mismatched types,
-missing return statements, or functions being called prior to their definition
-in the source file.
+The type information we inferred and checked during the previous stage is used
+during code generation, though only for a select few purposes.
+In particular, we use the type annotations for resolving calls to the
+\spl{print} function, as well as various sanity checks, where we throw an
+internal error if we encounter invalid type information.
+We do not need the type annotations to determine the size of data on the heap or
+stack though, as we represent all data types uniformly in a single stack
+register, where composite data types (i.e. lists and tuples) use a \emph{boxed}
+representation, consisting of a pointer stored on the stack which refers to
+the list/tuple data stored on the heap.
+
+Of course, the semantic analyses serve a much more general purpose than just
+supplying type annotations for the code generation stage, as they preclude many
+possible errors that might arise during code generation or at runtime due to
+mismatched types.
+
+In the following, we briefly discuss our chosen evaluation strategy in
+\cref{sec:codegen-eval-order}, after which we cover our general setup for
+generating SSM code in
+\cref{sec:codegen-monad,sec:codegen-instructions,sec:codegen-vars-args},
+which concern the monad, data structures, and helper functions that we use, how
+we represent the SSM instruction set in Haskell, and how we deal with scoping
+and storing/loading for function arguments as well as local and global variables,
+and the initialisation of global variables on the heap
+(\cref{sec:codegen-initialisation}).
+
+In \cref{sec:codegen-multi-reg-vals}, we weigh the benefits and drawbacks of possible
+representations for multi-register (or composite) data, and motivate our corresponding
+design choices. This directly leads us to the topic of polymorphism, which we
+cover in \cref{sec:polymorphism-boxing}, concluding with a discussion on the
+semantics of parameter passing in \cref{sec:codegen-param-passing}.
 
 
-\section{Evaluation Order}
+
+\section{Evaluation Order} \label{sec:codegen-eval-order}
 
 We take the evaluation strategy of SPL to be \emph{eager}, or call-by-value,
 meaning that function arguments are evaluated prior to performing function
@@ -27,11 +52,11 @@ As a consequence, we may perform unnecessary evaluation of arguments if they are
 never used in the function body, though the upside is that values only require
 a fixed amount of space (for the base types \spl{Int}, \spl{Bool}, and
 \spl{Char} at least---we will talk about lists in detail in
-\cref{sec:multi-reg-vals}), while a \emph{lazy} evaluation strategy would
-require us to store unevaluated expressions, which may be arbitrarily large.
-The memory usage under call-by-value is thus significantly smaller, and we avoid
-complicated memory management involving the storing and loading of arbitrary
-expressions.
+\cref{sec:codegen-multi-reg-vals}), while a \emph{lazy} evaluation strategy
+would require us to store unevaluated expressions, which may be arbitrarily
+large. The memory usage under call-by-value is thus significantly smaller, and
+we avoid complicated memory management involving the storing and loading of
+arbitrary expressions.
 
 
 
@@ -132,7 +157,7 @@ top and bottom of the \spl{while} loop.
 
 
 
-\section{Instructions}
+\section{Instructions} \label{sec:codegen-instructions}
 
 We defined algebraic data types \haskell{Register} and \haskell{Instr} for the
 register names and instructions available in SSM. An SSM program is simply a
@@ -174,7 +199,7 @@ script:\todo{Is this worth discussing?}
 \end{minted}
 
 
-\section{Variables and Arguments}
+\section{Variables and Arguments} \label{sec:codegen-vars-args}
 
 As mentioned in \cref{sec:codegen-monad}, we track two maps in our
 \haskell{CodeGen} monad state, which contain heap and stack locations,
@@ -268,7 +293,7 @@ instruction:
 % compute the addresses of the global variables to load from and store to.
 
 
-\section{Multi-Register Values} \label{sec:multi-reg-vals}
+\section{Multi-Register Values} \label{sec:codegen-multi-reg-vals}
 
 While values of the base types $\Int$, $\Bool$ and $\Char$ can all be
 stored in a single register, value instances of lists
@@ -303,12 +328,12 @@ compared to storing the list elements in an array of fixed size.
 However, such a representation has some important advantages when dealing with
 polymorphism, which we will cover in \cref{sec:polymorphism-boxing}, and in
 mapping the semantics of SPL onto the instruction set of SSM.
-The semantics of lists in SPL is much like that of lists in functional,
-high-level languages such as ML/OCaml or Haskell, where lists are viewed as
-essentially left-deep nested tuples, decomposable into a \emph{head} (the first
-element of the list) and a \emph{tail}, the remainder of the list following the
-head. This is reflected in the way SPL allows construction of lists, that is,
-via the \emph{cons} constructor `\spl{:}' with type
+The semantics of lists in SPL follows that of functional, high-level languages
+such as ML/OCaml or Haskell, where lists are viewed as essentially left-deep
+nested tuples, decomposable into a \emph{head} (the first element of the list)
+and a \emph{tail}, the remainder of the list following the head. This is
+reflected in the way SPL allows construction of lists, that is, via the
+\emph{cons} constructor `\spl{:}' with type
 $\forall \alpha.\ \alpha \to \TList{\alpha} \to \TList{\alpha}$, as well as the
 destructors (selectors) on lists, namely \spl{.hd} and \spl{.tl}, which take a
 non-nil list instance and return the head and tail, respectively.
@@ -506,7 +531,7 @@ there would still be cases where we get many specialised instances, albeit for
 slightly more contrived examples.
 
 
-\section{Parameter Passing}
+\section{Parameter Passing} \label{sec:codegen-param-passing}
 Beyond the considerations regarding the representation for values of various
 data types covered so far, we must also pay attention to how our choices may
 (inadvertently) affect the semantics resulting from our code generation.
