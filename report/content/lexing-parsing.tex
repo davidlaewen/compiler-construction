@@ -1,24 +1,51 @@
 \chapter{Lexing \& Parsing} \label{chp:lexing-parsing}
 
 In this chapter we discuss the lexing and parsing phases of our compiler.
-For both these phases we make use of the Megaparsec
-library\footnote{\url{https://hackage.haskell.org/package/megaparsec}} for Haskell.
+For both phases we make use of the Megaparsec
+library\footnote{\url{https://hackage.haskell.org/package/megaparsec}}.
 %
 Our compiler has two separate phases for lexing and parsing.
 This is mainly to make the work of the parser easier through the preprocessing
 performed by the lexer.
-The two phases also constitute a separation of concerns, where the lexer
+The two phases also constitute a separation of concerns: the lexer
 tokenises the input, converting e.g. literals and keywords into corresponding
-tokens, while the parser deals with the program structure and the construction
-of the AST from the token stream returned by the lexer.
-
-\section{Lexing}
-Firstly, the lexer deals with stripping whitespace and comments, which includes
-skipping single and multiline comments.
-Secondly, this stage tokenises the input, converting the source file into a
-stream of tokens.
+tokens, and handling whitespace and comments; the parser deals with the actual
+program structure and the construction of the AST from the token stream returned
+by the lexer.
 %
-Tokens are one of either\vspace{-1mm}
+As a consequence, we require an additional pass for lexing the input prior to
+parsing, and the lexer cannot leverage the program structure to e.g. exclude
+certain cases or provide more informative error messages.
+However, as we will see, the parser benefits in many ways from this
+preprocessing.
+
+We first cover the lexing stage in \cref{sec:lexing}, after which we discuss
+the setup of parsing stage in \cref{sec:parsing-setup}, our parse AST
+representation in \cref{sec:parse-ast}, and the parsing of programs in
+\cref{sec:parsing-programs}.
+
+
+\section{Lexing} \label{sec:lexing}
+
+The lexer has two main functionalities.
+Firstly, it deals with stripping whitespace and comments, which includes
+skipping single-line and multi-line comments.
+Secondly, this stage tokenises the text input, converting the source file into a
+stream of tokens.
+
+Our lexer is implemented using Megaparsec, and has the following type:
+\begin{minted}{haskell}
+  type Lexer a = Parsec Void Text a
+\end{minted}
+%
+The type of the input stream is \haskell{Text}. We use \haskell{Void} for the
+custom error type, as Megaparsec's built-in error type is sufficient for
+handling the few forms of error we might encounter during lexing.
+%
+Our lexer instances are generally of type \haskell{Lexer Token}, that is, they
+try to consume part of the input, returning a token if they succeed.
+
+Tokens are one of either \vspace{-1mm}
 \begin{itemize}[itemsep=0mm]
   \item integer, Boolean, or character literals;
   \item keywords and symbols, as defined in our keyword and symbol table; or
@@ -110,17 +137,18 @@ symbols and keywords by simply updating the data type declarations and show
 instances, without needing to touch any code in the actual lexer.
 A slight caveat is that we need to pay attention to the order in which we
 declare the constructors of \haskell{Symbol} when
-symbols\footnote{The same is true for keywords, but our SPL implementation does not feature any keywords with
-overlapping prefixes.} have overlapping prefixes, as is the case for e.g.
-\spl{:} and \spl{::}, or \spl{[} and \spl{[]} (the empty list).
+symbols have overlapping prefixes, as is the case for e.g.
+\spl{:} and \spl{::}, or \spl{[} and \spl{[]} (the empty list).\footnote{The
+same is true for keywords, but our SPL implementation does not feature any
+keywords with overlapping prefixes.}
 We then need to ensure that we attempt to lex the longer symbol before its
 prefix, which we achieve by declaring it earlier in the data type definition.
 
 
 \paragraph{Identifiers}
 The last alternative in the lexer is that for identifiers, which can be any
-letter character\footnote{We actually reserve uppercase names for data constructors,
-further details on which we defer to \cref{chp:extension}.}
+letter character\footnote{We actually reserve capitalised names for data
+constructors, further details on which we defer to \cref{chp:extension}.}
 followed by a sequence of alphanumeric characters or underscores.
 Identifiers cover global and local variable names, function names, and
 function parameter names.
@@ -161,8 +189,9 @@ representation in the desugaring phase (\cref{sec:desugaring}).
 %
 All user errors result in error messages featuring a file name together with a
 line and column range, indicating the part of the program from which the error
-arose. Depending on the shell/terminal, these links are even clickable, allowing
-the user to immediately jump to the location of the error in their source code.
+arose. If supported by the shell/terminal (e.g. that of VSCode), these links are
+even clickable, allowing the user to immediately jump to the location of the
+error in their source code.
 
 \paragraph{Whitespace and comments}
 Our parsing library of choice, Megaparsec, makes dealing with whitespace quite
@@ -175,17 +204,230 @@ Megaparsec even features a built-in option for correctly
 handling nested block comments.
 
 \paragraph{Error recovery}
-The lexer has error recovery, which is quite easy to implement.
-There are essentially two types of errors in our lexer:
-either the lexer encounters an invalid integer (e.g. \verb|123ab|),
-or it encounters an unknown symbol not featured in the symbol table.
+The lexer supports error recovery, which is quite simple to achieve.
+There are essentially just two types of errors that can occur while lexing:
+either we encounter an invalid integer (e.g. \verb|123ab|),
+or we encounter a symbol not featured in the symbol table.
 In both cases we recover from the error by repeatedly discarding characters from
 the input until we can successfully lex a token again.
+In any case, we fail after the lexing stage and do not continue to parsing, but
+the lexer error recovery allows us to identify multiple errors in one lexing
+pass and generate error messages for each of them.
 
 
-\section{Parsing}
+\section{Parsing Stage Setup} \label{sec:parsing-setup}
+
+Before we discuss the AST representation in \cref{sec:parse-ast} and the actual
+parsing of programs in \cref{sec:parsing-programs}, we give a more technical
+account of the underlying `machinery' of the parsing stage in the present
+section. In particular, we cover the custom token stream type on which our
+parser operates, how we define custom parse errors, and support for error
+recovery and reporting multiple errors.
+
+While \haskell{Lexer} operates on input of type \haskell{Data.Text}, our parser
+\haskell{TokenParser} operates on the token stream returned by the lexer.
+The type of our parser is given by:
+%
+\begin{minted}{haskell}
+  type TokenParser a = Parsec ParserError TokenStream a
+\end{minted}
+Here, \haskell{TokenStream} specifies the type of the input stream,
+\haskell{ParserError} is the type of our custom error component, and the type
+variable \code{a} (made explicit above by eta-expansion) specifies the output
+type of the parser instance.
+
+
+\subsection{Custom Token Stream}
+
+Our lexer instances generally return a single token, that is, an instance of
+the \haskell{Token} data type shown in \cref{sec:lexing}. By lexing many such
+tokens from the input, we obtain a list of tokens, hence the input of type
+\haskell{Data.Text} is processed into a list \haskell{[Positioned Token]},
+where \haskell{Positioned a} equips the underlying type \code{a} with positional
+information:
+\begin{minted}{haskell}
+  data Positioned a = Positioned {
+    startPosition :: SourcePos,
+    endPosition   :: SourcePos,
+    startOffset   :: Int,
+    tokenLength   :: Int,
+    tokenVal      :: a
+  } deriving (Eq, Ord, Show)
+\end{minted}
+
+In order to use Megaparsec with our custom token type, we need to make our list
+of tokens an instance of Megaparsec's \haskell{Stream} type class\footnote{\url{https://hackage.haskell.org/package/megaparsec-9.7.0/docs/Text-Megaparsec-Stream.html}}.
+Simply instantiating \haskell{Stream} with \haskell{[Positioned Token]} is not
+sufficient though, since we want our parser to display segments or lines from
+the original input in our error messages, which is not possible based on the
+token stream alone.
+To this end, we must bundle the list of tokens returned by the lexer with the
+original source program of type \haskell{Data.Text}:
+%
+\begin{minted}{haskell}
+  data TokenStream = TokenStream {
+    tokenStreamInput :: T.Text,
+    tokenStream :: [Positioned PT.Token]
+  } deriving (Show)
+\end{minted}
+
+We give type class declarations of \haskell{TokenStream} for the \haskell{Stream}
+type class, along with the \haskell{VisualStream} and \haskell{TraversableStream}
+type classes, which are needed for error reporting and debugging support.
+This involves a fair amount of function definitions, though most of the
+implementation closely follows the example code given in the Megaparsec tutorial
+of Mark Karpov, which discusses the use of Megaparsec with custom input
+streams\footnote{\url{https://markkarpov.com/tutorial/megaparsec.html\#working-with-custom-input-streams}}.
+
+Since this is really just boilerplate code, we will forego a detailed
+explanation, but to summarise briefly, we need to define a number of functions
+for decomposing a \haskell{TokenStream} instance into a (list of)
+\haskell{Positioned Token} and the remaining stream, along with functions for
+displaying a \haskell{TokenStream} instance as a string, and a function that
+takes an offset in the input and returns the corresponding line and updates the
+positional state of the stream, shifting it to the position given by the offset.
+
+
+\subsection{Custom Parse Errors}
+
+Megaparsec can generate so-called trivial parse errors out of the box, where the
+error message displays the position of the parse error and the corresponding
+line from the input, listing the unexpected token that was encountered (if any),
+and the tokens that were expected.
+We can additionally generate `fancy' custom parse errors. A naive method for
+doing so is using the \haskell{fail} combinator, which always fails, reporting
+its string argument as the error.
+
+A cleaner approach is to use Megaparsec's support for extending its
+\haskell{ErrorFancy} type by embedding a custom data type of parse errors.
+We use this capability to define a number of custom errors for various scenarios,
+with a few example cases shown below:
+%
+\begin{minted}{haskell}
+  data ParserError where
+    NoClosingDelimiter   :: PT.Symbol -> ParserError
+    FunctionNoArrow      :: ParserError
+    ProdTypeMissingEntry :: ParserError
+    ...
+    IfNoCondition        :: ParserError
+\end{minted}
+
+We can then specify how our custom errors should be displayed by defining a
+corresponding type class instance for Megaparsec's \haskell{ShowErrorComponent}:
+%
+\begin{minted}{haskell}
+  instance ShowErrorComponent ParserError where
+    showErrorComponent :: ParserError -> String
+    showErrorComponent (NoClosingDelimiter sym) = "Expecting closing `" <> show sym <> "`"
+    showErrorComponent FunctionNoArrow = "Expecting argument type or `->`"
+    showErrorComponent ProdTypeMissingEntry = "Expecting left type of product"
+    ...
+    showErrorComponent IfNoCondition = "Expecting if condition between `(` and `)`"
+\end{minted}
+
+Instances of \haskell{ParserError} are used throughout our parser implementation
+to provide more informative error messages for many possible issues we might
+encounter while parsing the input.
+Using a data type to do so allows us to reuse our custom errors in different
+parts of the parser, and ensures that the various forms of error are always
+displayed in a consistent format.
+
+
+\todobox{Describe error recovery}
+
+
+\section{Parse AST Representation} \label{sec:parse-ast}
+
+\begin{figure}
+\begin{minted}[breaklines]{haskell}
+data Program = Program [VarDecl] [FunMutDecl]
+data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
+data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
+
+data Stmt = If Loc Expr [Stmt] [Stmt]
+          | While Loc Expr [Stmt]
+          | Assign Loc VarLookup Expr
+          | FunCall Loc T.Text [Expr]
+          | Return Loc (Maybe Expr)
+          | GarbageStmt
+
+data Type = IntT Loc | BoolT Loc | CharT Loc
+          | Prod Loc Type Type | List Loc Type | Void Loc
+          | Fun Loc [Type] Type
+          | TyVar Loc T.Text
+          | GarbageType
+
+data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
+data ExprLookup = ExprField Expr Field
+data Field = Head | Tail | Fst | Snd | GarbageField
+
+data Expr = Ident Loc T.Text
+          | ExprLookup Loc ExprLookup
+          | Int Loc Int
+          | Bool Loc Bool
+          | Char Loc Char
+          | UnOp Loc UnaryOp Expr
+          | BinOp Loc BinaryOp Expr Expr
+          | FunCallE Loc T.Text [Expr]
+          | EmptyList Loc
+          | Tuple Loc Expr Expr
+          | GarbageExpr
+
+data UnaryOp = Not | Neg
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte
+              | And | Or | Cons
+\end{minted}
+	\caption{Abstract syntax tree for parsing stage}
+  \label{fig:parse-ast}
+\end{figure}
+
+The data types of our AST representation can be found in \cref{fig:parse-ast}.
+Our top level node is \haskell{Program}. A \haskell{Program} consists of a list
+of variable declarations, and a list of function declarations.
+
+At each parser level, we include a `garbage' AST node,
+such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
+expressions. In the case of a parse error, these nodes allow us to construct a
+valid AST and continue our parsing pass, while also clearly marking the AST as
+erroneous. When we later translate our parse AST to the AST representation used
+for typing, these nodes prevent us from accidentally entering the typing stage
+when parse errors were present in the source program, which would clearly
+constitute a compiler bug.
+Since the `garbage' nodes allow us to continue parsing after we encounter a
+parse error, they are particularly useful for supporting multiple error messages
+and error recovery.
+
+To model field lookups we use the \haskell{Field} datatype, where a field
+\haskell{Snd (Fst "x")} should be interpreted as \spl{x.fst.snd}.
+Field selectors can appear both on the left side of assignments, e.g.
+\spl{x.fst = 42;}, and in expressions, e.g. \spl{(0,40+2).snd}. In both cases, we
+model the field selectors using \haskell{Field}, which features cases for the
+built-in list and tuple projections.
+In both variable assignments and expressions, field selectors can be chained
+arbitrarily, e.g. \spl{x.tl.tl.hd.fst}, for which we use recursion in the AST
+definition.
+Variables in variable assignments are modelled using \haskell{VarLookup}, an
+instance of which is either an identifier or a field lookup. The latter case is
+self-referential, as it consists of a field lookup on instance of
+\haskell{VarLookup} itself.
+Similarly, \haskell{ExprLookup} is mutually recursive with \haskell{Expr}, so in
+a field lookup of the form $e.s$, $e$ can be an arbitrary expression, so can
+again be of the form $e.s$, and so on.
+
+We did not create a special data type for built-in functions like
+\spl{print} or \spl{isEmpty}, since we currently treat them as regular functions
+of a fixed type and predetermined implementation, which is either hardcoded in
+the code generation, or given in a prelude file that is always loaded by the
+compiler.
+
+
+
+
+\section{Parsing of Programs} \label{sec:parsing-programs}
 
 \subsection{Operator Precedence \& Associativity}
+
 In order to write parser functions corresponding to the provided grammar of SPL,
 we needed to transform the grammar such that we eliminate occurrences of left
 recursion and obtain the desired structure of the AST with respect to
@@ -229,7 +471,22 @@ In the rule for $\NT{Expr}$, the leftmost non-terminal is $\NT{Prop}$ and not
 $\NT{Expr}$ itself, allowing us to avoid infinite parsing loops caused by left
 recursion.
 %
-\begin{figure}[t]
+Below the expression level, denoted by $\NT{Expr}$, our grammar
+features the following levels, in increasing precedence level (where some level
+names are rather arbitrary):
+\begin{itemize}
+  \item Propositions $\NT{Prop}$, which include the comparison operators;
+  \item $\NT{List}$, with the \spl{:} (cons) operator on lists;
+  \item formulas $\NT{Form}$, featuring addition and subtraction;
+  \item terms $\NT{Term}$, featuring multiplication, division, and the modulo
+        operator;
+  \item and finally values $\NT{Val}$, which include integer, Boolean and
+        character literals, the empty list \spl{[]}, the unary operators \spl{!}
+        and \spl{-}, function calls, identifiers, tuples, or just a pair of
+        parentheses, which modify the precedence.
+\end{itemize}
+
+\begin{figure}[th]
   \[
   \begin{array}{lcl}
 		%
@@ -256,20 +513,6 @@ recursion.
   \label{fig:new-expr-grammar}
 \end{figure}
 %
-Below the expression level, denoted by $\NT{Expr}$, our grammar
-features the following levels, in increasing precedence level (where some level
-names are rather arbitrary):
-\begin{itemize}
-  \item Propositions $\NT{Prop}$, which include the comparison operators;
-  \item $\NT{List}$, with the \spl{:} (cons) operator on lists;
-  \item formulas $\NT{Form}$, featuring addition and subtraction;
-  \item terms $\NT{Term}$, featuring multiplication, division, and the modulo
-        operator;
-  \item and finally values $\NT{Val}$, which include integer, Boolean and
-        character literals, the empty list \spl{[]} the unary operators \spl{!}
-        and \spl{-}, function calls, identifiers, tuples, or just a pair of
-        parentheses, which modifies the precedence.
-\end{itemize}
 
 The rule for $\NT{Val}$ allows us to jump back to $\NT{Expr}$ at the topmost
 level of the grammar, either via an opening parenthesis \spl{(}, or the
@@ -310,102 +553,10 @@ Certain terminals and non-terminals, such as $\NT{Char}$ or \code{[]}, could be
 placed higher up in the grammar, since e.g. characters and the empty list cannot
 be used in arithmetic operations. Despite this, we chose to place these in the
 $\NT{Val}$ rule, since it is more intuitive to provide a type error rather than
-a parse error for non-numbers occuring in an arithmetic expression.
-
-
-\section{Abstract Syntax Tree}
-
-\begin{figure}
-\begin{minted}[breaklines]{haskell}
-data Program = Program [VarDecl] [FunMutDecl]
-data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
-data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
-data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
-
-data Stmt = If Loc Expr [Stmt] [Stmt]
-          | While Loc Expr [Stmt]
-          | Assign Loc VarLookup Expr
-          | FunCall Loc T.Text [Expr]
-          | Return Loc (Maybe Expr)
-          | GarbageStmt
-
-data Type = IntT Loc
-          | BoolT Loc
-          | CharT Loc
-          | Prod Loc Type Type
-          | List Loc Type
-          | Void Loc
-          | Fun Loc [Type] Type
-          | TyVar Loc T.Text
-          | GarbageType
-
-data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
-data ExprLookup = ExprField Expr Field
-data Field = Head | Tail | Fst | Snd | GarbageField
-
-data Expr = Ident Loc T.Text
-          | ExprLookup Loc ExprLookup
-          | Int Loc Int
-          | Bool Loc Bool
-          | Char Loc Char
-          | UnOp Loc UnaryOp Expr
-          | BinOp Loc BinaryOp Expr Expr
-          | FunCallE Loc T.Text [Expr]
-          | EmptyList Loc
-          | Tuple Loc Expr Expr
-          | GarbageExpr
-
-data UnaryOp = Not | Neg
-data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte | And | Or | Cons
-\end{minted}
-	\caption{Abstract syntax tree for parsing stage}
-  \label{fig:parse-ast}
-\end{figure}
-
-Our syntax tree can be found in \cref{fig:parse-ast}. Our top level node is
-\haskell{Program}. A \haskell{Program} consists of a
-list of variable declarations, and a list of function declarations.
-
-At each parser level, we include a `garbage' AST node,
-such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
-expressions. In the case of a parse error, these nodes allow us to construct a
-valid AST and continue our parsing pass, while also clearly marking the AST as
-erroneous. When we later translate our parse AST to the AST representation used
-for typing, these nodes prevent us from accidentally entering the typing stage
-when parse errors where present in the source program, which would clearly
-constitute a compiler bug.
-Since the `garbage' nodes allow us to continue parsing after we encounter a
-parse error, they are particularly useful for supporting multiple error messages
-and error recovery.
-
-To model field lookups we use the \haskell{Field} datatype, where a field
-\haskell{Snd (Fst "x")} should be interpreted as \spl{x.fst.snd}.
-Field selectors can appear both on the left side of assignments, e.g.
-\spl{x.fst = 42;}, and in expressions, e.g. \spl{(0,40+2).snd}. In both cases, we
-model the field selectors using \haskell{Field}, which features cases for the
-built-in list and tuple projections.
-In both variable assignments and expressions, field selectors can be chained
-arbitrarily, e.g. \spl{x.tl.tl.hd.fst}, for which we use recursion in the AST
-definition.
-Variables in variable assignments are modelled using \haskell{VarLookup}, an
-instance of which is either an identifier or a field lookup. The latter case is
-self-referential, as it consists of a field lookup on instance of
-\haskell{VarLookup} itself.
-Similarly, \haskell{ExprLookup} is mutually recursive with \haskell{Expr}, so in
-a field lookup of the form $e.s$, $e$ can be an arbitrary expression, so can
-again be of the form $e.s$, and so on.
-
-We did not create a special data type for built-in functions like
-\spl{print} or \spl{isEmpty}, since we currently treat them as regular functions
-of a fixed type and predetermined implementation, which is either hardcoded in
-the code generation, or given in a prelude file that is always loaded by the
-compiler.
+a parse error for non-numbers occurring in an arithmetic expression.
 
 
 
-
-We also did not add source position information to the AST yet.
-We will do this whenever we find we need this information in the AST.
 
 \begin{todoenv}
   \begin{itemize}
