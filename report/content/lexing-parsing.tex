@@ -215,6 +215,184 @@ the lexer error recovery allows us to identify multiple errors in one lexing
 pass and generate error messages for each of them.
 
 
+
+\section{Parse AST Representation} \label{sec:parse-ast}
+
+Before we can explain how a token stream returned by the lexer is parsed, we
+first need to introduce the representation of programs that our parser targets,
+that is, our representation of abstract syntax trees.
+As briefly mentioned in \cref{sec:intro-lang-choice}, the syntax of SPL
+corresponds to a form of \emph{rose trees}, where certain AST nodes have a
+sequence of successors, or \emph{sub-forest}, rather than a fixed number of
+child nodes.
+For instance, we have an arbitrary number of top-level variable declarations at
+the start of a program, and similarly for e.g. the statements in a function body
+or while-block.
+
+When working with Haskell, the obvious choice is to use (recursive) algebraic
+data types, which we combine with the built-in list type to represent the
+aforementioned nodes with a sequence of successors.
+The data types of our AST representation can be found in \cref{fig:parse-ast}.
+
+The structure generally follows that of the grammar given in \cref{chp:grammar},
+that is, we have data types corresponding to variable declarations and function
+declarations, statements, expressions, types, along with some additional data
+types for field lookups as well as unary and binary operators.
+We first remark on some general features of the AST representation, before
+briefly discussing the data declarations.
+
+
+\begin{figure}
+\begin{minted}[breaklines]{haskell}
+data Program = Program [VarDecl] [FunMutDecl]
+data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
+data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
+data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
+
+data Stmt = If Loc Expr [Stmt] [Stmt]
+          | While Loc Expr [Stmt]
+          | Assign Loc VarLookup Expr
+          | FunCall Loc T.Text [Expr]
+          | Return Loc (Maybe Expr)
+          | GarbageStmt
+
+data Type = IntT Loc | BoolT Loc | CharT Loc
+          | Prod Loc Type Type | List Loc Type | Void Loc
+          | Fun Loc [Type] Type
+          | TyVar Loc T.Text
+          | GarbageType
+
+data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
+data ExprLookup = ExprField Expr Field
+data Field = Head | Tail | Fst | Snd | GarbageField
+
+data Expr = Ident Loc T.Text
+          | ExprLookup Loc ExprLookup
+          | Int Loc Int
+          | Bool Loc Bool
+          | Char Loc Char
+          | UnOp Loc UnaryOp Expr
+          | BinOp Loc BinaryOp Expr Expr
+          | FunCallE Loc T.Text [Expr]
+          | EmptyList Loc
+          | Tuple Loc Expr Expr
+          | GarbageExpr
+
+data UnaryOp = Not | Neg
+data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte
+              | And | Or | Cons
+\end{minted}
+	\caption{Abstract syntax tree for parsing stage}
+  \label{fig:parse-ast}
+\end{figure}
+
+
+\paragraph{Location data}
+For most of the AST nodes, we include a field with location data of type
+\haskell{Loc}, which is defined as follows:
+%
+\begin{minted}{haskell}
+  data Loc = Loc !SourcePos !SourcePos
+\end{minted}
+%
+The two entries of type \haskell{SourcePos} correspond to a start and end
+position, which our parser determines based on the token positions provided by
+the lexer.
+Such a \haskell{Loc} entry thus specifies the part of the input which a given
+AST node corresponds to. The location data is propagated throughout the
+remaining stages of the compiler, allowing us to specify a range within the
+source code when reporting errors to the user, such as a type mismatch
+discovered in the typing stage.
+
+
+\paragraph{`Garbage' nodes}
+At each level of the AST, we include a `garbage' AST node,
+such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
+expressions. In the case of a parse error, these nodes allow us to construct a
+valid AST and continue our parsing pass, while also clearly marking the AST as
+erroneous. When we later translate our parse AST to the AST representation used
+for typing, we include sanity checks to ensure that no garbage nodes are
+present; otherwise we would have entered the typing stage despite the presence
+of syntax errors, which would clearly constitute a compiler bug.
+Since the `garbage' nodes allow us to continue parsing after we encounter a
+parse error, they play an important role for supporting multiple errors
+and error recovery.
+
+
+\paragraph{Program and declarations}
+Our top level node is \haskell{Program}. A \haskell{Program} is given by a list
+of variable declarations, and a list of function declarations.
+The two forms of declaration are represented by \haskell{VarDecl} and
+\haskell{FunDecl}, where we again see the use of lists in \haskell{FunDecl}
+represent a sequence of parameter names and the sequence of variable
+declarations and statements.
+Both forms of declaration feature an optional type annotation, represented using
+the \haskell{Maybe} type constructor.
+
+
+\paragraph{Statements}
+The cases for statements exactly match those in the grammar, except for the
+additional \haskell{GarbageStmt} case. Much like a function body, the statement
+blocks of if-else and while-loops are represented by a list of statements,
+the arguments in a function call are a list of expressions, and we use
+\haskell{Maybe} for the optional expression in a return statement.
+
+Variable assignments can feature field selectors on the left-hand side, e.g.
+\spl{x.fst = 42;}. We model this using \haskell{VarLookup}, an instance of which
+is either an identifier or again an instance of \haskell{VarLookup}, so that we
+can represent chaining of selectors as in e.g. \spl{x.tl.hd.fst = 42;}.
+The chain of selectors is then represented by a nesting of \haskell{VarField}s,
+terminated by \haskell{VarId}.
+
+
+\paragraph{Types}
+We use \haskell{Type} to represent types annotated by the user, where type
+variables are given by arbitrary identifiers, e.g. \spl{a [a] -> [a]}, or
+\spl{(left,right) -> (right,left)}. Type variables are given by the case
+\haskell{TyVar Loc T.Text}, that is, we store the identifiers as specified by
+the user.
+
+
+\paragraph{Expressions}
+The identifier case for expressions is again of represented using
+\haskell{Data.Text}. For field lookups/projections, we use \haskell{ExprLookup}
+and the \haskell{Field} data type, the cases of which correspond to the list and
+tuple projections \spl{hd}, \spl{tl}, \spl{fst} and \spl{snd}.
+By the mutual recursion between \haskell{Expr} and \haskell{ExprLookup}, field
+lookups can be chained, much like in variable assignments, as in e.g.
+\spl{((1,2):[]).hd.fst}.
+
+All unary and binary operations are represented by the cases \haskell{UnOp} and
+\haskell{BinOp}, where the operators are given by \haskell{UnaryOp} and
+\haskell{BinaryOp}, respectively.
+Function calls are captured by \haskell{FunCallE}, with the function identifier
+of type \haskell{Data.Text} and the arguments given by a list of expressions
+\haskell{[Expr]}.
+We did not create a special representation for built-in functions like
+\spl{print} or \spl{isEmpty}. We essentially treat these functions just like
+regular user-defined functions, except that their type and implementation are
+predetermined, and are hard-coded in the typing and code generation stage.
+
+% \paragraph{Field lookups}
+% To model field lookups we use the \haskell{Field} datatype, featuring cases for
+% the list and tuple projections \code{hd}, \code{tl}, \code{fst} and \code{snd}.
+% Field selectors can appear on the left side of assignments, e.g.
+% \spl{x.fst = 42;}, and in expressions, e.g. \spl{(0,40+2).snd}.
+% In both variable assignments and expressions, field selectors can be chained
+% arbitrarily, e.g. \spl{x.tl.tl.hd.fst}.
+% For field lookups in expressions, we have the \haskell{ExprLookup} case,
+% featuring a selector of type \haskell{Field} and a
+
+% For expressions, we have the type \haskell{ExprLookup}, with a single
+% constructor featuring an expression and a field selector of type \haskell{Field}.
+
+% Similarly, \haskell{ExprLookup} is mutually recursive with \haskell{Expr}, so in
+% a field lookup of the form $e.s$, $e$ can be an arbitrary expression, so can
+% again be of the form $e.s$, and so on.
+
+
+
+
 \section{Parsing Stage Setup} \label{sec:parsing-setup}
 
 Before we discuss the AST representation in \cref{sec:parse-ast} and the actual
@@ -261,6 +439,7 @@ Simply instantiating \haskell{Stream} with \haskell{[Positioned Token]} is not
 sufficient though, since we want our parser to display segments or lines from
 the original input in our error messages, which is not possible based on the
 token stream alone.
+
 To this end, we must bundle the list of tokens returned by the lexer with the
 original source program of type \haskell{Data.Text}:
 %
@@ -270,22 +449,23 @@ original source program of type \haskell{Data.Text}:
     tokenStream :: [Positioned PT.Token]
   } deriving (Show)
 \end{minted}
-
+%
 We give type class declarations of \haskell{TokenStream} for the \haskell{Stream}
 type class, along with the \haskell{VisualStream} and \haskell{TraversableStream}
 type classes, which are needed for error reporting and debugging support.
 This involves a fair amount of function definitions, though most of the
 implementation closely follows the example code given in the Megaparsec tutorial
-of Mark Karpov, which discusses the use of Megaparsec with custom input
+of Mark Karpov~\citep{Karpov2019}, which discusses the use of Megaparsec with custom input
 streams\footnote{\url{https://markkarpov.com/tutorial/megaparsec.html\#working-with-custom-input-streams}}.
 
 Since this is really just boilerplate code, we will forego a detailed
-explanation, but to summarise briefly, we need to define a number of functions
-for decomposing a \haskell{TokenStream} instance into a (list of)
-\haskell{Positioned Token} and the remaining stream, along with functions for
-displaying a \haskell{TokenStream} instance as a string, and a function that
-takes an offset in the input and returns the corresponding line and updates the
-positional state of the stream, shifting it to the position given by the offset.
+explanation, but give a brief summary.
+We need to define a number of functions for decomposing a \haskell{TokenStream}
+instance into a (list of) \haskell{Positioned Token} and the remaining stream,
+along with functions for displaying a \haskell{TokenStream} instance as a
+string, and a function that takes an offset in the input and returns the
+corresponding line, while also updating the positional state of the stream,
+shifting it to the position given by the offset.
 
 
 \subsection{Custom Parse Errors}
@@ -333,94 +513,34 @@ parts of the parser, and ensures that the various forms of error are always
 displayed in a consistent format.
 
 
-\todobox{Describe error recovery}
+\subsection{Error Recovery}
 
+Our parsing stage supports reporting of multiple parse errors, and can recover
+from many forms of errors, continuing the parsing pass and possibly accumulating
+further errors.
+We can thus provide the user with more information in the presence of multiple
+syntax errors; doing so allows them to locate those errors without re-running
+the compiler several times.
 
-\section{Parse AST Representation} \label{sec:parse-ast}
+By default, when our top-level instance of \haskell{TokenParser} fails, the
+parsing pass is terminated and the error is reported (with a location and the
+offending line from the input).
+Aside from letting a \haskell{TokenParser} instance fail outright, Megaparsec
+also allows us to report an error without failure, such that we can continue
+parsing and potentially find and report further errors.
+We can also wrap a parser in a recovery combinator, where if the inner parser
+fails, another parser function is called in an attempt to recover from the
+failure and again continue parsing.
+Our implementation uses both of these features.
 
-\begin{figure}
-\begin{minted}[breaklines]{haskell}
-data Program = Program [VarDecl] [FunMutDecl]
-data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
-data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
-data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
-
-data Stmt = If Loc Expr [Stmt] [Stmt]
-          | While Loc Expr [Stmt]
-          | Assign Loc VarLookup Expr
-          | FunCall Loc T.Text [Expr]
-          | Return Loc (Maybe Expr)
-          | GarbageStmt
-
-data Type = IntT Loc | BoolT Loc | CharT Loc
-          | Prod Loc Type Type | List Loc Type | Void Loc
-          | Fun Loc [Type] Type
-          | TyVar Loc T.Text
-          | GarbageType
-
-data VarLookup = VarId Loc T.Text | VarField Loc VarLookup Field
-data ExprLookup = ExprField Expr Field
-data Field = Head | Tail | Fst | Snd | GarbageField
-
-data Expr = Ident Loc T.Text
-          | ExprLookup Loc ExprLookup
-          | Int Loc Int
-          | Bool Loc Bool
-          | Char Loc Char
-          | UnOp Loc UnaryOp Expr
-          | BinOp Loc BinaryOp Expr Expr
-          | FunCallE Loc T.Text [Expr]
-          | EmptyList Loc
-          | Tuple Loc Expr Expr
-          | GarbageExpr
-
-data UnaryOp = Not | Neg
-data BinaryOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Lte | Gte
-              | And | Or | Cons
-\end{minted}
-	\caption{Abstract syntax tree for parsing stage}
-  \label{fig:parse-ast}
-\end{figure}
-
-The data types of our AST representation can be found in \cref{fig:parse-ast}.
-Our top level node is \haskell{Program}. A \haskell{Program} consists of a list
-of variable declarations, and a list of function declarations.
-
-At each parser level, we include a `garbage' AST node,
-such as \haskell{GarbageStmt} for statements, or \haskell{GarbageExpr} for
-expressions. In the case of a parse error, these nodes allow us to construct a
-valid AST and continue our parsing pass, while also clearly marking the AST as
-erroneous. When we later translate our parse AST to the AST representation used
-for typing, these nodes prevent us from accidentally entering the typing stage
-when parse errors were present in the source program, which would clearly
-constitute a compiler bug.
-Since the `garbage' nodes allow us to continue parsing after we encounter a
-parse error, they are particularly useful for supporting multiple error messages
-and error recovery.
-
-To model field lookups we use the \haskell{Field} datatype, where a field
-\haskell{Snd (Fst "x")} should be interpreted as \spl{x.fst.snd}.
-Field selectors can appear both on the left side of assignments, e.g.
-\spl{x.fst = 42;}, and in expressions, e.g. \spl{(0,40+2).snd}. In both cases, we
-model the field selectors using \haskell{Field}, which features cases for the
-built-in list and tuple projections.
-In both variable assignments and expressions, field selectors can be chained
-arbitrarily, e.g. \spl{x.tl.tl.hd.fst}, for which we use recursion in the AST
-definition.
-Variables in variable assignments are modelled using \haskell{VarLookup}, an
-instance of which is either an identifier or a field lookup. The latter case is
-self-referential, as it consists of a field lookup on instance of
-\haskell{VarLookup} itself.
-Similarly, \haskell{ExprLookup} is mutually recursive with \haskell{Expr}, so in
-a field lookup of the form $e.s$, $e$ can be an arbitrary expression, so can
-again be of the form $e.s$, and so on.
-
-We did not create a special data type for built-in functions like
-\spl{print} or \spl{isEmpty}, since we currently treat them as regular functions
-of a fixed type and predetermined implementation, which is either hardcoded in
-the code generation, or given in a prelude file that is always loaded by the
-compiler.
-
+In more predictable scenarios, especially those where some symbol or
+subexpression is missing outright, we can simply register the error, continue
+parsing and report the error later.
+For other situations, e.g. upon encountering an unexpected token, we can try
+discarding tokens from the input in an attempt to recover the parsing pass.
+Importantly, if an error was registered during parsing, our compiler will always
+terminate at the end of the parsing stage, and will never proceed to the
+following stages with some corrected or modified AST.
 
 
 

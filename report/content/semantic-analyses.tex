@@ -171,7 +171,7 @@ assigned monotypes.
 During the typing procedure, we must generate fresh unification variables and
 work with substitutions, which we also need to compose and apply to types.
 For generating fresh variable names, we simply keep track of an integer
-\haskell{varState} under the state monad, which allows us to simply read and
+\code{varState} under the state monad, which allows us to simply read and
 increment the counter whenever we need a new name. Since the counter strictly
 increases, we are guaranteed to obtain a (currently) unused name.
 
