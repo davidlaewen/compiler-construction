@@ -522,12 +522,12 @@ displayed in a consistent format.
 Our parser consists of monadic parsing functions for our \haskell{TokenParser}
 type constructor, defined in terms of Megaparsec's \haskell{Parsec} monad.
 As is typical for a purely functional parser using monadic functions, we make
-heavy use of monadic \emph{combinators}, such as \haskell{many} and
-\haskell{sepBy} from \haskell{Control.Monad}.
+heavy use of monadic \emph{combinators}, such as \code{many} and
+\code{sepBy} from \haskell{Control.Monad}.
 The parser monad is in fact an instance of \haskell{MonadPlus}, meaning we also
 have access to the functions of the \haskell{Alternative} type class, most
 notably \code{<|>}, which denotes a choice between a number of parser
-functions, or \haskell{optional}, which allows a parser to fail, returning a
+functions, or \code{optional}, which allows a parser to fail, returning a
 result wrapped in \haskell{Maybe}.
 
 We also define various helper functions to abstract out reoccurring patterns,

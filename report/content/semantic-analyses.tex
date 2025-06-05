@@ -1,18 +1,23 @@
 \chapter{Semantic Analyses \& Typing} \label{chp:semantic-analyses}
 
-If the source program was successfully parsed to a parse AST, we proceed by
-translating the parsed program to a new AST representation used in
-the typing stage.
+\todobox{Overview and signposting paragraph}
+
+\section{Typing AST and Desugaring} \label{sec:desugaring}
+
+If the source program was successfully parsed to the parse AST representation of
+\cref{fig:parse-ast}, we proceed by translating the parsed program to a new AST
+representation used in the typing stage.
 \cref{fig:type-ast} shows this new \emph{typing AST}.
-As you can see, the definition has shrunk somewhat when compared to that of
-\cref{fig:parse-ast}. This is mostly due to the fact that all field selectors
-and operators on expressions have been converted to regular function calls (case
+As you can see, the definition has shrunk somewhat when compared to the AST of
+the parsing stage. This is mostly due to the fact that all field selectors and
+operators on expressions have been converted to regular function calls (case
 \haskell{FunCallE}), although field selectors in variable assignments remain
-unchanged.
+unchanged.\todo{Mention how we keep them distinct}
 In addition, all the garbage nodes available in the parse AST are no longer
-present in the typing AST: since such garbage nodes indicate errors in the
-parsing stage, we should not proceed to the typing stage in their presence, and
-thus do not require corresponding nodes in our typing ASTs.
+present in the typing AST: since the garbage nodes indicate errors in the
+parsing stage, we should not proceed to the typing stage in their presence.
+The desugaring stage includes sanity checks that throw an error if such nodes
+are found in the parsed program.
 
 \begin{figure}
 \begin{minted}[breaklines]{haskell}
@@ -46,6 +51,13 @@ data Expr a = Ident Loc T.Text a
             | FunCallE Loc FunName [Expr a] a
             | EmptyList Loc a
             | Tuple Loc (Expr a) (Expr a) a
+
+type UVar = Int
+type TVar = T.Text
+
+data UType = Int | Bool | Char | Void
+           | Prod UType UType | List UType | Fun [UType] UType
+           | UVar UVar | TVar TVar
 \end{minted}
 
 \caption{Abstract syntax tree for typing stage}
@@ -53,7 +65,7 @@ data Expr a = Ident Loc T.Text a
 \end{figure}
 
 Another key difference is that we extend many of the nodes with type
-parameters \haskell{a} and \haskell{b}. The fields correspond to the types we
+parameters \code{a} and \code{b}. The fields correspond to the types we
 infer for the respective nodes during the typing stage.
 Initially, we have no type information available (aside from the optional type
 annotations in the source program), and represent this lack of information
@@ -62,14 +74,14 @@ iterate through the typing AST, replacing these dummy fields of type \haskell{()
 with our inferred type information, represented by \haskell{UType}.
 For instance, when checking an expression $e$, we start with an instance of
 \haskell{Expr ()}, and return an instance of \haskell{Expr UType}.
-The definition of \haskell{UType} is given in \cref{fig:type-adt}, and
+The definition of \haskell{UType} is also given in \cref{fig:type-ast}, and
 corresponds to the grammar of SPL types, with the addition of \emph{unification
 variables} \haskell{UVar}.
 Unification variables are represented simply by integers, and are generated as
 placeholders for unknown types during type checking. While iterating through the
 AST, we annotate the nodes with these unification variables, and simultaneously
 generate a set of constraints between them, expressing how the (currently still
-unknown) types must relate to each other.
+unknown) types must relate to each other.\todo{Fix this description}
 
 \todobox{Which nodes feature type information, and which just `thread through' the
 type parameters?}
@@ -79,9 +91,9 @@ expression \spl{(1,2).fst}. The field selector \spl{.fst} will be desugared
 to a regular function, meaning we can think of the expression as something
 closer to \spl{fstfun((1,2))}. The type of \spl{fstfun} is polymorphic, and
 given by $\forall \alpha \beta.\ (\alpha,\beta) \to \alpha$, expressing that
-from a tuple with entries of---respectively---type $\alpha$ and $\beta$,
+from a tuple with entries of type $\alpha$ and $\beta$ (respectively),
 \spl{fstfun} returns the first entry with type $\alpha$.
-During typing, we generate unification variables $\alpha_1$, $\alpha_2$, and
+During typing, we generate unification variables $\alpha_1$, $\alpha_2$ and
 $\beta$, where $(\alpha_1,\alpha_2)$ is the input type of \spl{fstfun}, $\beta$
 is the output type and thus the type of \spl{(1,true).fst}, and we also know
 that $\alpha_1 = \beta$, since we are selecting the first component.
@@ -94,43 +106,45 @@ We now know that \code{($\alpha_1$,$\alpha_2$) $=$ (Int,Bool)}, so by
 $\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
 $\beta = \code{Int}$.
 
-\begin{figure}
-\begin{minted}[breaklines]{haskell}
-type UVar = Int
-type TVar = T.Text
+% \begin{figure}
+% \begin{minted}[breaklines]{haskell}
+% type UVar = Int
+% type TVar = T.Text
 
-data UType = Int | Bool | Char | Void
-           | Prod UType UType | List UType
-           | Fun [UType] UType
-           | UVar UVar
-           | TVar TVar
-\end{minted}
+% data UType = Int | Bool | Char | Void
+%            | Prod UType UType | List UType | Fun [UType] UType
+%            | UVar UVar | TVar TVar
+% \end{minted}
 
-  \caption{Algebraic data type of SPL types}
-  \label{fig:type-adt}
-\end{figure}
+%   \caption{Algebraic data type of SPL types}
+%   \label{fig:type-adt}
+% \end{figure}
 
 
-\section{Desugaring} \label{sec:desugaring}
+\section{SCC Analysis}
+
+\todobox{Briefly describe how we construct a graph of the function declarations,
+how we use the SCC library function to get the topological sorting, and how we
+convert the result back into a \haskell{Program} instance.}
+
 
 \section{Scoping}
-SPL features essentially only two scopes: the global scope covers top-level
-variable definitions and all function declarations, while function arguments
-and variables assigned within a function body fall under the local scope of the
-respective function.
+As specified in the grammar given in \cref{chp:grammar}, SPL only allows
+variable declarations at the global level, or at the beginning of a function
+body. SPL thus features only two scope levels: one global scope which covers
+top-level variable definitions and all function declarations, and a local scope
+per function, which features the function arguments and the local variables
+declared at the start of the function body.
 
 Consider the following example program:
 %
 \begin{lstlisting}[language=SPL]
   Int a = 2;
 
-  f(x) :: Int -> Int {
+  main(x) :: -> Void {
     Int b = 20;
-    return x * b;
-  }
-
-  main() {
-    print(f(2) + a);
+    print(b * x + a);
+    return;
   }
 \end{lstlisting}
 %
@@ -206,7 +220,7 @@ substitution procedure is defined as follows:
 \]
 
 For the free (unification) variables in a type $\tau$, we write $\FV(\tau)$, where
-$\FV$ is defined by:
+$\FV(-)$ is defined by:
 
 \[
 \begin{array}{rcl}
@@ -239,8 +253,12 @@ a substitution $S$.
 \end{array}
 \]
 
+For all other combinations of types $\tau$ and $\sigma$ not covered by the
+equations above, the types cannot be unified and the result of
+$\unify(\tau,\sigma)$ is `\textsf{Fail}'.
 
-\section{Type Inference}
+
+\section{Typing Algorithm}
 
 We now present our type inference algorithm. By misuse of notation, we describe
 the cases of the algorithm in deduction rules, where the judgement
@@ -255,8 +273,8 @@ states that in context $\Gamma$, the $i$-th expression $e_i$ has type $\tau_i$,
 generating the substitution $S_i$. We then write $\set{S_i}$ to mean the
 composition of all $S_i$ in order, that is, $S_n \circ \dots \circ S_1$.
 The judgement $\fresh(\alpha)$ states that the unification variable $\alpha$ is
-freshly generated. We write $\inst(\forall \set{\alpha}. \tau)$ for the
-typing scheme $\forall \set{\alpha}. \tau$ where all $\set{\alpha}$ are
+freshly generated. We write $\inst(\forall\ \set{\alpha}.\ \tau)$ for the
+typing scheme $\forall\ \set{\alpha}.\ \tau$ where all $\set{\alpha}$ are
 substituted with fresh unification variables.
 Finally, $\unify(\sigma,\tau)$ denotes the substitution generated by performing
 the unification procedure on types $\sigma$ and $\tau$.
@@ -293,7 +311,7 @@ the unification procedure on types $\sigma$ and $\tau$.
       {\Gamma \vdash_W \code{$f$($\set{e_i}$)} : \tau.S,\ S \circ \set{S_i}}
   \end{mathpar}
 
-  \caption{Rules for type inference algorithm on expressions}
+  \caption{Rules for the type inference algorithm on expressions}
   \label{fig:typing-rules-expr}
 \end{figure}
 
