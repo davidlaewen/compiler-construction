@@ -25,7 +25,7 @@ representation in \cref{sec:parse-ast}, and the parsing of programs in
 \cref{sec:parsing-programs}.
 
 
-\section{Lexing} \label{sec:lexing}
+\section{Lexing Stage} \label{sec:lexing}
 
 The lexer has two main functionalities.
 Firstly, it deals with stripping whitespace and comments, which includes
@@ -393,14 +393,18 @@ predetermined, and are hard-coded in the typing and code generation stage.
 
 
 
-\section{Parsing Stage Setup} \label{sec:parsing-setup}
+\section{Parsing Stage} \label{sec:parsing}
 
-Before we discuss the AST representation in \cref{sec:parse-ast} and the actual
-parsing of programs in \cref{sec:parsing-programs}, we give a more technical
-account of the underlying `machinery' of the parsing stage in the present
-section. In particular, we cover the custom token stream type on which our
-parser operates, how we define custom parse errors, and support for error
-recovery and reporting multiple errors.
+Before we discuss details on the parsing of programs, we give a more technical
+account of the underlying `machinery' of the parsing stage in
+\cref{sec:parsing-setup}. In particular, we cover the custom token stream type
+on which our parser operates, how we define custom parse errors, and support for
+error recovery and reporting multiple errors.
+\cref{sec:precedence-associativity} then explains how we handle operator
+precedence and associativity when parsing expressions.
+
+
+\subsection{Parsing Setup} \label{sec:parsing-setup}
 
 While \haskell{Lexer} operates on input of type \haskell{Data.Text}, our parser
 \haskell{TokenParser} operates on the token stream returned by the lexer.
@@ -415,7 +419,7 @@ variable \code{a} (made explicit above by eta-expansion) specifies the output
 type of the parser instance.
 
 
-\subsection{Custom Token Stream}
+\paragraph{Custom Token Stream}
 
 Our lexer instances generally return a single token, that is, an instance of
 the \haskell{Token} data type shown in \cref{sec:lexing}. By lexing many such
@@ -468,7 +472,7 @@ corresponding line, while also updating the positional state of the stream,
 shifting it to the position given by the offset.
 
 
-\subsection{Custom Parse Errors}
+\paragraph{Custom Parse Errors}
 
 Megaparsec can generate so-called trivial parse errors out of the box, where the
 error message displays the position of the parse error and the corresponding
@@ -480,7 +484,7 @@ its string argument as the error.
 
 A cleaner approach is to use Megaparsec's support for extending its
 \haskell{ErrorFancy} type by embedding a custom data type of parse errors.
-We use this capability to define a number of custom errors for various scenarios,
+We use this capability to define various custom errors for different scenarios,
 with a few example cases shown below:
 %
 \begin{minted}{haskell}
@@ -513,7 +517,12 @@ parts of the parser, and ensures that the various forms of error are always
 displayed in a consistent format.
 
 
-\subsection{Error Recovery}
+\paragraph{Parser combinators}
+\todobox{Discuss use of parser combinators, in particular those specific to
+the token type, and give some examples.}
+
+
+\paragraph{Error Recovery}
 
 Our parsing stage supports reporting of multiple parse errors, and can recover
 from many forms of errors, continuing the parsing pass and possibly accumulating
@@ -526,27 +535,52 @@ By default, when our top-level instance of \haskell{TokenParser} fails, the
 parsing pass is terminated and the error is reported (with a location and the
 offending line from the input).
 Aside from letting a \haskell{TokenParser} instance fail outright, Megaparsec
-also allows us to report an error without failure, such that we can continue
-parsing and potentially find and report further errors.
+allows us to report an error without failure, such that we can continue parsing
+and potentially find and report further errors.
 We can also wrap a parser in a recovery combinator, where if the inner parser
 fails, another parser function is called in an attempt to recover from the
 failure and again continue parsing.
-Our implementation uses both of these features.
+Our implementation uses both of these features:
+\begin{itemize}
+  \item In more predictable scenarios, especially those where some symbol or
+        subexpression is missing outright, we can simply register the error,
+        continue parsing and report the error later.
+  \item For other situations, e.g. upon encountering an unexpected token, we can
+        try discarding tokens from the input in an attempt to recover the
+        parsing pass. Importantly, if an error was registered during parsing,
+        our compiler will always terminate at the end of the parsing stage, and
+        will never proceed to the following stages with some corrected or
+        modified AST.
+\end{itemize}
 
-In more predictable scenarios, especially those where some symbol or
-subexpression is missing outright, we can simply register the error, continue
-parsing and report the error later.
-For other situations, e.g. upon encountering an unexpected token, we can try
-discarding tokens from the input in an attempt to recover the parsing pass.
-Importantly, if an error was registered during parsing, our compiler will always
-terminate at the end of the parsing stage, and will never proceed to the
-following stages with some corrected or modified AST.
+To illustrate, let us consider the case of the empty list literal \spl{[]} while
+parsing an expression:
+\begin{minted}{haskell}
+  emptyListP = do
+      (_,start,_) <- symbolP SymBracketLeft
+      (_,_,end) <- symbolP SymBracketRight <|>
+        registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
+\end{minted}
+%
+In the above code, we first try to parse a left bracket `\code{[}'. If
+\haskell{symbolP SymBracketLeft} succeeds, we assume that the user intended to
+type `\code{[]}', since that is the only possible expression starting with a
+left bracket.
+As such, if parsing the right bracket token fails, we register a corresponding
+error (with \haskell{NoClosingDelimiter} and the symbol `\code{]}'),
+but do not fail outright, allowing \haskell{emptyListP} to succeed despite the
+missing closing bracket.
+
+Error correction is of course always heuristic, as we are essentially trying to
+guess the intent of the user and handle the syntax error accordingly.
+In the above example, the user may also have entered an opening bracket
+`\code{[}' by accident; if we then report further errors in the following input,
+the user might be more confused than if we reported only the missing `\code{]}'.
 
 
 
-\section{Parsing of Programs} \label{sec:parsing-programs}
 
-\subsection{Operator Precedence \& Associativity}
+\subsection{Operator Precedence \& Associativity} \label{sec:precedence-associativity}
 
 In order to write parser functions corresponding to the provided grammar of SPL,
 we needed to transform the grammar such that we eliminate occurrences of left
