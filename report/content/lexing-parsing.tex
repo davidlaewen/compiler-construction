@@ -398,10 +398,11 @@ predetermined, and are hard-coded in the typing and code generation stage.
 Before we discuss details on the parsing of programs, we give a more technical
 account of the underlying `machinery' of the parsing stage in
 \cref{sec:parsing-setup}. In particular, we cover the custom token stream type
-on which our parser operates, how we define custom parse errors, and support for
-error recovery and reporting multiple errors.
-\cref{sec:precedence-associativity} then explains how we handle operator
-precedence and associativity when parsing expressions.
+on which our parser operates, how we define custom parse errors, and our use of
+monadic parser combinators and helper functions.
+\cref{sec:parser-error-handling} covers our support for error recovery and
+reporting multiple errors, and \cref{sec:precedence-associativity} explains how
+we handle operator precedence and associativity when parsing expressions.
 
 
 \subsection{Parsing Setup} \label{sec:parsing-setup}
@@ -419,7 +420,7 @@ variable \code{a} (made explicit above by eta-expansion) specifies the output
 type of the parser instance.
 
 
-\paragraph{Custom Token Stream}
+\paragraph{Custom token stream}
 
 Our lexer instances generally return a single token, that is, an instance of
 the \haskell{Token} data type shown in \cref{sec:lexing}. By lexing many such
@@ -472,7 +473,7 @@ corresponding line, while also updating the positional state of the stream,
 shifting it to the position given by the offset.
 
 
-\paragraph{Custom Parse Errors}
+\paragraph{Custom parse errors}
 
 Megaparsec can generate so-called trivial parse errors out of the box, where the
 error message displays the position of the parse error and the corresponding
@@ -510,26 +511,86 @@ corresponding type class instance for Megaparsec's \haskell{ShowErrorComponent}:
 \end{minted}
 
 Instances of \haskell{ParserError} are used throughout our parser implementation
-to provide more informative error messages for many possible issues we might
-encounter while parsing the input.
+to provide some more context in error messages, rather than merely listing
+expected and unexpected tokens.
 Using a data type to do so allows us to reuse our custom errors in different
 parts of the parser, and ensures that the various forms of error are always
 displayed in a consistent format.
 
 
 \paragraph{Parser combinators}
-\todobox{Discuss use of parser combinators, in particular those specific to
-the token type, and give some examples.}
+Our parser consists of monadic parsing functions for our \haskell{TokenParser}
+type constructor, defined in terms of Megaparsec's \haskell{Parsec} monad.
+As is typical for a purely functional parser using monadic functions, we make
+heavy use of monadic \emph{combinators}, such as \haskell{many} and
+\haskell{sepBy} from \haskell{Control.Monad}.
+The parser monad is in fact an instance of \haskell{MonadPlus}, meaning we also
+have access to the functions of the \haskell{Alternative} type class, most
+notably \code{<|>}, which denotes a choice between a number of parser
+functions, or \haskell{optional}, which allows a parser to fail, returning a
+result wrapped in \haskell{Maybe}.
+
+We also define various helper functions to abstract out reoccurring patterns,
+e.g. as parsing a symbol token or parsing some part of the program between
+delimiters, as illustrated below:
+\begin{minted}{haskell}
+  symbolP :: Symbol -> TokenParser (WithPos ())
+  symbolP s = token test S.empty
+    where
+      test t | tokenVal t == Symbol s = Just ((), t.startPosition, t.endPosition)
+      test _ = Nothing
+
+  betweenP :: TokenParser (WithPos open) -> TokenParser (WithPos close) ->
+              TokenParser a -> TokenParser (WithPos a)
+  betweenP openP closeP p = do
+    (_,start,_) <- openP
+    x <- p
+    (_,_,end) <- closeP
+    pure (x,start,end)
+\end{minted}
+%
+The function \code{symbolP} takes an argument \code{s} of type
+\haskell{Symbol} (as discussed in \cref{sec:lexing}) and returns a parser that
+tests whether the next token in the token stream is a symbol token for the
+symbol \code{s}.
+The \haskell{WithPos} type constructor simply equips the result type with the
+start and end position in a 3-tuple:
+\begin{minted}{haskell}
+  type WithPos a = (a, SourcePos, SourcePos)
+\end{minted}
+Most of our parser helpers include positions in their output; we process these
+in the higher-level parsers to determine the \haskell{Loc} entries in the AST.
+The second function, \code{betweenP}, accepts two \haskell{TokenParser}
+instances which parse an opening and closing delimiter, where the third parser
+\code{p} parses some content between the delimiters.
+We can then parse an expression of the form \code{($e$)} as follows, where $e$
+is parsed by the argument of type \haskell{TokenParser a}:
+\begin{minted}{haskell}
+  parensP :: TokenParser a -> TokenParser (WithPos a)
+  parensP = betweenP (symbolP SymParenLeft) (symbolP SymParenRight)
+\end{minted}
+
+More generally, our parser functions form a hierarchy, starting with predicates
+for the various token types, then helper functions such as \code{parensP},
+and then parser functions for the various components and variants of statements,
+expressions, and so on, (as discussed in \cref{sec:parsing-programs}), which are
+combined to parsers for variable declarations and function declarations at the
+top level.
 
 
-\paragraph{Error Recovery}
+\subsection{Error Handling} \label{sec:parser-error-handling}
 
 Our parsing stage supports reporting of multiple parse errors, and can recover
-from many forms of errors, continuing the parsing pass and possibly accumulating
-further errors.
-We can thus provide the user with more information in the presence of multiple
-syntax errors; doing so allows them to locate those errors without re-running
-the compiler several times.
+from many forms of errors, in particular when a syntactic component is missing
+altogether, or by using the delimiters of statements to skip ahead and continue
+parsing to possibly accumulate and report further errors.
+
+
+\paragraph{Reporting multiple errors}
+
+By identifying and reporting multiple syntax errors, we can provide the user
+with more information in the presence of multiple syntax errors; doing so allows
+them to locate and fix more errors without re-running the compiler.
 
 By default, when our top-level instance of \haskell{TokenParser} fails, the
 parsing pass is terminated and the error is reported (with a location and the
@@ -537,63 +598,156 @@ offending line from the input).
 Aside from letting a \haskell{TokenParser} instance fail outright, Megaparsec
 allows us to report an error without failure, such that we can continue parsing
 and potentially find and report further errors.
-We can also wrap a parser in a recovery combinator, where if the inner parser
-fails, another parser function is called in an attempt to recover from the
-failure and again continue parsing.
-Our implementation uses both of these features:
-\begin{itemize}
-  \item In more predictable scenarios, especially those where some symbol or
-        subexpression is missing outright, we can simply register the error,
-        continue parsing and report the error later.
-  \item For other situations, e.g. upon encountering an unexpected token, we can
-        try discarding tokens from the input in an attempt to recover the
-        parsing pass. Importantly, if an error was registered during parsing,
-        our compiler will always terminate at the end of the parsing stage, and
-        will never proceed to the following stages with some corrected or
-        modified AST.
-\end{itemize}
+We use this to handle certain `predictable' errors, especially those where some
+symbol or subexpression is missing outright. We can then simply register the
+error, continue parsing, and report the error later.
 
-To illustrate, let us consider the case of the empty list literal \spl{[]} while
-parsing an expression:
+Here is where the `garbage' nodes mentioned in \cref{sec:parse-ast} come
+into play: if e.g. the condition of an if-statement is missing, we can use a
+\haskell{GarbageExpr} node to still construct a valid AST, allowing the
+statement parser to return a result such that we can continue parsing
+afterwards:
+\begin{minted}{haskell}
+  parensP exprP <|> registerError (withDummyPos GarbageExpr) IfNoCondition
+\end{minted}
+%
+The parser above will attempt to parse an expression between parentheses, using
+the \code{parensP} function we saw previously.
+If parsing the expression fails, we register a custom \haskell{IfNoCondition}
+error and return a \haskell{GarbageExpr} (with dummy position data) for the
+\haskell{Expr} component of the \haskell{If} node.
+
+
+To give another example, consider the case of the empty list literal
+\spl{[]} as part of our expression parser:
 \begin{minted}{haskell}
   emptyListP = do
       (_,start,_) <- symbolP SymBracketLeft
       (_,_,end) <- symbolP SymBracketRight <|>
-        registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
+          registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
 \end{minted}
 %
 In the above code, we first try to parse a left bracket `\code{[}'. If
-\haskell{symbolP SymBracketLeft} succeeds, we assume that the user intended to
+\code{symbolP} \haskell{SymBracketLeft} succeeds, we assume that the user intended to
 type `\code{[]}', since that is the only possible expression starting with a
 left bracket.
-As such, if parsing the right bracket token fails, we register a corresponding
+If parsing the right bracket token fails, we register a corresponding
 error (with \haskell{NoClosingDelimiter} and the symbol `\code{]}'),
-but do not fail outright, allowing \haskell{emptyListP} to succeed despite the
-missing closing bracket.
+but do not fail outright, allowing \code{emptyListP} to succeed despite the
+missing bracket.
 
-Error correction is of course always heuristic, as we are essentially trying to
-guess the intent of the user and handle the syntax error accordingly.
+
+Error correction is of course of a heuristic nature, as we are essentially
+trying to guess the intent of the user and handle the syntax error accordingly.
 In the above example, the user may also have entered an opening bracket
 `\code{[}' by accident; if we then report further errors in the following input,
-the user might be more confused than if we reported only the missing `\code{]}'.
+the user might be more confused than if we reported only the missing closing
+bracket `\code{]}'.
 
 
+\paragraph{Error recovery}
+
+For other situations, e.g. upon encountering an unexpected token, we can instead
+discard tokens from the input in an attempt to recover the parsing pass.
+We achieve this by wrapping a parser in a recovery combinator, where if the
+inner parser fails, another parser function is called in an attempt to recover
+from the failure and resume parsing at some later point in the input stream.
+Importantly, if an error was registered during parsing, our compiler will always
+terminate at the end of the parsing stage, and will never proceed to the
+following stages with some corrected or modified AST.
+
+SPL statements are terminated with `\code{;}', and we require that
+statement blocks are always surrounded with braces, i.e. `\verb|{...}|'.
+These delimiters---when placed correctly---provide reference points that we can
+use for error recovery when parsing sequences/blocks of statements.
+When parsing the statements in a function body, if-block, else-block, or
+while-block, we make use of Megaparsec's \code{withRecovery} function with the
+following recovery parser:
+\begin{minted}{haskell}
+  parseToNextStmt :: ParseError TokenStream ParserError -> TokenParser Stmt
+  parseToNextStmt e = (symbolP SymBraceRight >> fail "") <|>
+    (skipManyTill (satisfy $ const True)
+        (symbolP SymSemicolon <|> symbolP SymBraceRight) >>
+      registerParseError e >> withRecovery parseToNextStmt stmtP)
+\end{minted}
+
+The above function is called when the statement parser \code{stmtP} fails.
+In an attempt to find the start of the next statement, we skip tokens in the
+input until we reach either a `\code{;}' or `\verb|}|'.
+We then register the original error and call the statement parser at the
+following token, again with error recovery via the \code{parseToNextStmt}
+function itself.
+
+Crucially, the first line of \code{parseToNextStmt} ensures that once we reach
+the end of the current statement block, i.e. the closing brace `\verb|}|', the
+recovery attempt fails outright.
+Consider e.g. the following code snippet, where lines 2 and 3 in the
+while-block feature a syntax error:
+%
+\begin{lstlisting}[language=spl,numbers=left]
+  while (t < 100) {
+    b = + b;
+    t = t+1);
+    l = b:l;
+  }
+  return l;
+\end{lstlisting}
+%
+Given the above input (as a token stream returned by the lexer), our parser will
+report an unexpected `\code{+}' in line 2. The recovery function
+\code{parseToNextStmt} is called with the first error, and skips to the next
+semicolon, after which parsing is resumed---again with error recovery---for the
+statement in line 3. Again, an error is reported, this time the unexpected
+closing parenthesis `\code{)}'. Recovery is again run with
+\code{parseToNextStmt}, now skipping to line 4, where the variable assignment is
+parsed successfully.
+
+The above example illustrates a few key points regarding our error recovery:
+\begin{enumerate}[label=(\arabic*)]
+  \item To recover parsing, we must encounter a valid statement before the end
+        of the current statement block. That is, if the statement on line 4 was
+        also invalid, the error recovery would reach the closing brace at the
+        end of the block and fail outright.
+  %
+  \item We can also recover on certain invalid statements, provided that all
+        errors are caught by the parser. For instance, we could recover on the
+        line \spl{l = [;}, since the missing closing bracket would be caught by
+        the \code{emptyListP} parser discussed previously.
+        By contrast, we cannot recover on the statement \spl{l = ];}, as our
+        expression parser does not catch the unexpected closing bracket.
+  %
+  \item Recovery should not escape the current statement block. If we fail to
+        resume parsing inside the while-block, we could in principle skip past
+        the end of the while-block and successfully recover by parsing the
+        statement on line 6.
+        However, this has the unwanted effect of discarding the closing brace,
+        and would likely lead to confusing errors in the outer parser, i.e. the
+        parser for the surrounding block or function body.
+        As such, we are better off failing outright at the closing brace with
+        one useful error, rather than reporting multiple errors at the cost of
+        confusing the user with errors that no longer match the source program.
+\end{enumerate}
+
+Again, error recovery is very much heuristic, and we cannot account for every
+scenario. If, for instance, there are delimiters `\code{;}' or `\verb|}|'
+missing in the input, our error recovery may lead to worse error messages, as
+outlined in (3) above.
 
 
 \subsection{Operator Precedence \& Associativity} \label{sec:precedence-associativity}
 
 In order to write parser functions corresponding to the provided grammar of SPL,
-we needed to transform the grammar such that we eliminate occurrences of left
+we need to transform the grammar such that we eliminate occurrences of left
 recursion and obtain the desired structure of the AST with respect to
 associativity and operator precedence.
 This pertains especially to the parsing of expressions, where the rule
 \[ \NT{Exp} \Coloneqq \NT{Exp}\ \NT{Op2}\ \NT{Exp} \]
 is left-recursive and must be rewritten.
-In addition, it seems desirable to assign precedence levels for the various
-binary operators supported by SPL, and treat them as either left-associative or
-right-associative, depending on the operator.
+In addition, it is desirable from the user perspective to assign precedence
+levels for the various binary operators supported by SPL, and treat them as
+either left-associative or right-associative, depending on the operator.
 We must take this into consideration when designing the rules of our parser
-grammar, which we use as the basis for defining our monadic parser combinators.
+grammar, which we use as the basis for defining our parser combinators.
 
 To illustrate, let us consider what AST our parser should generate for the
 expression
@@ -611,9 +765,9 @@ Ideally, our parser should yield the desired AST without requiring the
 programmer to add parentheses, hence the precedence of \code{\&\&} must be lower
 than that of \code{==} and \code{!=}.
 Similarly, all comparison operators should have a lower precedence than the
-\emph{cons} operator ``\code{:}'', which in turn should be followed by addition
-and subtraction, then by multiplication, division and modulo and finally by
-Boolean negation and unary minus.
+\emph{cons} operator `\code{:}', which in turn should be lower than addition
+and subtraction, followed by multiplication, division and modulo and finally
+Boolean and integer negation.
 
 We achieve this behaviour using a recursive descent parser with multiple levels,
 shown in \cref{fig:new-expr-grammar}, where each non-terminal corresponds to a
@@ -622,7 +776,7 @@ level in the precedence hierarchy of operators.
 The parser thus begins at the lowest precedence level, featuring the Boolean
 operators \code{\&\&} and \code{||}.
 In the rule for $\NT{Expr}$, the leftmost non-terminal is $\NT{Prop}$ and not
-$\NT{Expr}$ itself, allowing us to avoid infinite parsing loops caused by left
+$\NT{Expr}$ itself, which prevents infinite parsing loops caused by left
 recursion.
 %
 Below the expression level, denoted by $\NT{Expr}$, our grammar
@@ -710,6 +864,7 @@ $\NT{Val}$ rule, since it is more intuitive to provide a type error rather than
 a parse error for non-numbers occurring in an arithmetic expression.
 
 
+\subsection{Parsing of Programs} \label{sec:parsing-programs}
 
 
 \begin{todoenv}
