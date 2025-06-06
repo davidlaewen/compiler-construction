@@ -18,12 +18,7 @@ import Utils.Utils (fst3)
 
 varDeclP :: TokenParser VarDecl
 varDeclP = do
-  mVar <- optional $ keywordP KwVar
-  (mty,startPos) <- case mVar of
-    Nothing -> do
-      ty <- monoTypeP -- Disallow polymorphic variables
-      pure (Just ty, getStart ty)
-    Just ((),start,_) -> pure (Nothing,start)
+  (mty,startPos) <- varOrTypeP
   (name,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
   _ <- symbolP SymEq <|> registerError (withDummyPos ()) VarDeclNoEquals
   -- TODO: In certain cases exprP inserts a garbage expr and doesn't fail, so parsing
@@ -31,6 +26,13 @@ varDeclP = do
   expr <- exprP <|> customFailure VarDeclNoExpression
   (_,_,endPos) <- symbolP SymSemicolon <|> registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
   pure $ VarDecl (Loc startPos endPos) mty name expr
+  where
+    varOrTypeP :: TokenParser (Maybe Type, SourcePos)
+    varOrTypeP = do
+      mVar <- optional $ keywordP KwVar
+      case mVar of
+        Just ((),start,_) -> pure (Nothing,start)
+        Nothing -> monoTypeP >>= \ty -> pure (Just ty, getStart ty)
 
 dataDeclP :: TokenParser DataDecl
 dataDeclP = do
@@ -165,12 +167,10 @@ parenOrTupleP = do
   closeExpr e <|> closeTuple e start
   where
     closeExpr :: Expr -> TokenParser Expr
-    closeExpr e = do
-      _  <- symbolP SymParenRight
-      pure e
+    closeExpr e = symbolP SymParenRight >> pure e
     closeTuple :: Expr -> SourcePos -> TokenParser Expr
     closeTuple e1 start = do
-      _ <- symbolP SymComma <|> customFailure TupleNoComma
+      _ <- symbolP SymComma <|> registerError (withDummyPos ()) TupleNoComma
       e2 <- exprP
       (_,_,end) <- symbolP SymParenRight <|>
         registerError ((),defaultPos,getEnd e2) ParenOpenNotClosed
@@ -385,10 +385,14 @@ programP = do
   -- All varDecls must appear before all funDecls
   dataDecls <- many dataDeclP
   varDecls <- many varDeclP -- many (try isVarDeclLookAhead >> varDeclP)
-  funDecls <- MP.some funDeclP
+  funDecls <- many funDeclP
+  handleNoFunDecls funDecls
   Program dataDecls varDecls funDecls <$ eof
   where
-    -- Disallow generic variables on top level
+    handleNoFunDecls :: [FunDecl] -> TokenParser ()
+    handleNoFunDecls [] = registerError () ProgramNoFunDecls
+    handleNoFunDecls _ = pure ()
+    -- | Disallow generic variables on top level
     isVarDeclLookAhead :: TokenParser ()
     isVarDeclLookAhead = lookAhead $ void baseTypeP <|>
       void (satisfy $ isSymbol SymParenLeft) <|>

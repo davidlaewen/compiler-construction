@@ -29,7 +29,7 @@ type TokenParser a = Parsec ParserError TokenStream a
 
 data ParserError where
   NoClosingDelimiter        :: PT.Symbol -> ParserError
-  MutualNoOpenBrace         :: ParserError
+  ProgramNoFunDecls         :: ParserError
   FunctionMissingStatements :: ParserError
   FunctionNoArrow           :: ParserError
   FunctionNoRetType         :: ParserError
@@ -60,7 +60,7 @@ instance ShowErrorComponent ParserError where
   showErrorComponent :: ParserError -> String
   showErrorComponent (NoClosingDelimiter sym) = "Expecting closing `" <> show sym <> "`"
 
-  showErrorComponent MutualNoOpenBrace = "Expecting declaration block `{...}` after `mutual`"
+  showErrorComponent ProgramNoFunDecls = "Program must declare function `main()`"
   showErrorComponent FunctionMissingStatements = "Function body must end with a statement"
   showErrorComponent FunctionNoArrow = "Expecting argument type or `->`"
   showErrorComponent FunctionNoRetType = "Missing return type after `->`"
