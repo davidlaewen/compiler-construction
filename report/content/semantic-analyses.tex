@@ -128,27 +128,126 @@ AST representation of \cref{fig:type-ast}---the body may freely contain function
 calls to other functions, as well as the function itself.
 In the typing algorithm, we must ensure that we process function declarations in
 the right order, based on how they reference each other.
-If the declaration for some function $f$ refers to a function $g$, we need the
-type of $g$ to check that the function is used correctly in the body of $f$,
-that is, according to its type.
+If the declaration for some function $f$ refers to a function $g$, we need to
+process $g$ first, since we need its type to check that $g$ is used correctly in
+the body of $f$.
 
 While we could simply require that the user declare a function before other
-functions that reference it, there is also the possibility that a function
-refers to itself (i.e. \emph{recursion}), or that two or more functions all
-refer to each other, in which case they are said to be \emph{mutually
-recursive}. We can then no longer order the functions as described above, and
-require some additional steps in our typing algorithm to handle such mutually
-recursive groups of functions correctly.
+functions that reference it, we are able to statically infer this ordering using
+the \emph{call graph} of the program.
+The call graph has as its nodes the functions declared in the program, while the
+edges are given by the function calls between them: if some function $f$ calls
+the function $g$, this is captured by a directed edge from $f$ to $g$.
+
+There is also the possibility that a function refers to itself
+(\emph{recursion}), and---more importantly---that two or more functions refer to
+each other in a cycle, in which case they are said to be \emph{mutually
+recursive}. We want to identify such groups of functions, since we need some
+additional steps in the typing algorithm to handle them correctly.
+Again, we can leverage the call graph to find groups of nodes that refer to each
+other cyclically; in graph terminology, these are referred to as
+\emph{strongly connected components} (SCCs).
+Our overall goal is thus to construct the call graph of the input program and
+use it to find the SCCs, as well as sorting the (groups of) functions such that
+they appear in the output prior to the functions that refer to them.
+More formally, we want the reverse \emph{topological} sorting of the directed
+acyclic graph given by the SCCs of the original call graph.
+
+The so-called strongly connected components algorithm of \citet{Tarjan1972}
+lends itself very elegantly to this problem, as it identifies the SCCs of a
+directed graph in linear time, while also returning the SCCs in reverse
+topological ordering as a by-product.
+We do not discuss the inner workings of the algorithm, and our compiler uses an
+existing Haskell implementation of Tarjan's algorithm provided in the
+\code{Data.Graph} library, based on the algorithm description of
+\citet{King1995}.
+
+\paragraph{Call graph generation}
+In order to use the library implementation of the SCC algorithm, we must
+construct the call graph for the input program in the appropriate format for the
+library function, and then process the output back into our AST representation,
+which gives us the sorted program.
+We generate the call graph using the following monad:
+\begin{minted}{haskell}
+  type GraphGen = StateT GraphGenState (Except T.Text)
+\end{minted}
+%
+Generating the graph requires some auxiliary data structures, which we thread
+through the computation using the state monad, where the state is given by
+\haskell{GraphGenState}\footnote{We define type aliases for the map types in our
+implementation. \haskell{Vertex} is a synonym for \haskell{Int}.}:
+\begin{minted}{haskell}
+  data GraphGenState = GraphGenState {
+    nameMap  :: M.Map Name Vertex,
+    declMap  :: M.Map Vertex (FunDecl () ()),
+    edgeMap  :: M.Map Vertex (S.Set Vertex),
+    vtxBound :: Vertex
+  }
+\end{minted}
 
 
-The references of functions to other functions via function calls gives rise to
-the notion of a \emph{call graph}. In such a graph, the nodes are given by the
-function declarations, while some function $f$ calling the function $g$ is
-captured by a directed edge from $f$ to $g$.
 
 
-\todobox{Example w/ program and graph?}
+\begin{figure}[h]
 
+  \centering
+
+  \begin{minipage}{.45\textwidth}
+    \begin{lstlisting}[language=SPL]
+      p(x) { $...$ }
+
+      f(x) {
+        $...$ g(x,x-1) $...$ p(x) $...$
+      }
+
+      g(x,y) {
+        $...$ p(y) $...$ h(y) $...$
+      }
+
+      h(n) { $...$ f(n/2) $...$ g(n) $...$ }
+
+      main() { var a = h(f(42)); $...$ }
+    \end{lstlisting}
+  \end{minipage}\hspace{6mm}%
+  %
+  \begin{minipage}{.45\textwidth}
+    \begin{center}
+      \begin{tikzpicture}[scale=0.18]
+        \tikzstyle{every node}+=[inner sep=0pt]
+        \draw [black] (33.9,-17.3) circle (3);
+        \draw (33.9,-17.3) node { \code{p()} };
+        \draw [black] (28.6,-29.7) circle (3);
+        \draw (28.6,-29.7) node { \code{f()} };
+        \draw [black] (44.3,-23.4) circle (3);
+        \draw (44.3,-23.4) node { \code{g()} };
+        \draw [black] (44.3,-35.6) circle (3);
+        \draw (44.3,-35.6) node { \code{h()} };
+        \draw [black] (34.7,-42.2) circle (3);
+        \draw (34.7,-42.2) node { \code{main()} };
+        \draw [black] (43.284,-32.784) arc (-166.34085:-193.65915:13.905);
+        \fill [black] (43.28,-26.22) -- (42.61,-26.88) -- (43.58,-27.11);
+        \draw [black] (45.113,-26.284) arc (10.75824:-10.75824:17.23);
+        \fill [black] (45.11,-32.72) -- (45.75,-32.02) -- (44.77,-31.84);
+        \draw [black] (31.38,-28.58) -- (41.52,-24.52);
+        \fill [black] (41.52,-24.52) -- (40.59,-24.35) -- (40.96,-25.28);
+        \draw [black] (41.49,-34.54) -- (31.41,-30.76);
+        \fill [black] (31.41,-30.76) -- (31.98,-31.5) -- (32.33,-30.57);
+        \draw [black] (41.71,-21.88) -- (36.49,-18.82);
+        \fill [black] (36.49,-18.82) -- (36.92,-19.65) -- (37.43,-18.79);
+        \draw [black] (29.78,-26.94) -- (32.72,-20.06);
+        \fill [black] (32.72,-20.06) -- (31.95,-20.6) -- (32.87,-20.99);
+        \draw [black] (37.17,-40.5) -- (41.83,-37.3);
+        \fill [black] (41.83,-37.3) -- (40.89,-37.34) -- (41.45,-38.16);
+        \draw [black] (33.38,-39.5) -- (29.92,-32.4);
+        \fill [black] (29.92,-32.4) -- (29.82,-33.33) -- (30.72,-32.9);
+      \end{tikzpicture}
+    \end{center}
+    \vspace{2mm}
+  \end{minipage}
+
+  \caption{Example program outline and corresponding call graph}
+
+\end{figure}
 
 
 \todobox{Briefly describe how we construct a graph of the function declarations,
