@@ -891,7 +891,7 @@ parser functions at the top-level, the statement level, and the expression
 level, showing how the concepts covered in the previous sections are used
 concretely in the implementation.
 
-The top-level parser function is defined as follows:
+Our top-level parser is defined as follows:
 \begin{minted}{haskell}
   programP :: TokenParser Program
   programP = do
@@ -901,19 +901,19 @@ The top-level parser function is defined as follows:
     Program dataDecls varDecls funDecls <$ eof
 \end{minted}
 %
-We first parse a (possibly empty) sequence of variable declarations using the
-\code{varDeclP} parser, followed by a non-empty sequence of function
-declarations using the \code{funDeclP} parser.
+We first parse a (possibly empty) sequence of variable declarations using
+\code{varDeclP}, followed by a sequence of function declarations with
+\code{funDeclP}.
 Global variable declarations begin with either the \spl{var} keyword token or
 a monomorphic type, so there is no overlap with function declarations, which
 must begin with an identifier token.
 We do not directly enforce the presence of at least one function declaration
 with the \code{some} combinator; instead, we use \code{many}, but register an
-error if the resulting list of \haskell{FunDecl}s is empty, informing the user
-that a program must define a \spl{main()} function.
+error if the resulting list of \haskell{FunDecl}s is empty, which lets us inform
+the user that a program must define at least a \spl{main()} function.
 
-A good example for our basic form of error correction and multi-error support is
-the parser for variable declarations:
+A good example for our basic form of error recovery is the parser for variable
+declarations:
 \begin{minted}{haskell}
   varDeclP :: TokenParser VarDecl
   varDeclP = do
@@ -921,17 +921,19 @@ the parser for variable declarations:
     (ident,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
     _ <- symbolP SymEq <|> registerError (withDummyPos ()) VarDeclNoEquals
     expr <- exprP <|> customFailure VarDeclNoExpression
-    (_,_,endPos) <- symbolP SymSemicolon <|> registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
+    (_,_,endPos) <- symbolP SymSemicolon <|>
+        registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
     pure $ VarDecl (Loc startPos endPos) mty ident expr
 \end{minted}
 %
 The local \code{varOrTypeP} helper function (\haskell{where}-clause omitted
 here) parses either the \spl{var} keyword or a monomorphic type, returning an
 instance of \haskell{Maybe Type} along with a \haskell{SourcePos}.
-In the next two lines, if we cannot parse the identifier or the \spl{=} symbol,
-we simply continue parsing and register a corresponding error message; the most
-plausible scenario is that they are missing altogether, in which case it is most
-helpful if we skip them and try to parse the remainder of the declaration.
+In the next two lines, if we cannot parse the identifier or the `\spl{=}' symbol,
+we skip them and register a corresponding error message. The most
+likely scenario is that they are missing altogether; in that case, we can
+provide further useful error messages if we just continue parsing the remainder
+of the declaration.
 
 Next, our statement parser is defined as follows:
 \begin{minted}{haskell}
@@ -940,7 +942,7 @@ Next, our statement parser is defined as follows:
 \end{minted}
 %
 If-else-blocks, while-loops and return statements all begin with a distinct
-keyword token, hence we can simply try them one after the other.
+keyword token, meaning we can simply try them one after the other.
 Assignments and function calls both start with an identifier though, hence we
 need to wrap the \code{assignP} with \code{try}. The resulting parser will
 attempt to parse an assignment, but backtracks upon failure, after which we try
@@ -962,7 +964,7 @@ while-loops:
 %
 Once we have parsed the condition---using \code{parensP} for the parentheses and
 \code{exprP} for the expression---we try to parse a sequence of statements
-between braces `\verb|{...}|' using the \code{parseToNextStmt} function for
+between braces `\verb|{...}|' using \code{parseToNextStmt} for
 error recovery.
 
 Finally, to illustrate the parsing of expressions discussed in
@@ -974,8 +976,7 @@ non-terminal, as defined in the grammar of \cref{fig:new-expr-grammar}:
   exprP = propP >>= opPropP
     where
       opP :: TokenParser BinaryOp
-      opP = (symbolP SymAndAnd >> pure And) <|>
-            (symbolP SymPipePipe >> pure Or)
+      opP = (symbolP SymAndAnd >> pure And) <|> (symbolP SymPipePipe >> pure Or)
       opPropP :: Expr -> TokenParser Expr
       opPropP prop = (try opP >>= \op -> do
         prop' <- propP <|> registerError GarbageExpr (BinaryOpNoExpression op)
@@ -999,6 +1000,39 @@ desired associativity for \spl{&&} and \code{||}.
 We instead parse only the next operand using \code{propP}, and then call
 \code{opPropP} recursively, where the argument is given by the \haskell{BinOp}
 node featuring the (old) accumulator and the new operand.
+
+The remaining expression parsers for binary operations all work in the same way.
+For unary operations and atoms, the parser functions are much as expected, again
+following the transformed grammar of \cref{fig:new-expr-grammar}.
+Much like the examples shown so far, most parser functions include some form of
+error correction, where we allow the parser to skip certain components once we
+are on a `fixed path', e.g. if an operator is not followed by an
+operand, or if a period `\code{.}' is not followed by a field selector.
+
+One final aspect worth mentioning is how our parser for $\NT{Atom}$ deals
+with tuples \code{($e$,$e'$)} and parenthesis pairs \code{($e$)}.
+We could naively try to parse one option first, i.e. consume
+the entire expression $e$ until we reach the `\code{,}' or `\code{)}'.
+If we picked the wrong case, we then need to backtrack to the start of $e$,
+which could be very costly.
+To avoid backtracking, we use the following approach instead:
+\begin{minted}{haskell}
+  parenOrTupleP :: TokenParser Expr
+  parenOrTupleP = do
+    (_,start,_) <- symbolP SymParenLeft
+    e <- exprP <|> registerError GarbageExpr ParenOpenNoExpression
+    closeExprP e <|> closeTupleP e start
+\end{minted}
+%
+We first parse the opening parenthesis `\code{(}' and the expression $e$, which
+both paths have in common.
+We then pass \code{e} first to the helper function
+\code{closeExprP}, which tries to parse a closing parenthesis `\code{)}'.
+If that parser fails, we try to parse the remainder of a tuple using
+\code{closeTupleP} instead, i.e. a comma, second expression $e'$, and then a
+closing parenthesis.
+Since we have already parsed to the end of $e$, \code{closeExprP} fails
+immediately if the next token is a `\code{,}', and we avoid any backtracking.
 
 
 % \begin{todoenv}
