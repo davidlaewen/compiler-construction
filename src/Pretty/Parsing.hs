@@ -13,7 +13,7 @@ prettyPrintProgram _ (Program dataDecls varDecls funDecls) = do
   sepBy "\n\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
   sepBy "\n" (prettyPrintVarDecl 0) varDecls
   unless (null varDecls || null funDecls) $ putStrLn ""
-  sepBy "\n\n" (prettyPrintFunMutDecl 0) funDecls
+  sepBy "\n\n" (prettyPrintFunDecl 0) funDecls
   putStrLn ""
 
 prettyPrintDataDecl :: Indentation -> DataDecl -> IO ()
@@ -110,13 +110,6 @@ prettyPrintExpr = go 0
 
     unOpPrecedence :: Int
     unOpPrecedence = 6
-
-prettyPrintFunMutDecl :: Indentation -> FunMutDecl -> IO ()
-prettyPrintFunMutDecl i (SingleDecl funDecl) = prettyPrintFunDecl i funDecl
-prettyPrintFunMutDecl i (MutualDecls _ funDecls) = do
-  putShow KwMutual
-  printBlock i $
-    sepBy "\n" (prettyPrintFunDecl $ i + tabWidth) funDecls
 
 prettyPrintFunDecl :: Indentation -> FunDecl -> IO ()
 prettyPrintFunDecl i (FunDecl _ funName argNames retTypeM varDecls stmts) = do

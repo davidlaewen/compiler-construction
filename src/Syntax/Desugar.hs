@@ -16,7 +16,7 @@ class Desugar a b where
 instance Desugar P.Program (T.Program () ()) where
   desugar :: P.Program -> T.Program () ()
   desugar (P.Program dataDecls varDecls funDecls) =
-    T.Program (desugar <$> dataDecls) (desugar <$> varDecls) (desugar <$> funDecls)
+    T.Program (desugar <$> dataDecls) (desugar <$> varDecls) (T.SingleDecl . desugar <$> funDecls)
 
 instance Desugar P.DataDecl T.DataDecl where
   desugar :: P.DataDecl -> T.DataDecl
@@ -37,11 +37,6 @@ instance Desugar P.FunDecl (T.FunDecl () ()) where
   desugar :: P.FunDecl -> T.FunDecl () ()
   desugar (P.FunDecl loc name args rt varDecls stmts) =
     T.FunDecl loc name args (desugar <$> rt) (desugar <$> varDecls) (desugar <$> stmts) ()
-
-instance Desugar P.FunMutDecl (T.FunMutDecl () ()) where
-  desugar :: P.FunMutDecl -> T.FunMutDecl () ()
-  desugar (P.MutualDecls loc funDecls) = T.MutualDecls loc $ desugar <$> funDecls
-  desugar (P.SingleDecl funDecl) = T.SingleDecl $ desugar funDecl
 
 
 instance Desugar P.Stmt (T.Stmt ()) where

@@ -4,12 +4,10 @@ module Parser.Tokens (
   Token(..),
   Keyword(..),
   keywords,
-  isKeyword,
   Symbol(..),
   symbols
 ) where
 
-import Data.Text ( Text )
 import qualified Data.Text as T
 
 
@@ -80,9 +78,6 @@ instance Show Keyword where
 -- | List of all keywords
 keywords :: [Keyword]
 keywords = enumFromTo minBound maxBound
-
-isKeyword :: Text -> Bool
-isKeyword s = s `elem` (T.pack . show <$> keywords)
 
 
 

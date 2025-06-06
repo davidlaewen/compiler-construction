@@ -1,0 +1,55 @@
+var x = 5;
+
+facR(n) :: Int -> Int {
+  if (n < 2) {
+    return 1;
+  } else {
+    return n * facR(n-1);
+  }
+}
+
+main() :: -> Void {
+  var res = 0;
+  res = facR(x);
+  print(res);
+  print(' ');
+  test();
+  return;
+}
+
+// The iterative version of the factorial function
+facI ( n ) :: Int -> Int {
+    var r = 1;
+    while ( n > 1 ) {
+        r = r * n;
+        n = n - 1;
+    }
+    return r;
+}
+
+printBool(b) {
+  if (b) {
+    print('T');
+  } else {
+    print('F');
+  }
+  return;
+}
+
+// A main function to check the results
+// It takes no arguments, so the type looks like this:
+test ( ) :: -> Void {
+    var n = 0;
+    var facN = 1;
+    var ok = True;
+    while ( n < 20 ) {
+        facN = facR( n );
+        if (facN != facI(n)) {
+            // print ( n : facN : facI ( n ) : facL ( n ) : [] );
+            ok = False;
+        }
+        n = n + 1;
+    }
+    printBool ( ok );
+    return;
+}

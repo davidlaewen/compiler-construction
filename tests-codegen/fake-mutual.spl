@@ -1,3 +1,5 @@
+// Syntax no longer supported
+
 mutual {
 
   f(x) :: a -> b {

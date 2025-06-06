@@ -1,0 +1,10 @@
+Int x = 1;
+
+main(x,y) :: a b -> a {
+  var t = x;
+  var l = [];
+
+  l = 1:l;
+
+  return x;
+}

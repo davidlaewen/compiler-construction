@@ -5,7 +5,7 @@ module Parser.Parser (parser) where
 import Control.Applicative hiding (many)
 import Parser.Definition
 import Syntax.ParseAST
-import Text.Megaparsec
+import Text.Megaparsec as MP
 import Parser.Tokens (Token(..), Keyword(..), Symbol(..))
 import qualified Data.Set as S
 import Control.Monad (void)
@@ -21,7 +21,7 @@ varDeclP = do
   mVar <- optional $ keywordP KwVar
   (mty,startPos) <- case mVar of
     Nothing -> do
-      ty <- typeP
+      ty <- monoTypeP -- Disallow polymorphic variables
       pure (Just ty, getStart ty)
     Just ((),start,_) -> pure (Nothing,start)
   (name,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
@@ -49,7 +49,7 @@ dataConstrP = do
     constrArgP = do
       (selector,_,_) <- idP
       _ <- symbolP SymColon
-      ty <- typeP
+      ty <- monoTypeP -- We currently only support monomorphic constructors
       pure (selector,ty)
 
 funDeclP :: TokenParser FunDecl
@@ -60,7 +60,7 @@ funDeclP = do
     \t -> pure (fst3 <$> t))
   retType <- optional (symbolP SymColonColon >> funTypeP)
   ((decls,stmts),_,endPos) <- bracesP $ do
-    decls <- many (try isVarDeclLookahead >> varDeclP)
+    decls <- many varDeclP -- (try isVarDeclLookahead >> varDeclP)
     stmts <- many (withRecovery parseToNextStmt stmtP)
     pure (decls, stmts)
   handleNoStatements funIdOffset stmts
@@ -74,19 +74,7 @@ funDeclP = do
     isVarDeclLookahead = lookAhead $
       void (keywordP KwVar) <|>
       void (symbolP SymParenLeft) <|> void (symbolP SymBracketLeft) <|>
-      void (typeP >> idP)
-
-
-mutualDeclP :: TokenParser FunMutDecl
-mutualDeclP = do
-  (_,start,_) <- keywordP KwMutual
-  _ <- symbolP SymBraceLeft <|> registerError (withDummyPos ()) MutualNoOpenBrace
-  funDecls <- many funDeclP
-  (_,_,end) <- symbolP SymBraceRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBraceRight)
-  pure $ MutualDecls (Loc start end) funDecls
-
-funOrMutualDeclP :: TokenParser FunMutDecl
-funOrMutualDeclP = mutualDeclP <|> SingleDecl <$> funDeclP
+      void (monoTypeP >> idP)
 
 
 ----------------------
@@ -99,29 +87,38 @@ baseTypeP = intTypeP <|> boolTypeP <|> charTypeP
     boolTypeP = keywordP KwBool >>= (\(_,start,end) -> pure $ BoolT (Loc start end))
     charTypeP = keywordP KwChar >>= (\(_,start,end) -> pure $ CharT (Loc start end))
 
-typeP :: TokenParser Type
-typeP = baseTypeP <|> tyVarP <|> tyNameP <|> prodTypeP <|> listTypeP
+prodTypeP :: TokenParser Type -> TokenParser Type
+prodTypeP innerP = do
+  (_,start,_) <- symbolP SymParenLeft
+  ty1 <- innerP <|> customFailure ProdTypeMissingEntry
+  _ <- symbolP SymComma <|> registerError (withDummyPos ()) ProdTypeMissingComma
+  ty2 <- innerP <|> customFailure ProdTypeNoSecondEntry
+  (_,_,end) <- symbolP SymParenRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymParenRight)
+  pure $ Prod (Loc start end) ty1 ty2
+
+listTypeP :: TokenParser Type -> TokenParser Type
+listTypeP innerP = do
+  (_,start,_) <- symbolP SymBracketLeft
+  ty <- innerP <|> customFailure ListTypeMissingEntry
+  (_,_,end) <- symbolP SymBracketRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
+  pure $ List (Loc start end) ty
+
+dataTypeP :: TokenParser Type
+dataTypeP = nameP >>= \(name,start,end) ->
+  pure $ DataT (Loc start end) name
+
+monoTypeP :: TokenParser Type
+monoTypeP = baseTypeP <|> dataTypeP <|> prodTypeP monoTypeP <|> listTypeP monoTypeP
+
+polyTypeP :: TokenParser Type
+polyTypeP = baseTypeP <|> tyVarP <|> dataTypeP <|> prodTypeP polyTypeP <|> listTypeP polyTypeP
   where
     tyVarP = idP >>= \(ident,start,end) ->
       pure $ TyVar (Loc start end) ident
-    tyNameP = nameP >>= \(name,start,end) ->
-      pure $ DataT (Loc start end) name
-    prodTypeP = do
-      (_,start,_) <- symbolP SymParenLeft
-      ty1 <- typeP <|> customFailure ProdTypeMissingEntry
-      _ <- symbolP SymComma <|> registerError (withDummyPos ()) ProdTypeMissingComma
-      ty2 <- typeP <|> customFailure ProdTypeNoSecondEntry
-      (_,_,end) <- symbolP SymParenRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymParenRight)
-      pure $ Prod (Loc start end) ty1 ty2
-    listTypeP = do
-      (_,start,_) <- symbolP SymBracketLeft
-      ty <- typeP <|> customFailure ListTypeMissingEntry
-      (_,_,end) <- symbolP SymBracketRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
-      pure $ List (Loc start end) ty
 
 funTypeP :: TokenParser Type
 funTypeP = do
-  argTys <- many typeP
+  argTys <- many polyTypeP
   (_,start,_) <- symbolP SymRightArrow <|> registerError (withDummyPos ()) FunctionNoArrow
   if start == defaultPos then pure GarbageType else do
     retTy <- retTypeP <|> registerError GarbageType FunctionNoRetType
@@ -131,7 +128,7 @@ funTypeP = do
     pure $ Fun (Loc startPos (getEnd retTy)) argTys retTy
   where
     retTypeP :: TokenParser Type
-    retTypeP = typeP <|> (keywordP KwVoid >>= \(_,start,end) -> pure $ Void (Loc start end))
+    retTypeP = polyTypeP <|> (keywordP KwVoid >>= \(_,start,end) -> pure $ Void (Loc start end))
 
 
 ------------------------
@@ -316,7 +313,8 @@ exprP = propP >>= opPropP
 -- leading to other errors that no longer correspond to the source program.
 -- NOTE: In order to recover parsing after an invalid statement, we need to
 -- encounter a valid statement before the end of the current block. If all
--- remaining statements are invalid, or there are none,
+-- remaining statements are invalid, or there are none, the recovery will fail
+-- and we only report the original error.
 parseToNextStmt :: ParseError TokenStream ParserError -> TokenParser Stmt
 parseToNextStmt e = (symbolP SymBraceRight >> fail "") <|>
   (skipManyTill (satisfy $ const True)
@@ -386,8 +384,8 @@ programP :: TokenParser Program
 programP = do
   -- All varDecls must appear before all funDecls
   dataDecls <- many dataDeclP
-  varDecls <- many (try isVarDeclLookAhead >> varDeclP)
-  funDecls <- many funOrMutualDeclP
+  varDecls <- many varDeclP -- many (try isVarDeclLookAhead >> varDeclP)
+  funDecls <- MP.some funDeclP
   Program dataDecls varDecls funDecls <$ eof
   where
     -- Disallow generic variables on top level

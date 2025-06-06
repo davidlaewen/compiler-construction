@@ -1,4 +1,4 @@
-var A = 1;
+var a = 1;
 [Int] l = [];
 Int x = 42;
 (Bool,Char) t = (True,'c');

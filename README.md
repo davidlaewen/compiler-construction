@@ -9,7 +9,7 @@ Parsing:
 - [ ] What if global variables and functions are mutually defined? That is, the
       variable declaration calls a function which refers to the variable in the
       function body.
-- [ ] Remove `mutual { ... }` syntax, since mutually defined groups are now
+- [x] Remove `mutual { ... }` syntax, since mutually defined groups are now
       automatically determined by the call graph analysis
 
 Code gen:
@@ -17,14 +17,13 @@ Code gen:
 - [ ] Prelude with printing and comparison implementations
 - [ ] Strip no-op instructions from output (e.g. `ajs 0`)
 
-Extension:
+Extension (one of the following):
 - [ ] Anonymous functions (lambda notation)
-- [ ] Custom algebraic data types (records with field selectors)
+- [x] Custom algebraic data types (records with field selectors)
 - [ ] Custom typeclasses with dictionary passing
-- [ ] Further ideas
 
 Pretty printing:
-- [ ] Printer helpers for parentheses, brackets and braces
+- [x] Printer helpers for parentheses, brackets and braces
 - [ ] Possibly refactor with `Prettyprinter` library
 - [x] Add pretty printer for `TypeAST`
 

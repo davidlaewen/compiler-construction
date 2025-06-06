@@ -55,7 +55,7 @@ intL = IntLit <$> decimal <* withRecovery recovery (notFollowedBy letterChar)
   where
     recovery e = do
       -- FIXME: Possibly provide better error message here
-      _ <- fail "Malformed integer"
+      -- _ <- fail "Malformed integer"
       registerParseError e
       void $ some alphaNumChar
 
