@@ -125,7 +125,7 @@ $\beta = \code{Int}$.
 
 In a function declaration---represented by \haskell{FunDecl a b} in the
 AST representation of \cref{fig:type-ast}---the body may freely contain function
-calls to other functions, as well as the function itself.
+calls to other functions, or to the function itself.
 In the typing algorithm, we must ensure that we process function declarations in
 the right order, based on how they reference each other.
 If the declaration for some function $f$ refers to a function $g$, we need to
@@ -133,25 +133,26 @@ process $g$ first, since we need its type to check that $g$ is used correctly in
 the body of $f$.
 
 While we could simply require that the user declare a function before other
-functions that reference it, we are able to statically infer this ordering using
+functions that reference it, we can also automatically infer this ordering using
 the \emph{call graph} of the program.
-The call graph has as its nodes the functions declared in the program, while the
-edges are given by the function calls between them: if some function $f$ calls
-the function $g$, this is captured by a directed edge from $f$ to $g$.
+The call graph has as its vertices the functions declared in the program, while
+the edges are given by the function calls between them: if some function $f$
+calls the function $g$, this is captured by a directed edge from $f$ to $g$.
 
+\paragraph{Strongly connected components}
 There is also the possibility that a function refers to itself
 (\emph{recursion}), and---more importantly---that two or more functions refer to
 each other in a cycle, in which case they are said to be \emph{mutually
 recursive}. We want to identify such groups of functions, since we need some
 additional steps in the typing algorithm to handle them correctly.
-Again, we can leverage the call graph to find groups of nodes that refer to each
-other cyclically; in graph terminology, these are referred to as
+Again, we can leverage the call graph to find groups of vertices that refer to
+each other cyclically; in graph terminology, these are referred to as
 \emph{strongly connected components} (SCCs).
 Our overall goal is thus to construct the call graph of the input program and
 use it to find the SCCs, as well as sorting the (groups of) functions such that
 they appear in the output prior to the functions that refer to them.
-More formally, we want the reverse \emph{topological} sorting of the directed
-acyclic graph given by the SCCs of the original call graph.
+In graph theory terminology, we want the reverse \emph{topological sorting} of
+the directed acyclic graph given by the SCCs of the original call graph.
 
 The so-called strongly connected components algorithm of \citet{Tarjan1972}
 lends itself very elegantly to this problem, as it identifies the SCCs of a
@@ -159,36 +160,54 @@ directed graph in linear time, while also returning the SCCs in reverse
 topological ordering as a by-product.
 We do not discuss the inner workings of the algorithm, and our compiler uses an
 existing Haskell implementation of Tarjan's algorithm provided in the
-\code{Data.Graph} library, based on the algorithm description of
-\citet{King1995}.
+\code{Data.Graph} library, based on a Haskell-specific description of
+the algorithm due to \citet{King1995}.
 
 \paragraph{Call graph generation}
-In order to use the library implementation of the SCC algorithm, we must
-construct the call graph for the input program in the appropriate format for the
-library function, and then process the output back into our AST representation,
-which gives us the sorted program.
-We generate the call graph using the following monad:
+In order to use the library implementation of the SCC algorithm, we construct
+the call graph for the input program in the appropriate format, and then process
+the output back into our AST representation, which gives us the sorted program.
+
+The call graph generation is illustrated in \cref{fig:call-graph-example}. The
+program outline on the left specifies only the function calls and declarations,
+and features the functions \code{p}, \code{f}, \code{g}, \code{h} and
+\code{main}.
+The call graph corresponding to the program outline is shown on the right.
+We identify three strongly connected components: the functions \code{f},
+\code{g} and \code{h} refer to each other in a cycle, i.e. their vertices are
+all reachable from each other, hence they form an SCC; the remaining functions
+\code{p} and \code{main} both constitute a singleton SCC.
+
+We use the following monad:
 \begin{minted}{haskell}
   type GraphGen = StateT GraphGenState (Except T.Text)
 \end{minted}
 %
 Generating the graph requires some auxiliary data structures, which we thread
-through the computation using the state monad, where the state is given by
-\haskell{GraphGenState}\footnote{We define type aliases for the map types in our
-implementation. \haskell{Vertex} is a synonym for \haskell{Int}.}:
+through the computation using the state monad. The state is given by
+\haskell{GraphGenState}\footnote{The actual implementation uses type aliases for
+the various map types, which we unfold here.
+\haskell{Vertex} is a synonym for \haskell{Int}.}:
 \begin{minted}{haskell}
   data GraphGenState = GraphGenState {
-    nameMap  :: M.Map Name Vertex,
+    nameMap  :: M.Map T.Text Vertex,
     declMap  :: M.Map Vertex (FunDecl () ()),
     edgeMap  :: M.Map Vertex (S.Set Vertex),
     vtxBound :: Vertex
   }
 \end{minted}
+%
+The \code{nameMap} field associates function identifiers with their respective
+vertex ID in the call graph, while \code{declMap} maps the vertices back to the
+function declarations, allowing us to easily convert the sorted SCCs back to a
+list of (grouped) \haskell{FunDecl}s.
+The call graph itself is represented by \code{edgeMap}, which associates each
+vertex with the set of its successors. Finally, \code{vtxBound} stores the
+largest vertex ID in use, allowing us to generate fresh vertices by incrementing
+this number.
 
 
-
-
-\begin{figure}[h]
+\begin{figure}[t]
 
   \centering
 
@@ -206,7 +225,7 @@ implementation. \haskell{Vertex} is a synonym for \haskell{Int}.}:
 
       h(n) { $...$ f(n/2) $...$ g(n) $...$ }
 
-      main() { var a = h(f(42)); $...$ }
+      main() { $...$ h(f(42)) $...$ }
     \end{lstlisting}
   \end{minipage}\hspace{6mm}%
   %
@@ -245,14 +264,72 @@ implementation. \haskell{Vertex} is a synonym for \haskell{Int}.}:
     \vspace{2mm}
   \end{minipage}
 
+  \label{fig:call-graph-example}
   \caption{Example program outline and corresponding call graph}
 
 \end{figure}
 
 
-\todobox{Briefly describe how we construct a graph of the function declarations,
-how we use the SCC library function to get the topological sorting, and how we
-convert the result back into a \haskell{Program} instance.}
+In order to build the call graph, we start with the desugared input of type
+\haskell{Program () ()}. We then recurse throughout the entire AST
+representation to process the function declarations and find all function calls
+within those declarations. A function call can appear either as a statement or
+in an expression.
+When recursing through the AST, we only return a result of the unit type
+\haskell{()}; the generated graph is given by the final state under the
+\haskell{GraphGen} monad.
+Most cases are trivial, as we simply recurse into the subterms (if there are
+any). Function declarations are handled as follows:
+\begin{minted}{haskell}
+  funDeclToGraph :: FunDecl () () -> GraphGen ()
+  funDeclToGraph funDecl@(FunDecl _ funName _ _ varDecls stmts _) = do
+    declVtx <- nameToVertex funName -- Get existing or new vertex ID
+    insertDecl declVtx funDecl -- Map current function's vertex to the declaration
+    mapM_ (varDeclToGraph declVtx) varDecls
+    mapM_ (stmtToGraph declVtx) stmts
+\end{minted}
+%
+We first get the vertex corresponding to function name. If the function name has
+already been encountered, we get the vertex from \code{nameMap}, otherwise we
+generate a fresh vertex ID.
+We then associate the current declaration with the corresponding vertex ID in
+\code{declMap}. In the last two lines, we recurse into the variable declarations
+and statements of the function body. Since the output type is always
+\haskell{GraphGen ()}, we use \code{mapM\_}, which ignores the result of mapping
+the monadic functions onto the lists.
+
+The only other noteworthy case is when we encounter a function call:
+\begin{minted}{haskell}
+  exprToGraph declVtx (FunCallE _ funName args _) = do
+    case funName of -- Insert edge for function call
+      Name name -> insertEdge declVtx name
+      _ -> pure () -- Unless it's a built-in function
+    mapM_ (exprToGraph declVtx) args
+\end{minted}
+%
+Here, the first argument is the vertex ID of the current declaration, which is
+passed down recursively. We use the vertex ID to insert an edge from the vertex
+of the current function to the function that is called, unless \code{funName} is
+a built-in function, which we do not include in the SCC analysis.
+
+\paragraph{Processing the SCCs}
+The call graph is constructed from the final \code{edgeMap} and \code{declMap}
+entries. We store the instances of \haskell{FunDecl} directly in the graph, and
+the library function \code{stronglyConnComp} then gives us a list of the sorted
+function declaration SCCs, which we convert back to a \haskell{Program} instance
+as follows:
+\begin{itemize}
+  \item For a singleton SCC, we use the \haskell{SingleDecl} constructor;
+  \item for a cyclic SCC with one entry (i.e. a recursive function), we
+        also generate a \haskell{SingleDecl} node;
+  \item for a cyclic SCC containing multiple declarations, we insert a
+        \haskell{MutualDecls} node.
+\end{itemize}
+%
+The result is a list of type \haskell{FunMutDecl () ()}, which we combine with
+the unchanged list of variable declarations to construct the updated
+\haskell{Program} instance.
+
 
 
 \section{Scoping}

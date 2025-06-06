@@ -355,7 +355,7 @@ the user.
 
 \paragraph{Expressions}
 The identifier case for expressions is again of represented using
-\haskell{Data.Text}. For field lookups/projections, we use \haskell{ExprLookup}
+\haskell{Text}. For field lookups/projections, we use \haskell{ExprLookup}
 and the \haskell{Field} data type, the cases of which correspond to the list and
 tuple projections \spl{hd}, \spl{tl}, \spl{fst} and \spl{snd}.
 By the mutual recursion between \haskell{Expr} and \haskell{ExprLookup}, field
@@ -366,7 +366,7 @@ All unary and binary operations are represented by the cases \haskell{UnOp} and
 \haskell{BinOp}, where the operators are given by \haskell{UnaryOp} and
 \haskell{BinaryOp}, respectively.
 Function calls are captured by \haskell{FunCallE}, with the function identifier
-of type \haskell{Data.Text} and the arguments given by a list of expressions
+of type \haskell{Text} and the arguments given by a list of expressions
 \haskell{[Expr]}.
 We did not create a special representation for built-in functions like
 \spl{print} or \spl{isEmpty}. We essentially treat these functions just like
@@ -407,7 +407,7 @@ we handle operator precedence and associativity when parsing expressions.
 
 \subsection{Parsing Setup} \label{sec:parsing-setup}
 
-While \haskell{Lexer} operates on input of type \haskell{Data.Text}, our parser
+While \haskell{Lexer} operates on input of type \haskell{Text}, our parser
 \haskell{TokenParser} operates on the token stream returned by the lexer.
 The type of our parser is given by:
 %
@@ -425,7 +425,7 @@ type of the parser instance.
 Our lexer instances generally return a single token, that is, an instance of
 the \haskell{Token} data type shown in \cref{sec:lexing}. By lexing many such
 tokens from the input, we obtain a list of tokens, hence the input of type
-\haskell{Data.Text} is processed into a list \haskell{[Positioned Token]},
+\haskell{Text} is processed into a list \haskell{[Positioned Token]},
 where \haskell{Positioned a} equips the underlying type \code{a} with positional
 information:
 \begin{minted}{haskell}
@@ -446,7 +446,7 @@ the original input in our error messages, which is not possible based on the
 token stream alone.
 
 To this end, we must bundle the list of tokens returned by the lexer with the
-original source program of type \haskell{Data.Text}:
+original source program of type \haskell{Text}:
 %
 \begin{minted}{haskell}
   data TokenStream = TokenStream {
