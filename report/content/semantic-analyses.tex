@@ -76,7 +76,7 @@ For instance, when checking an expression $e$, we start with an instance of
 \haskell{Expr ()}, and return an instance of \haskell{Expr UType}.
 The definition of \haskell{UType} is also given in \cref{fig:type-ast}, and
 corresponds to the grammar of SPL types, with the addition of \emph{unification
-variables} \haskell{UVar}.
+variables} \haskell{UVar}.\todo{Point out \haskell{MutualDecls} node}
 Unification variables are represented simply by integers, and are generated as
 placeholders for unknown types during type checking. While iterating through the
 AST, we annotate the nodes with these unification variables, and simultaneously
@@ -122,6 +122,34 @@ $\beta = \code{Int}$.
 
 
 \section{SCC Analysis}
+
+In a function declaration---represented by \haskell{FunDecl a b} in the
+AST representation of \cref{fig:type-ast}---the body may freely contain function
+calls to other functions, as well as the function itself.
+In the typing algorithm, we must ensure that we process function declarations in
+the right order, based on how they reference each other.
+If the declaration for some function $f$ refers to a function $g$, we need the
+type of $g$ to check that the function is used correctly in the body of $f$,
+that is, according to its type.
+
+While we could simply require that the user declare a function before other
+functions that reference it, there is also the possibility that a function
+refers to itself (i.e. \emph{recursion}), or that two or more functions all
+refer to each other, in which case they are said to be \emph{mutually
+recursive}. We can then no longer order the functions as described above, and
+require some additional steps in our typing algorithm to handle such mutually
+recursive groups of functions correctly.
+
+
+The references of functions to other functions via function calls gives rise to
+the notion of a \emph{call graph}. In such a graph, the nodes are given by the
+function declarations, while some function $f$ calling the function $g$ is
+captured by a directed edge from $f$ to $g$.
+
+
+\todobox{Example w/ program and graph?}
+
+
 
 \todobox{Briefly describe how we construct a graph of the function declarations,
 how we use the SCC library function to get the topological sorting, and how we

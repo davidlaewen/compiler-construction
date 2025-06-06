@@ -734,15 +734,17 @@ missing in the input, our error recovery may lead to worse error messages, as
 outlined in (3) above.
 
 
-\subsection{Operator Precedence \& Associativity} \label{sec:precedence-associativity}
+\subsection{Rewriting the Expression Grammar} \label{sec:precedence-associativity}
 
 In order to write parser functions corresponding to the provided grammar of SPL,
 we need to transform the grammar such that we eliminate occurrences of left
 recursion and obtain the desired structure of the AST with respect to
 associativity and operator precedence.
-This pertains especially to the parsing of expressions, where the rule
+This pertains primarily to the parsing of expressions, where the rule
 \[ \NT{Exp} \Coloneqq \NT{Exp}\ \NT{Op2}\ \NT{Exp} \]
 is left-recursive and must be rewritten.
+
+\paragraph{Operator precedence}
 In addition, it is desirable from the user perspective to assign precedence
 levels for the various binary operators supported by SPL, and treat them as
 either left-associative or right-associative, depending on the operator.
@@ -769,9 +771,11 @@ Similarly, all comparison operators should have a lower precedence than the
 and subtraction, followed by multiplication, division and modulo and finally
 Boolean and integer negation.
 
-We achieve this behaviour using a recursive descent parser with multiple levels,
-shown in \cref{fig:new-expr-grammar}, where each non-terminal corresponds to a
-level in the precedence hierarchy of operators.
+\paragraph{Expression grammar levels}
+We obtain the desired operator precedences by using a recursive descent parser
+with multiple levels based on the grammar shown in \cref{fig:new-expr-grammar},
+where each non-terminal corresponds to a level in the precedence hierarchy of
+operators.
 %
 The parser thus begins at the lowest precedence level, featuring the Boolean
 operators \code{\&\&} and \code{||}.
@@ -788,9 +792,11 @@ names are rather arbitrary):
   \item formulas $\NT{Form}$, featuring addition and subtraction;
   \item terms $\NT{Term}$, featuring multiplication, division, and the modulo
         operator;
-  \item and finally values $\NT{Val}$, which include integer, Boolean and
-        character literals, the empty list \spl{[]}, the unary operators \spl{!}
-        and \spl{-}, function calls, identifiers, tuples, or just a pair of
+  \item unary operations $\NT{UnOp}$, with the \spl{!} and \spl{-} operator;
+  \item field selections $\NT{Sel}$, consisting of an atom followed by a
+        (possibly empty) list of field selectors;
+  \item and finally `atoms' $\NT{Atom}$, which include integer, Boolean and
+        character literals, the empty list \spl{[]}, function calls, identifiers, tuples, or just a pair of
         parentheses, which modify the precedence.
 \end{itemize}
 
@@ -806,14 +812,23 @@ names are rather arbitrary):
 		%
 		\NT{Form} & \Coloneqq & \NT{Term}\ (( \code{+} \mid \code{-} )\ \NT{Term})^* \br
 		%
-		\NT{Term} & \Coloneqq & \NT{Val}\ (( \code{*} \mid \code{/} \mid \code{\%} )\ \NT{Val} )^* \br
+		\NT{Term} & \Coloneqq & \NT{UnOp}\ (( \code{*} \mid \code{/} \mid \code{\%} )\ \NT{UnOp} )^* \br
+    %
+    \NT{UnOp} & \Coloneqq & \code{!}\ \NT{UnOp}\ \ruleSep \code{-}\ \NT{UnOp} \ruleSep \NT{Sel} \br
+    %
+    \NT{Sel} & \Coloneqq & \NT{Atom}\ (\code{.}\ \NT{Field})^* \br
+    %
+    \NT{Atom} & \Coloneqq & \NT{Int} \ruleSep \NT{Bool} \ruleSep \NT{Char} \\
+    & \mid & \NT{Id} \ruleSep \NT{FunCall} \ruleSep \code{[]} \\
+    & \mid & \code{(}\ \NT{Expr}\ \code{)} \ruleSep
+        \code{(}\ \NT{Expr}\ \code{,}\ \NT{Expr}\ \code{)} \\
 		%
-		\NT{Val} & \Coloneqq & \code{(}\ \NT{Expr}\ \code{)} \ruleSep
-      \code{(}\ \NT{Expr}\ \code{,}\ \NT{Expr}\ \code{)} \\
-		& \mid & \NT{FunCall} \ruleSep
-      \NT{Id} \NT{Field} \\
-    & \mid & \NT{Int} \ruleSep \NT{Bool} \ruleSep \NT{Char} \\
-		& \mid & \code{!}\ \NT{Val} \ruleSep \code{-}\ \NT{Val} \ruleSep \code{[]}
+		% \NT{Val} & \Coloneqq & \code{(}\ \NT{Expr}\ \code{)} \ruleSep
+    %   \code{(}\ \NT{Expr}\ \code{,}\ \NT{Expr}\ \code{)} \\
+		% & \mid & \NT{FunCall} \ruleSep
+    %   \NT{Id} \NT{Field} \\
+    % & \mid & \NT{Int} \ruleSep \NT{Bool} \ruleSep \NT{Char} \\
+		% & \mid & \code{!}\ \NT{Val} \ruleSep \code{-}\ \NT{Val} \ruleSep \code{[]}
 		%
   \end{array}
   \]
@@ -822,7 +837,7 @@ names are rather arbitrary):
 \end{figure}
 %
 
-The rule for $\NT{Val}$ allows us to jump back to $\NT{Expr}$ at the topmost
+The rule for $\NT{Atom}$ allows us to jump back to $\NT{Expr}$ at the topmost
 level of the grammar, either via an opening parenthesis \spl{(}, or the
 arguments of a function call \code{$f$($e_1$,$\dots$,$e_n$)}.
 
@@ -830,30 +845,33 @@ In order to still parse arbitrarily many applications of \code{\&\&} or
 \code{||}, we use the pattern $((\code{\&\&} \mid \code{||})\ \NT{Prop})^*$,
 hence we can parse any expression of the form $\dots \code{\&\&} \dots \code{||} \dots$,
 or just a single $\NT{Prop}$, since $*$ denotes zero or more occurrences of
-a pattern.
+a pattern; the same format of production rule is also used for the subsequent
+levels of the grammar.
 
-For the following rules of the expression grammar, we proceed in much the same
-manner: They consist of an expression matching the following rule, followed
-by zero or more occurrences of a binary operator and another expression matching
-the following rule. The resulting expression grammar after applying the
-transformations outlined above is shown in \cref{fig:new-expr-grammar}.
+The rules for $\NT{Prop}$, $\NT{List}$, $\NT{Form}$ and $\NT{Term}$ all follow
+the same pattern; they consist of a non-terminal of the next level,
+followed by zero or more occurrences of some binary operators along with another
+non-terminal of the next level. The resulting expression grammar after applying
+the transformations outlined above is shown in \cref{fig:new-expr-grammar}.
 
+
+\paragraph{Associativity}
 
 Another important consideration for the expression grammar is the
 \emph{associativity} of the various operators. For instance, since addition
 associates to the left, we want the expression \code{1+2+3} to result in an AST
 of the form \code{Add (Add 1 2) 3} rather than \code{Add 1 (Add 2 3)} (see
 \cref{fig:parse-ast} for the actual AST data type of our implementation).
-In fact, all binary operators included in SPL are typically left-associative, in
-contrast to e.g. exponentiation, which is usually taken to be right-associative.
+In fact, all binary operators of SPL are usually taken to be left-associative,
+in contrast to e.g. exponentiation, which is typically right-associative.
 
-We obtain the correct AST through the grammar rule pattern
-$\NT{e}\ (\NT{op}\ \NT{e})^*$ discussed previously.
+We obtain the corresponding left-deep AST through the general grammar rule
+pattern $\NT{e}\ (\NT{op}\ \NT{e})^*$ for binary operations discussed previously.
 Here, we first parse an instance of $\NT{e}$, which we then optionally combine
 repeatedly with another instance of $\NT{e}$. We can do so using an
 accumulator $a$, which we initialise with the leftmost subexpression
-$e_1$, then update by $a \leftarrow op\ e_1\ e_2$, then by
-$a \leftarrow op\ a\ e_3$, and so forth. By successively combining the (nested)
+$e_1$, then update by $a \leftarrow \mathit{op}\ a\ e_2$, then by
+$a \leftarrow \mathit{op}\ a\ e_3$, and so forth. By successively combining the (nested)
 expression parsed thus far with the following subexpression, we achieve the
 desired left-deep nesting of the AST.
 
@@ -866,15 +884,131 @@ a parse error for non-numbers occurring in an arithmetic expression.
 
 \subsection{Parsing of Programs} \label{sec:parsing-programs}
 
+Our monadic parser functions closely follow the grammar given in
+\cref{chp:codegen}, with the expression parser using the modified grammar as
+detailed in \cref{sec:precedence-associativity}. We give some examples for the
+parser functions at the top-level, the statement level, and the expression
+level, showing how the concepts covered in the previous sections are used
+concretely in the implementation.
 
-\begin{todoenv}
-  \begin{itemize}
-    \item How did you design the Abstract Syntax Tree
-    \item How does the parser work?
-    \item How did you handle difficult things like fixity, associativity etc.
-    \item Is there error handling? Recovery?
-    \item Do you have a lexer and parser?
-    \item How do they communicate?
-    \item Problems?
-  \end{itemize}
-\end{todoenv}
+The top-level parser function is defined as follows:
+\begin{minted}{haskell}
+  programP :: TokenParser Program
+  programP = do
+    varDecls <- many varDeclP
+    funDecls <- many funDeclP
+    handleNoFunDecls funDecls
+    Program dataDecls varDecls funDecls <$ eof
+\end{minted}
+%
+We first parse a (possibly empty) sequence of variable declarations using the
+\code{varDeclP} parser, followed by a non-empty sequence of function
+declarations using the \code{funDeclP} parser.
+Global variable declarations begin with either the \spl{var} keyword token or
+a monomorphic type, so there is no overlap with function declarations, which
+must begin with an identifier token.
+We do not directly enforce the presence of at least one function declaration
+with the \code{some} combinator; instead, we use \code{many}, but register an
+error if the resulting list of \haskell{FunDecl}s is empty, informing the user
+that a program must define a \spl{main()} function.
+
+A good example for our basic form of error correction and multi-error support is
+the parser for variable declarations:
+\begin{minted}{haskell}
+  varDeclP :: TokenParser VarDecl
+  varDeclP = do
+    (mty,startPos) <- varOrTypeP
+    (ident,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
+    _ <- symbolP SymEq <|> registerError (withDummyPos ()) VarDeclNoEquals
+    expr <- exprP <|> customFailure VarDeclNoExpression
+    (_,_,endPos) <- symbolP SymSemicolon <|> registerError (withDummyPos ()) (NoClosingDelimiter SymSemicolon)
+    pure $ VarDecl (Loc startPos endPos) mty ident expr
+\end{minted}
+%
+The local \code{varOrTypeP} helper function (\haskell{where}-clause omitted
+here) parses either the \spl{var} keyword or a monomorphic type, returning an
+instance of \haskell{Maybe Type} along with a \haskell{SourcePos}.
+In the next two lines, if we cannot parse the identifier or the \spl{=} symbol,
+we simply continue parsing and register a corresponding error message; the most
+plausible scenario is that they are missing altogether, in which case it is most
+helpful if we skip them and try to parse the remainder of the declaration.
+
+Next, our statement parser is defined as follows:
+\begin{minted}{haskell}
+  stmtP :: TokenParser Stmt
+  stmtP = ifP <|> whileP <|> returnP <|> try assignP <|> funCallSP
+\end{minted}
+%
+If-else-blocks, while-loops and return statements all begin with a distinct
+keyword token, hence we can simply try them one after the other.
+Assignments and function calls both start with an identifier though, hence we
+need to wrap the \code{assignP} with \code{try}. The resulting parser will
+attempt to parse an assignment, but backtracks upon failure, after which we try
+to parse a function call instead.
+The else-block of an if-statement is optional, and our parser allows it to be
+omitted, in which case we specify the else-statements as the empty list.
+
+The parsers for function declarations and statements use the error recovery
+described in \cref{sec:parser-error-handling}, as illustrated by the parser for
+while-loops:
+\begin{minted}{haskell}
+  whileP :: TokenParser Stmt
+  whileP = do
+    (_,start,_) <- keywordP KwWhile
+    (cond,_,_) <- parensP exprP
+    (stmts,_,end) <- bracesP $ many (withRecovery parseToNextStmt stmtP)
+    pure $ While (Loc start end) cond stmts
+\end{minted}
+%
+Once we have parsed the condition---using \code{parensP} for the parentheses and
+\code{exprP} for the expression---we try to parse a sequence of statements
+between braces `\verb|{...}|' using the \code{parseToNextStmt} function for
+error recovery.
+
+Finally, to illustrate the parsing of expressions discussed in
+\cref{sec:precedence-associativity}, consider the parser for the $\NT{Expr}$
+non-terminal, as defined in the grammar of \cref{fig:new-expr-grammar}:
+%
+\begin{minted}{haskell}
+  exprP :: TokenParser Expr
+  exprP = propP >>= opPropP
+    where
+      opP :: TokenParser BinaryOp
+      opP = (symbolP SymAndAnd >> pure And) <|>
+            (symbolP SymPipePipe >> pure Or)
+      opPropP :: Expr -> TokenParser Expr
+      opPropP prop = (try opP >>= \op -> do
+        prop' <- propP <|> registerError GarbageExpr (BinaryOpNoExpression op)
+        opPropP (BinOp (Loc (getStart prop) (getEnd prop')) op prop prop')) <|> pure prop
+\end{minted}
+%
+We start by parsing an instance of $\NT{Prop}$, i.e. of the following precedence
+level. The result is then passed (monadically with \haskell{>>=}) to
+\code{opPropP}, which tries to parse one of the binary operators \spl{&&} or
+\code{||}, followed by another $\NT{Prop}$.
+If we fail to parse an operator and second operand, we just return the
+result of \code{propP}.
+
+Note in particular how the parameter of \code{opPropP} serves to
+\emph{accumulate} the subsequent operands one-by-one. This way, we can
+construct the desired left-deep syntax tree, as outlined in
+\cref{sec:precedence-associativity}.
+Parsing the whole remaining subterm after the operator recursively with
+\code{exprP} would result in a right-deep nesting, which does not match the
+desired associativity for \spl{&&} and \code{||}.
+We instead parse only the next operand using \code{propP}, and then call
+\code{opPropP} recursively, where the argument is given by the \haskell{BinOp}
+node featuring the (old) accumulator and the new operand.
+
+
+% \begin{todoenv}
+%   \begin{itemize}
+%     \item How did you design the Abstract Syntax Tree
+%     \item How does the parser work?
+%     \item How did you handle difficult things like fixity, associativity etc.
+%     \item Is there error handling? Recovery?
+%     \item Do you have a lexer and parser?
+%     \item How do they communicate?
+%     \item Problems?
+%   \end{itemize}
+% \end{todoenv}
