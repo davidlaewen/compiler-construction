@@ -15,43 +15,36 @@ var exTree2468 = (2, (4, (6,[]):[]):(8,[]):[] );
    /
   6       */
 
-mutual {
 
-  // [a] -> Int
-  sumNodeList(l) {
-    if (isEmpty(l)) {
-      return 0;
-    } else {
-      return sumNode(l.hd) + sumNodeList(l.tl);
-    }
+sumNodeList(l) :: [a] -> Int {
+  if (isEmpty(l)) {
+    return 0;
+  } else {
+    return sumNode(l.hd) + sumNodeList(l.tl);
   }
+}
 
-  // (Int,b) -> Int
-  sumNode(t) {
-    return t.fst + sumNodeList(t.snd);
-  }
-
+sumNode(t) :: (Int,b) -> Int {
+  return t.fst + sumNodeList(t.snd);
 }
 
 max(n,m) {
   if (n > m) { return n; } else { return m; }
 }
 
-mutual {
 
-  depthNodeList(l) {
-    if (isEmpty(l)) {
-      return 0;
-    } else {
-      return max( depthNode(l.hd), depthNodeList(l.tl) );
-    }
+depthNodeList(l) {
+  if (isEmpty(l)) {
+    return 0;
+  } else {
+    return max( depthNode(l.hd), depthNodeList(l.tl) );
   }
-
-  depthNode(t) {
-    return 1 + depthNodeList(t.snd);
-  }
-
 }
+
+depthNode(t) {
+  return 1 + depthNodeList(t.snd);
+}
+
 
 
 main() {

@@ -1,10 +1,11 @@
-Int x = 1;
+Int x = succ(1);
 
-main(x,y) :: a b -> a {
-  var t = x;
-  var l = [];
+succ(n) :: Int -> Int {
+  return n + 1;
+}
 
-  l = 1:l;
-
-  return x;
+main() {
+  Int x = succ(1);
+  print(x);
+  return;
 }
