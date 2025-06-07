@@ -15,7 +15,7 @@ var fortytwo = Mul(Add(Lit(20), Lit(1)), Lit(2));
 evaluate(a,x,y) :: AExp Int Int -> Int {
   if (isAdd(a)) { return evaluate(a.ladd,x,y) + evaluate(a.radd,x,y); } else {
   if (isMul(a)) { return evaluate(a.lmul,x,y) * evaluate(a.rmul,x,y); } else {
-  if (isNeg(a)) { return -1 * evaluate(a.neg,x,y); } else {
+  if (isNeg(a)) { return -evaluate(a.neg,x,y); } else {
   if (isLit(a)) { return a.lit; } else {
   if (isVarX(a)) { return x; } else { return y; }}}}}
 }
@@ -23,6 +23,9 @@ evaluate(a,x,y) :: AExp Int Int -> Int {
 main() {
   var res = 0;
   res = evaluate(fortytwo,0,0);
+  print(res);
+  print(' ');
+  res = evaluate(Neg(fortytwo),0,0);
   print(res);
   return;
 }
