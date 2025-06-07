@@ -87,16 +87,18 @@
 
 % Syntax highlighting for SPL
 \lstdefinelanguage{SPL}{%
-	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|}
-	morekeywords={while,else,if,print,return,isEmpty,fst,snd,hd,tl,Int,Char,Bool,Void,True,False,var},%
+	alsoletter={0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_+-*/\%=<>!\&|:},
+  keywords=[1]{while,if,else,return,var,data,Int,Bool,Char,Void,True,False},
+  keywords=[2]{print,isEmpty,fst,snd,hd,tl},
+  keywords=[3]{::,=,->}, %,<,>,+,*,/,-,\%,!,\&,|,==},
 	sensitive=true,%
 	morecomment=[l]{//},%
 	morecomment=[n]{/*}{*/},%
 	literate=%
-		{->}{{$\rightarrow$}}2
+		{->}{{${\color{teal}\rightarrow}$}}2
 		{>=}{{$\geq\:$}}1
 		{<=}{{$\leq\:$}}1
-		{==}{{$\equiv$}}1
+		%{==}{{$\equiv$}}1
 }
 \lstset{%
   mathescape,
@@ -105,10 +107,12 @@
 	breaklines=true,
 	postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
 	keepspaces=true,
-	basicstyle=\tt,
-	commentstyle=\sl,
-	keywordstyle=\bf,
-	stringstyle=\tt,
+	basicstyle=\ttfamily,
+	commentstyle=\color{OliveGreen}\ttfamily,
+  keywordstyle=[1]\color{Fuchsia}\bfseries,
+	keywordstyle=[2]\color{MidnightBlue},
+  keywordstyle=[3]\color{teal},
+	stringstyle=\ttfamily,
 	showspaces=false,
 	showstringspaces=false,
 	showtabs=false,
