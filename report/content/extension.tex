@@ -254,16 +254,16 @@ error for the missing declaration.
 
 \paragraph{Unification and substitution}
 Unification of data types is very straightforward: we can only unify a given
-data type with itself, i.e. of the same name, which yields the empty substitution:
-\[ \unify(\mathit{dtype}_1, \mathit{dtype}_2) \eqdef
+data type $\Dat$ with itself, i.e. of the same name, which yields the empty substitution:
+\[ \unify(\Dat_1, \Dat_2) \eqdef
     \begin{cases}
-      \emptyset \text{, if } \mathit{dtype}_1 = \mathit{dtype}_2 \\
-      \mathsf{Fail} \text{, otherwise}
+      \emptyset , & \text{ if } \Dat_1 = \Dat_2 \\
+      \mathsf{Fail} , & \text{ otherwise}
     \end{cases} \]
 %
 Substituting in a data type has no effect, and the set of free variables is empty:
 \begin{align*}
-  \mathit{dtype}.S \eqdef \mathit{dtype} && \FV(\mathit{dtype}) \eqdef \emptyset
+  \Dat.S \eqdef \Dat && \FV(\Dat) \eqdef \emptyset
 \end{align*}
 
 
@@ -279,7 +279,7 @@ selector, and reporting an error if it has not been declared.
 \end{minted}
 %
 We expect the type scheme to be of the form
-\spl{$\langle\mathit{DataName}\rangle$->$\tau$}, otherwise we have encountered
+\spl{$\langle\mathit{DataName}\rangle$ -> $\tau$}, otherwise we have encountered
 an (internal) compiler error.
 Next, we unify the output type $\tau$ with the type for the left-hand
 side of the assignment (after possibly applying subsequent field selectors), while
@@ -300,39 +300,240 @@ course also \spl{Int}.
 
 \section{Code Generation} \label{sec:ext-codegen}
 
+Roughly speaking, the code generation for custom data types generalises the way
+we handle the built-in polymorphic list and tuple types.
+Instances of a data type are, in general, composed of multiple fields.
+Much like for lists and tuples, we store the data itself on the heap, and hold
+a pointer to the heap location on the stack.
+
+Constructor calls are handled similarly to the `\spl{:}' (cons) operator and the
+tuple constructor \spl{($-$,$-$)}: we compute all entries on the stack, and then
+store them block-wise to heap using the \code{stmh} instruction.
+Since all data is represented by a single stack entry, the size of the block is
+simply given by the number of constructor arguments.
+
+\paragraph{Distinguishing variants}
+The main question regarding the representation of the custom data types is how
+we ensure that we can distinguish the different variants of a given data type.
+More specifically, we need to consider how we can automatically generate the
+constructor predicate functions that test for a certain variant.
+For lists, we only have two cases, and represent the empty list by a null
+pointer on the stack. The code generated for \spl{isEmpty} then simply checks
+if the stack entry holds the null pointer.
+
+This approach does not scale to general data types though, e.g. the \spl{AExp}
+type from earlier:
+%
+\begin{lstlisting}[language=SPL]
+  data AExp {
+    Add(ladd : AExp, radd : AExp),
+    Mul(lmul : AExp, rmul : AExp),
+    Neg(neg : AExp),
+    Lit(lit : Int), VarX(), VarY()
+  }
+\end{lstlisting}
+%
+Here, we have two variants that have more than one field, and thus need to be
+stored on the stack, namely \spl{Add} and \spl{Mul}.
+Since \spl{Add} and \spl{Mul} are both represented by heap locations on the
+stack the only way we can distinguish them is by using an additional label entry
+on the stack that identifies the respective variant.
+We can simply start at 0 and enumerate the constructors, i.e. \spl{Add} gets
+label 0, and \spl{Mul} gets label 1.
+
+In the case of \spl{Neg} and \spl{Lit}, it may seem like we can store the single
+field directly on the stack rather than the heap, but again, this would prevent
+us from distinguishing the variants, as e.g. the field of \spl{Neg} may be given
+by a heap location, but so are the variants \spl{Add} and \spl{Mul}. To
+circumvent this, we must also store the fields for \spl{Neg} and \spl{Lit} on
+the heap, and label them with 2 and 3, respectively.
+
+For \spl{VarX} and \spl{VarY}, we could indeed use a special out-of-bounds
+pointer on the stack. We would then always need to check for those pointers
+first, and only then can we distinguish the remaining variants by loading their
+label from the heap.
+With more constructors, this gets rather inefficient, so we instead choose a
+uniform representation, where all variants are stored as a heap pointer which
+points to the heap data, consisting of at least the label, and possibly also the
+field entries.
+
+\paragraph{Heap allocation example}
+To illustrate the representation that we use, let us take a look at how we store
+the following nested expression:
+\begin{lstlisting}[language=SPL]
+  var a = Add(Lit(42), VarX());
+\end{lstlisting}
+%
+The generated SSM code performs the following steps:
 \begin{itemize}
-  \item Again, ctors and selectors are represented as (special cased) function
-        calls
-  \item Main challenge/question: How to represent data type instances? Since we
-        use boxing for all composite data, we want to store the fields on the
-        heap, and keep just a heap location on the stack.
-  \item How to identify different variants (predicate functions)? Not an issue
-        with list type, since empty list can be represented by null pointer on
-        stack. With custom data types, multiple variants may only fit on the
-        heap, so we need to add a label on the heap which identifies the variant.
-
-  \item The predicate functions need to be `variant-agnostic', i.e. work the
-        same for all variants. We could arguably represent ctors w/ no args as
-        a special value on the stack, but then we would always need to check
-        those prior to loading the label, which is slower
-
-  \item Hence, we instead choose to always store the label on the stack, even if
-        there are no fields. Then we can just load the label and check for
-        equality with the variant label.
-        Include the code we generate for ctor predicates?
-
-  \item Ctor calls are basically a generalisation of cons and the tuple
-        constructors, that is, we compute all the arguments on the stack, and
-        then store the block to the heap (w/ stmh), along with the label that
-        identifies the variant (discussed above).
-
-  \item Destructive updates: We load the heap address for the variable on the
-        stack, and then offset it based on the field selector.
-        All fields have size 1 on the heap, so we just offset by $i$ for the $i$-th
-        field (or $-i+1$, or whatever).
-        Once we reach the end of the selector chain, we store the value to the
-        address at the SP.
-
-  \item Use \spl{AExp} example again, and give an example heap representation as
-        a table figure.
+  \item First, the arguments of \spl{Add} are computed: 42 is loaded to the
+        stack, then the label for \spl{Lit} (i.e. 3), and both are stored to the
+        heap using the \code{stmh} instruction.
+  \item Next, the label for \spl{VarX} (i.e. 4) is loaded and stored to the heap.
+  \item The entries of \spl{Add} are now at the top of the stack. The label for
+        \spl{Add} (i.e. 0) is loaded, and all three entries are stored to the
+        heap, again using \code{stmh}.
 \end{itemize}
+
+The above operations result in the heap layout shown in \cref{fig:heap-layout-example}.
+%
+After storing to the heap, the address at the stack pointer points to the
+final entry, which is the label. Data type instances are thus always represented
+on the stack by the location of their label, which lets us load and check the
+label without needing an offset on the heap.
+
+
+\begin{figure}[t]
+  \centering
+  \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Address} & \textbf{Value} & \textbf{Comment} \\
+    \hline
+    \code{0X0007D0} & \code{0X00002A} & \code{Lit}, \code{lit} entry \\
+    \code{0X0007D1} & \code{0X000003} & \code{Lit} label  \\
+    \code{0X0007D2} & \code{0X000004} & \code{VarX} label \\
+    \code{0X0007D3} & \code{0X0007D1} & \code{Add}, \code{ladd} entry \\
+    \code{0X0007D4} & \code{0X0007D2} & \code{Add}, \code{radd} entry \\
+    \code{0X0007D5} & \code{0X000000} & \code{Add} label \\
+    \hline
+  \end{tabular}
+  %
+  \caption{Heap layout (excerpt) after allocating expression \code{Add(Lit(42), VarX())}}
+  \label{fig:heap-layout-example}
+\end{figure}
+
+\paragraph{Implementation}
+Implementing the approach described so far requires some additional data
+structures in our code generation stage. We extend the state of our code
+generation monad with a field \code{ctorMap} of type \haskell{Map Text CtorData},
+i.e. a map associating constructor names to instances of \haskell{CtorData},
+which is defined as follows:
+\begin{minted}{haskell}
+  data CtorData = CtorData { label :: Int, fieldCount :: Int }
+\end{minted}
+%
+For each constructor, the map thus contains the label (as in the example above),
+and the number of fields, which dictates how many stack entries we need to store
+to the heap for the constructor call.
+In addition, we use a field \code{selectorMap} of type \haskell{Map Text Int}
+which associates to each field the respective heap offset, which is needed for
+loading and storing with the field selectors.
+
+We then process the constructor calls of each data declaration as follows:
+\begin{minted}[linenos]{haskell}
+  codegenCtor :: (Ctor,Int) -> Codegen SSMProgram
+  codegenCtor (ctor@(Ctor _ cName args), cLabel) = do
+    let fieldOffsets = zip (reverse (fst <$> args)) [(-1::Int),-2..]
+    forM_ fieldOffsets codegenSelector
+    insertCtorData cName $ CtorData cLabel (length args)
+    codegenPredicate ctor cLabel
+    where
+      codegenSelector :: (T.Text,Int) -> Codegen ()
+      codegenSelector (name,offset) = insertSelector name offset
+\end{minted}
+
+The heap location on the stack refers to the label entry, which thus has offset
+0. Since the fields of the constructor are stored before the label, these have
+the offsets $-n,\dots,-1$ for a constructor with $n$ fields.
+Line 3 generates the corresponding name-offset pairs by zipping the list
+enumeration \haskell{[-1,-2..]} with the reversed list of constructor field
+names. The resulting pairs are then passed to \code{codegenSelector}, which
+inserts them into \code{selectorMap}.
+
+The function \code{codegenPredicate} generates the predicate function for the
+constructor \code{ctor} based on the integer label \code{cLabel}. In the case
+of \spl{Lit}, the following SSM code is generated:
+\begin{lstlisting}[numbers=left]
+  isLit:
+    ldl 1
+    ldh 0
+    ldc 3
+    eq
+    str RR
+    ret
+\end{lstlisting}
+%
+First, the argument to the function is loaded with an offset of 1 from the mark
+pointer (line 2); then, the label is loaded from the stack (line 3), and the
+label 3 identifying \spl{Lit} is loaded (line 4).
+The two values are compared (line 5), resulting in a Boolean entry at the stack
+pointer, which is stored to the return register before returning from the
+subroutine.
+
+
+\paragraph{Destructive updates}
+As for lists and tuples, the field selectors of custom data types can also be
+used in assignments to perform destructive updates, for example:
+\begin{lstlisting}[language=SPL]
+  var a = Add(Lit(20),Lit(2));
+  a.ladd.lit = 40;
+\end{lstlisting}
+%
+We extend the approach described in \cref{chp:codegen}\todo{Update reference},
+where we traverse the field selectors from left to right.
+At each step, we load from the address at the top of the stack, and then
+possibly apply an offset to the result.
+With the addition of the custom field selectors, the code for loading the next
+location is:
+\begin{minted}{haskell}
+  case field of
+    Head -> pure (program ++ [LoadAddress 0, AddOffset $ -1], ident)
+    ...
+    (SelField name) -> do
+      offset <- lookupSelector name
+      let loadProgram = LoadAddress 0 : [AddOffset offset]
+      pure (program ++ loadProgram, ident)
+\end{minted}
+
+Here is where the \code{selectorMap} comes into play, as we use it to look up
+the offset for the respective field. Since the field offsets are given by
+$-n,\dots,-1$, the offset is always non-zero, so we always include the
+\haskell{AddOffset} (that is, \code{ldaa}) instruction.
+
+In the example assignment \spl{a.ladd.lit = 40;}, we start by loading the
+(heap or stack) address corresponding to \spl{a}. We then load from that
+address, which gives us the heap location of the \spl{Add} instance. We apply an
+offset of $-2$ to get the location of the \spl{ladd} entry.
+Next, we load from that address, resulting in the heap location of the \spl{Lit}
+entry, and offset with $-1$. We now have the location of the \spl{lit} field at
+the top of the stack, and store the new value of $40$ to that location.
+
+
+
+% \begin{itemize}
+  % \item Again, ctors and selectors are represented as (special cased) function
+  %       calls
+  % \item Main challenge/question: How to represent data type instances? Since we
+  %       use boxing for all composite data, we want to store the fields on the
+  %       heap, and keep just a heap location on the stack.
+  % \item How to identify different variants (predicate functions)? Not an issue
+  %       with list type, since empty list can be represented by null pointer on
+  %       stack. With custom data types, multiple variants may only fit on the
+  %       heap, so we need to add a label on the heap which identifies the variant.
+
+  % \item The predicate functions need to be `variant-agnostic', i.e. work the
+  %       same for all variants. We could arguably represent ctors w/ no args as
+  %       a special value on the stack, but then we would always need to check
+  %       those prior to loading the label, which could get quite inefficient
+
+  % \item Hence, we instead choose to always store the label on the stack, even if
+  %       there are no fields. Then we can just load the label and check for
+  %       equality with the variant label.
+  %       Include the code we generate for ctor predicates?
+  %       Yes, example given for Lit constructor.
+
+  % \item Ctor calls are basically a generalisation of cons and the tuple
+  %       constructors, that is, we compute all the arguments on the stack, and
+  %       then store the block to the heap (w/ stmh), along with the label that
+  %       identifies the variant (discussed above).
+
+  % \item Destructive updates: We load the heap address for the variable on the
+  %       stack, and then offset it based on the field selector.
+  %       All fields have size 1 on the heap, so we just offset by $i$ for the $i$-th
+  %       field (or $-i+1$, or whatever).
+  %       Once we reach the end of the selector chain, we store the value to the
+  %       address at the SP.
+
+  % \item Use \spl{AExp} example again, and give an example heap representation as
+  %       a table figure.
+% \end{itemize}
