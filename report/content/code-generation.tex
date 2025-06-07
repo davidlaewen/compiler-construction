@@ -115,8 +115,8 @@ The above is essentially a monadic version of
 \haskell{concatMap :: (a -> [b]) -> [a] -> [b]} defined in the \haskell{GHC.List}
 module, which takes some function \haskell{f :: a -> [b]} and maps it onto a
 list of type \haskell{[a]}, subsequently \emph{flattening} the resulting
-list of lists, concatenating all the lists within the outer list and returning
-a single list of type \haskell{[b]}.
+list of lists, that is, concatenating all the lists within the outer list and
+returning a single list of type \haskell{[b]}.
 
 All our code generation functions have the return type \haskell{Codegen Program},
 where we recall that \haskell{Program} is just a shorthand for a list of
@@ -184,11 +184,11 @@ instance is given below.
 
 We indent all instructions except for labels by two spaces, which helps with
 navigating the resulting SSM code.
-Currently, the code generation stage simply dumps the pretty-printed SSM
-code into the console, to test the execution, we can simply pipe the console
-output into a file, on which we then run the SSM interpreter with the
-\texttt{--cli} option. We can achieve all the above with a simple bash
-script:\todo{Is this worth discussing?}
+The code generation stage simply dumps the pretty-printed SSM code into the
+console. To run the SSM code, we can then simply pipe the console output into a
+file, on which we then run the SSM interpreter with the \texttt{--cli} option.
+We can achieve all the above with a simple bash script:\todo{Is this worth
+discussing?}
 %
 \begin{minted}{bash}
   #!/bin/bash
@@ -265,10 +265,10 @@ We then store all global variables with a single \texttt{stmh} instruction,
 ensuring that the data is allocated at the offsets from `HeapLow' that we
 computed statically.
 
-After the instruction for storing the global variables, we include a jump to the
-\texttt{main} label, denoting the entry point of the actual program, followed by
-the result of compiling all function declarations, and finally the \texttt{halt}
-instruction:
+After the instructions for storing the global variables, we include a jump to
+the \texttt{main} label, denoting the entry point of the actual program,
+followed by the result of compiling all function declarations, and finally the
+\texttt{halt} instruction:
 %
 \begin{minted}{haskell}
   codegen :: TA.Program UType UScheme -> Codegen Program
@@ -341,7 +341,7 @@ non-nil list instance and return the head and tail, respectively.
 Such a recursive representation of lists stands in contrast to the \emph{arrays}
 that are a staple of imperative languages such as C or Java. These correspond
 to a block of registers with fixed size, where the registers can be
-accessed via indexing in $\bigO(1)$ time.
+accessed by index in $\bigO(1)$ time.
 Importantly, the size of an array is fixed at instantiation and thus known
 a-priori, while a recursive SPL list can grow and shrink at runtime. To express
 such a semantics in SPL while storing the list elements in register blocks would
@@ -377,15 +377,15 @@ Despite this, we chose the linked representation in SSM for the following reason
         which may even be slower with a dynamically resized array.
         These are common use cases in SPL, and so again, it would seem more
         reasonable to support a specific vector type for use cases where (very)
-        large lists must be accessed often and out-of-order.
+        large lists need to be accessed often and out-of-order.
   %
   \item Using a representation of lists in SSM that is fundamentally different
         to the lists of SPL would lead to rather unpredictable performance from
         the user perspective. For example, extending a list
         $\code{l}$ of type $\TList{\Int}$ by \spl{l := 1:l;} could occasionally
         require copying all elements in \code{l}, causing the same operation to
-        vary between being near-instant and very slow, which seems undesirable
-        from the perspective of the programmer.
+        vary between being near-instant and very slow. Such behaviour seems
+        undesirable from the perspective of the programmer.
 \end{itemize}
 
 Based on the points above, we chose to translate SPL lists to a linked
@@ -419,27 +419,27 @@ using a variable assignment:
 Variable \spl{l} initially refers to the singleton list \spl{1:[]}, but then the
 tail of \spl{l} is updated such that it refers to \spl{l} itself, causing the
 list to become cyclically defined in terms of itself.
-Creating a cyclical definition in this way is similar to the interaction of
-anonymous functions and mutable references in a language such as OCaml, which
-allow recursive fixed points to be defined by storing an anonymous function to a
-mutable reference \code{r} and then updating the reference with a function that
-uses \code{r} in its body, as in the following ML-style pseudocode:
-\begin{lstlisting}
-  let r := ref($\lambda$x.x) in
-    r $\leftarrow$ $\lambda$x.((!r) x);
-\end{lstlisting}
+% Creating a cyclical definition in this way is similar to the interaction of
+% anonymous functions and mutable references in a language such as OCaml, which
+% allow recursive fixed points to be defined by storing an anonymous function to a
+% mutable reference \code{r} and then updating the reference with a function that
+% uses \code{r} in its body, as in the following ML-style pseudocode:
+% \begin{lstlisting}
+%   let r := ref($\lambda$x.x) in
+%     r $\leftarrow$ $\lambda$x.((!r) x);
+% \end{lstlisting}
 
-Returning to our list example: updating the tail of \spl{l} to refer to \spl{l}
-itself effectively results in an infinite list, e.g. a recursive function which
-prints all elements of a list would just repeatedly print \spl{1} when called
-with \spl{l}.
-Such behaviour could be desirable, as it allows us to effectively model
-(infinite) streams. For instance, if we want to \emph{zip} a given list with the
-list of alternating zeroes and ones using
+Updating the tail of \spl{l} to refer to \spl{l} itself effectively results in
+an infinite list, e.g. a recursive function which prints all elements of a list
+would just repeatedly print \spl{1} when called with \spl{l} (until the stack
+overflows, at least).
+Such behaviour could be desirable, as it lets us model infinite, periodic lists.
+For instance, if we want to \emph{zip} a given list with the list of alternating
+zeroes and ones using
 \begin{center}
   \spl{zip :: [a] -> [b] -> [(a,b)]},
 \end{center}
-we could supply as the second argument cyclical list containing 0 and 1 in
+we could supply as the second argument the cyclical list containing 0 and 1 in
 alternation infinitely often, constructed similarly as above:
 \begin{lstlisting}[language=spl]
   [Int] l = 0:1:[];

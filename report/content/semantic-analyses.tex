@@ -102,9 +102,9 @@ of the two inner types, that is, the types of \spl{1} and \spl{true}.
 These, in turn, are trivial to typecheck, and do not yield any constraints or
 substitutions. Given that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
 to the constraints from earlier:
-We now know that \code{($\alpha_1$,$\alpha_2$) $=$ (Int,Bool)}, so by
+We now know that \spl{($\alpha_1$,$\alpha_2$)} $=$ \spl{(Int,Bool)}, so by
 $\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
-$\beta = \code{Int}$.
+$\beta$ $=$ \spl{Int}.
 
 % \begin{figure}
 % \begin{minted}[breaklines]{haskell}
@@ -177,8 +177,12 @@ We identify three strongly connected components: the functions \code{f},
 \code{g} and \code{h} refer to each other in a cycle, i.e. their vertices are
 all reachable from each other, hence they form an SCC; the remaining functions
 \code{p} and \code{main} both constitute a singleton SCC.
+The function \code{p} is called by the SCC containing \code{f}, \code{g} and
+\code{h}, which in turn is called by \code{main}, hence the sequence of SCCs in
+reverse topological ordering is given by:
+\[ \langle \{ \code{p} \},\ \{ \code{f}, \code{g}, \code{h} \},\ \{ \code{main} \} \rangle \]
 
-We use the following monad:
+We generate the call graph using the following monad:
 \begin{minted}{haskell}
   type GraphGen = StateT GraphGenState (Except T.Text)
 \end{minted}
@@ -264,8 +268,8 @@ this number.
     \vspace{2mm}
   \end{minipage}
 
-  \label{fig:call-graph-example}
   \caption{Example program outline and corresponding call graph}
+  \label{fig:call-graph-example}
 
 \end{figure}
 
@@ -335,10 +339,13 @@ the unchanged list of variable declarations to construct the updated
 \section{Scoping}
 As specified in the grammar given in \cref{chp:grammar}, SPL only allows
 variable declarations at the global level, or at the beginning of a function
-body. SPL thus features only two scope levels: one global scope which covers
-top-level variable definitions and all function declarations, and a local scope
-per function, which features the function arguments and the local variables
-declared at the start of the function body.
+body. Our implementation thus features two scope levels:
+\begin{itemize}
+  \item A global scope, which covers top-level variable declarations and all
+        function declarations, and
+  \item a local scope per function, which features the function arguments and
+        the local variables declared at the start of the function body.
+\end{itemize}
 
 Consider the following example program:
 %
@@ -408,7 +415,7 @@ instance Monoid Subst where
 \end{minted}
 
 We write $\tau.S$ for applying the substitution $S$ to type $\tau$, where the
-substitution procedure is defined as follows:
+substitution procedure is defined by:
 
 \[
 \begin{array}{rcl}
@@ -435,7 +442,7 @@ $\FV(-)$ is defined by:
   \FV(\Void) & \eqdef & \emptyset \\
   \FV( \TProd{\tau_1}{\tau_2} ) & \eqdef & \FV(\tau_1) \cup \FV(\tau_2) \\
   \FV( \TList{\tau} ) & \eqdef & \FV(\tau) \\
-  \FV( \TFun{\set{\sigma_i}}{\tau} ) & \eqdef & \{ \FV(\sigma_i) \mid i \} \cup \FV(\tau)
+  \FV( \TFun{\set{\sigma_i}}{\tau} ) & \eqdef & \bigcup_i(\FV(\sigma_i)) \cup \FV(\tau)
 \end{array}
 \]
 

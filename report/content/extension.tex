@@ -1,0 +1,338 @@
+\chapter{Extension} \label{chp:extension}
+
+Our extension to SPL concerns the addition of custom, user-defined
+record types. The custom record types generally resemble the record types of
+Haskell, as seen in the preceding chapters, in particular e.g. the state for our
+typing monad and code generation monad.
+The syntax that we support also resembles that of SPL's built-in polymorphic
+list and tuple type, as our user-defined record types also use field selectors
+to access and destructively update the fields of a record instance.
+
+We illustrate the syntax and features of the custom record types in
+\cref{sec:ext-syntax-features}, and then proceed to discuss the changes we made
+in each stage of our compiler, starting with the lexer and parser in
+\cref{sec:ext-parsing}, the desugaring and typing stage in \cref{sec:ext-typing},
+and finally the code generation in \cref{sec:ext-codegen}.
+
+\section{Syntax and Features} \label{sec:ext-syntax-features}
+In the following, we will use the running example of arithmetic expressions in
+two variables $x$ and $y$. The corresponding type is declared as follows in our
+syntax:
+\begin{lstlisting}[language=SPL]
+  data AExp {
+    Add(ladd : AExp, radd : AExp),
+    Mul(lmul : AExp, rmul : AExp),
+    Neg(neg : AExp),
+    Lit(lit : Int),
+    VarX(), VarY()
+  }
+\end{lstlisting}
+
+Such \emph{data declarations} must be given at the top level of the program,
+prior to the global variable declarations and function declarations.
+The above declaration defines a new custom data type \spl{AExp}, along with the
+six \emph{constructors} \spl{Add}, \spl{Mul}, \spl{Neg}, \spl{Lit}, \spl{VarX}
+and \spl{VarY}, expressing integer addition, multiplication, negation, literals,
+and integer variables $x$ and $y$.
+For the fields of each constructor (if present), \emph{field selectors} are
+defined, which we can use much like \spl{.hd}, \spl{.tl}, \spl{.fst} and
+\spl{.snd} to project out the corresponding field from an instance of the type,
+as well as destructive updates to the field entries.
+
+Let us now take a look at how these constructors and selectors can be used:
+\begin{lstlisting}[language=SPL]
+  var a = Add(Lit(1), Lit(1)); // 1 + 1
+  var b = Mul(Lit(2), Lit(10)); // 2 * 10
+  var res = Mul(VarX(), VarY()); // x * y
+  var c = Add(y, a.ladd); // 2 * 10 + 1
+  res.lmul = a; // (1 + 1) * y
+  res.rmul = c; // (1 + 1) * (2 * 10 + 1)
+\end{lstlisting}
+%
+As one would expect, we can construct instances \spl{AExp} by calling the
+constructors much like functions, with the fields given by the constructor
+arguments, e.g. \spl{1} in \spl{Lit(1)}. The fields of \spl{Add}, \spl{Mul} and
+\spl{Neg} are themselves of type \spl{AExp}, i.e. we can nest \spl{AExp}
+instances recursively, like in \spl{Add(Lit(1), Lit(1))}.
+The last three lines illustrate how we can use record dot syntax to e.g. select
+the left entry from the \spl{Add} instance stored in \spl{a}, or to overwrite
+the left and right entry of \spl{res}.
+
+\paragraph{Expressiveness and infinite types}
+Much as in Haskell, our custom record types generalise combined sum and product
+types: \code{AExp} constitutes a sum type, where the variants are given by the
+six constructors. Each of the variants in turn corresponds to an $n$-tuple of
+the field types, i.e. a product type. We can make this explicit by writing
+\spl{AExp} as a recursive type of the form $\mu \alpha. \tau$ as follows:
+\[ \code{AExp} \simeq \mu \alpha.\
+    (\alpha \times \alpha) + (\alpha \times \alpha) + \alpha + \code{Int} + \mathbf{1} + \mathbf{1} ,\]
+%
+Here, $\mathbf{1}$ denotes the unit type, and each component of the sum type
+correspond to one of constructors (in the same order as the declaration).
+The occurrences of $\alpha$ refer to the recursive type itself, that is, we can
+repeatedly unfold such a recursive type $\mu\alpha.\tau$ by the substitution
+$\tau[\alpha \mapsto \mu\alpha.\tau]$.
+
+The above serves to illustrate how the custom data/record types actually
+increase the expressiveness of SPL: they allow us to declare such infinite,
+self-referential data types. Infinite types are not available in SPL otherwise,
+except for the special case of the list type \spl{[$\tau$]}, which we can view
+as being defined by
+$\code{[$\tau$]} \eqdef (\tau \times \code{[$\tau$]}) + \mathbf{1}$
+(head and tail, or the empty list).
+
+For instance, SPL cannot express the type of \emph{rose trees}, as mentioned
+in \cref{sec:intro-lang-choice}. For a rose tree of integers, a node is
+given by an integer label, along with a list/sequence of subtrees, which are
+again nodes as just described.
+
+We might try to emulate this in SPL as follows:
+\begin{lstlisting}[language=SPL]
+  var exTree123 = (1, (2,[]) : (3,[]) : []);
+  /*  1
+     / \
+    2   3 */
+\end{lstlisting}
+%
+However, the above code does not typecheck: it requires unifying some type
+$\alpha$ with \spl{(Int,[$\alpha$])}, which violates the occurs check.
+
+With our extension, we can express integer rose trees using a custom data declaration:
+\begin{lstlisting}[language=SPL]
+  data RoseTreeInt {
+    Node(label : Int, forest : [RoseTreeInt])
+  }
+\end{lstlisting}
+%
+Using the \spl{Node} constructor rather than tuples, our tree instance from
+earlier now typechecks:
+\begin{lstlisting}
+  var exTree123 = Node(1, Node(2,[]) : Node(3,[]) : []);
+\end{lstlisting}
+
+
+\paragraph{Constructor predicates}
+Our custom data types make both their introduction forms and elimination forms
+explicit by the constructors and field selectors, respectively.
+However, we also need a way of testing which variant of a data type we are
+dealing with in order to safely access the fields. Returning to our example of
+arithmetic expressions, a function to e.g. print or evaluate an expression would
+need to perform a case distinction on the possible forms of the input of type
+\spl{AExp}.
+
+Our solution to this is arguably somewhat of a hack, although it does follow the
+approach used for SPL's built-in list type. Much like the \spl{isEmpty}
+function, we provide the user with a predicate function for each variant of a
+data type. For example, for the \spl{Add} constructor we provide a function
+\spl{isAdd} of type \spl{AExp -> Bool}, which checks if its argument is
+constructed with \spl{Add}.
+Using these \emph{constructor predicates}, we can e.g. recursively evaluate an
+arithmetic expression for a given valuation of $x$ and $y$:
+\begin{lstlisting}[language=SPL]
+  evaluate(a,x,y) :: AExp Int Int -> Int {
+    if (isAdd(a))  { return evaluate(a.ladd,x,y) + evaluate(a.radd,x,y); } else {
+    if (isMul(a))  { return evaluate(a.lmul,x,y) * evaluate(a.rmul,x,y); } else {
+    if (isNeg(a))  { return - evaluate(a.neg,x,y); } else {
+    if (isLit(a))  { return a.lit; } else {
+    if (isVarX(a)) { return x; }
+    else { return y; }}}}}
+  }
+\end{lstlisting}
+
+Clearly, the nested if-statements are not an elegant solution, and it would be
+nicer to have some `case of' or `switch' syntax for the multi-way case
+distinction.
+An even nicer solution would be to support pattern matching, with a pattern
+syntax that allows binding the fields to local identifiers, and also e.g.
+testing them for equality with a given value, or ignoring them altogether if
+a wildcard pattern is used.
+
+
+
+\section{Lexing and Parsing} \label{sec:ext-parsing}
+
+We extend our parse AST representation with the following nodes:
+\begin{minted}{haskell}
+  data DataDecl = DataDecl Loc T.Text [DataConstr]
+  data DataConstr = DataConstr Loc T.Text [(T.Text, Type)]
+\end{minted}
+%
+At the top level (\haskell{Program}), we include a list of \haskell{DataDecl}.
+The only other changes to the parse AST are that
+\begin{itemize}
+  \item a field can now be given by \haskell{Selector T.Text}, i.e. the field
+        name can be a custom string, and
+  \item the expression syntax includes a constructor call node, consisting of
+        the constructor name of type \haskell{Text}, and the constructor
+        arguments, given by \haskell{[Expr]}.
+\end{itemize}
+
+\paragraph{Naming convention}
+Aside from adding the \spl{data} keyword, there is another noteworthy change to
+the lexing stage: we need a way to distinguish constructor calls from function
+calls in our grammar, and similarly for type variables and data types.
+We want constructor and function calls to both use the format
+$f$\spl{($...$)}. The overlap in the type grammar stems from type variables
+and data type names both being given by strings/names.
+
+We follow the convention of Haskell (and other languages) of using lowercase
+strings---we call these \emph{identifers}---for functions and function
+arguments, and variables, while uppercase strings---which we call
+\emph{names}---are reserved for constructors and data types.
+This naming convention allows us to already distinguish identifiers and
+names in the lexer, where we produce either an \haskell{IdToken} or a
+\haskell{NameToken}.
+
+\paragraph{Parsing}
+These two separate token types allow our parser to easily distinguish the
+overlapping cases described above.
+The parsing of data declarations, constructor calls, and field selectors is
+otherwise straightforward. We add a new function \code{nameP} for parsing a
+\haskell{NameToken} and a parser function for data declarations.
+In the expression grammar, we extend the $\NT{Atom}$ level with constructor
+calls $C\code{(}...\code{)}$. In contrast to function calls, a constructor
+call cannot appear as a statement.
+
+
+\section{Desugaring and Typing} \label{sec:ext-typing}
+
+Constructor calls and record field selectors in expressions are desugared to
+function calls, for which we extend the definition of \haskell{FunName} as
+follows:
+\begin{minted}{haskell}
+  data FunName = Name T.Text | CtorCall T.Text | Selector T.Text | ... | IsEmpty | Print
+\end{minted}
+
+Much like for the unary and binary operators, built-in field selectors and
+built-in functions, this allows a more uniform treatment in the typing algorithm
+and during code generation.
+
+In the typing stage, we extend the domain of the global context with
+constructor and selector names:
+\begin{minted}{haskell}
+  data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
+                | GlobalCtor T.Text | GlobalSelector T.Text
+\end{minted}
+%
+By treating constructors and selectors essentially like functions, our general
+infrastructure and typing monad remains otherwise unchanged.
+
+\paragraph{Global environment entries}
+We process data declarations by inserting the constructors into the global
+environment with their corresponding type scheme:
+\begin{minted}[linenos]{haskell}
+  checkDataCtor :: Text.Text -> Ctor -> CGen ()
+  checkDataCtor declName (Ctor _ cName args) = do
+    envInsertCtor cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
+    -- Insert constructor predicate function `is<CName>` of type `<DataType> -> Bool`
+    envGlobalInsertFun ("is" <> cName) $ UScheme S.empty (Fun [Data declName] Bool)
+    forM_ args (\(selName,ty) -> -- Insert selector schemes
+      envInsertSelector selName $ UScheme S.empty (Fun [Data declName] ty))
+\end{minted}
+%
+The above function processes a constructor \haskell{Ctor} in three steps:
+\begin{itemize}
+  \item On line 3, we extend the global environment with the constructor, where
+        the input types are given by the argument types of the constructor, and
+        the output type is given by the data type (\code{declName}).
+  %
+  \item We also need to add the constructor predicate to the environment, which
+        is what happens in line 5: the function name generated by prepending
+        \haskell{"is"} to the constructor name, while the type is always given
+        by \spl{$\langle\mathit{DataName}\rangle$ -> Bool}.
+  %
+  \item Finally, lines 6 and 7 iterate over the constructor arguments, adding
+        the corresponding field selectors to the global environment. Each
+        selector has as its domain the data type, and as its range the type of
+        the corresponding constructor field.
+\end{itemize}
+
+When we encounter a constructor call or field selector in an expression, we
+simply look up the type scheme in the global environment, just like for function
+calls. If the constructor/selector is not found in the environment, we report an
+error for the missing declaration.
+
+\paragraph{Unification and substitution}
+Unification of data types is very straightforward: we can only unify a given
+data type with itself, i.e. of the same name, which yields the empty substitution:
+\[ \unify(\mathit{dtype}_1, \mathit{dtype}_2) \eqdef
+    \begin{cases}
+      \emptyset \text{, if } \mathit{dtype}_1 = \mathit{dtype}_2 \\
+      \mathsf{Fail} \text{, otherwise}
+    \end{cases} \]
+%
+Substituting in a data type has no effect, and the set of free variables is empty:
+\begin{align*}
+  \mathit{dtype}.S \eqdef \mathit{dtype} && \FV(\mathit{dtype}) \eqdef \emptyset
+\end{align*}
+
+
+\paragraph{Destructive updates}
+The only remaining change is for the use of field selectors in destructive
+variable updates. There, we proceed again by looking up the type scheme for the
+selector, and reporting an error if it has not been declared.
+\begin{minted}{haskell}
+  envLookupSelector name >>= \case
+    Nothing -> throwLocError loc' $ "Could not find selector `" <> name <> "`"
+    Just (UScheme _ (Fun [dataTy@(Data _)] outputTy)) -> pure (dataTy,outputTy)
+    Just _ -> error $ "Selector `" <> T.unpack name <> "` does not map out of data type!"
+\end{minted}
+%
+We expect the type scheme to be of the form
+\spl{$\langle\mathit{DataName}\rangle$->$\tau$}, otherwise we have encountered
+an (internal) compiler error.
+Next, we unify the output type $\tau$ with the type for the left-hand
+side of the assignment (after possibly applying subsequent field selectors), while
+we unify the input type with the type of the variable (after applying any
+preceding field selectors).
+To return to our running example \code{AExp}:
+\begin{lstlisting}[language=SPL]
+  var x = (True, Lit(1):[]);
+  x.snd.hd.lit = 2;
+\end{lstlisting}
+%
+Here, the type of \spl{x.snd.hd}, given by \spl{AExp}, is unified with the input type of
+the \spl{.lit} selector, which has type \spl{AExp -> Int}.
+The output type of \spl{.lit} is unified with the type of \spl{2}, which is of
+course also \spl{Int}.
+
+
+
+\section{Code Generation} \label{sec:ext-codegen}
+
+\begin{itemize}
+  \item Again, ctors and selectors are represented as (special cased) function
+        calls
+  \item Main challenge/question: How to represent data type instances? Since we
+        use boxing for all composite data, we want to store the fields on the
+        heap, and keep just a heap location on the stack.
+  \item How to identify different variants (predicate functions)? Not an issue
+        with list type, since empty list can be represented by null pointer on
+        stack. With custom data types, multiple variants may only fit on the
+        heap, so we need to add a label on the heap which identifies the variant.
+
+  \item The predicate functions need to be `variant-agnostic', i.e. work the
+        same for all variants. We could arguably represent ctors w/ no args as
+        a special value on the stack, but then we would always need to check
+        those prior to loading the label, which is slower
+
+  \item Hence, we instead choose to always store the label on the stack, even if
+        there are no fields. Then we can just load the label and check for
+        equality with the variant label.
+        Include the code we generate for ctor predicates?
+
+  \item Ctor calls are basically a generalisation of cons and the tuple
+        constructors, that is, we compute all the arguments on the stack, and
+        then store the block to the heap (w/ stmh), along with the label that
+        identifies the variant (discussed above).
+
+  \item Destructive updates: We load the heap address for the variable on the
+        stack, and then offset it based on the field selector.
+        All fields have size 1 on the heap, so we just offset by $i$ for the $i$-th
+        field (or $-i+1$, or whatever).
+        Once we reach the end of the selector chain, we store the value to the
+        address at the SP.
+
+  \item Use \spl{AExp} example again, and give an example heap representation as
+        a table figure.
+\end{itemize}
