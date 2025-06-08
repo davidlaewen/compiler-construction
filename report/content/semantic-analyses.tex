@@ -369,7 +369,12 @@ the unchanged list of variable declarations to construct the updated
 
 
 
-\section{Scoping}
+\section{Typing Stage} \label{sec:typing-stage}
+
+\todobox{Signposting paragraph}
+
+
+\subsection{Scoping} \label{sec:scoping}
 As specified in the grammar given in \cref{chp:grammar}, SPL only allows
 variable declarations at the global level, or at the beginning of a function
 body. Our implementation thus features two scope levels:
@@ -395,9 +400,9 @@ Consider the following example program:
 Here, \spl{a} and \spl{f} are bound in the global scope, while \spl{x} and
 \spl{b} are bound only in the body of function \spl{f}.
 
-To represent this information, our type inference implementation uses two
-variants of identifier, as well as two separate environments, one of which
-stores global identifiers, while they other tracks local bindings.
+To represent this information, our typing procedure uses two variants of
+identifier, as well as two separate environments, one of which stores global
+identifiers, while the other tracks local bindings.
 
 \begin{minted}{haskell}
 data LocalId = LocalTermVar T.Text | LocalFunName T.Text | RetType
@@ -415,41 +420,42 @@ term variables $x$ and function names $f$ at the respective levels.
 which is used within the local scope of a function body to identify the return
 type, as it has no explicit identifier in the source.
 Next, we have \haskell{EnvLevel}, which simply serves as a toggle for certain
-functions whose behaviour differs depending on the scope.
+functions whose behaviour differ depending on the scope.
 Finally, \haskell{GlobalEnv} maps \haskell{GlobalId}s to \haskell{UScheme}s,
 while \haskell{LocalEnv} maps \haskell{LocalId}s to \haskell{UType}s.
 The reason for using \haskell{UScheme} at the top level is that the types of
-functions are generalised in the free unification variables, that is, they have
-the general form $\forall\ \set{\alpha}.\ \tau$, while variables are always
+functions may be generalised in the free unification variables, that is, they
+have the general form $\forall\ \set{\alpha}.\ \tau$, while variables are always
 assigned monotypes.
 
 
-\section{Variables and Substitutions}
+\subsection{Type Unification and Substitution} \label{sec:unification-substitution}
 
-During the typing procedure, we must generate fresh unification variables and
-work with substitutions, which we also need to compose and apply to types.
-For generating fresh variable names, we simply keep track of an integer
-\code{varState} under the state monad, which allows us to simply read and
-increment the counter whenever we need a new name. Since the counter strictly
-increases, we are guaranteed to obtain a (currently) unused name.
+During the typing procedure, we generate placeholder type variables (unification
+variables) for unknown types. While traversing the program, we identify type
+constraints, that is, equalities that must hold between (known or unknown) types.
+We write $\tau \sim \sigma$ for the constraint stating that $\tau$ and $\sigma$
+must match. For instance, given a function call \code{$f$($e_1$,$...$,$e_n$)}
+where $f$ has type $\tau_1\ ...\ \tau_n$ \spl{->} $\tau$ and the expressions
+$e_1,\dots,e_n$ have types $\sigma_1,\dots,\sigma_n$, the expression types must
+match the input types of $f$, which we express by the constraints $\tau_1 \sim
+\sigma_1,\ \dots,\ \tau_n \sim \sigma_n$.
 
-Substitutions $S$ are represented by maps from unification variables
-\haskell{UVar} to (unification) types \haskell{UType}. Their type \haskell{Subst}
-constitutes an instance of Haskell's \haskell{Monoid} typeclass, where the
-binary operation is defined as composition $S_1 \circ S_2$, and the unit element
-is given by the empty substitution $\emptyset$.
+We handle constraints between types by trying to \emph{unify} the left and right
+type. Both types may contain placeholder variables for (currently) unknown
+types; as such, unification is not just an equality check, but we instead try to
+instantiate the unknown variables such that the two types match.
+The unification procedure may fail if we cannot find such an instantiation.
+If the procedure succeeds, we return a \emph{substitution}, expressing how the
+placeholders must be replaced in order to resolve the constraint.
 
-\begin{minted}{haskell}
-instance Semigroup Subst where
-  Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1
-
-instance Monoid Subst where
-  mempty = Subst M.empty
-\end{minted}
-
-We write $\tau.S$ for applying the substitution $S$ to type $\tau$, where the
-substitution procedure is defined by:
-
+Substitutions $S$ are represented by maps from unification (placeholder)
+variables ($\alpha,\beta,\dots$) to types ($\tau,\sigma,\dots$). A type
+substitution thus has the general form
+$\{ \alpha_1 \mapsto \tau_1, \dots, \alpha_n \mapsto \tau_n \}$.
+We write $\tau.S$ for the result of applying the substitution $S$ in the type
+$\tau$. This operation is defined as follows:
+%
 \[
 \begin{array}{rcl}
   \alpha.S & \eqdef & S(\alpha) \\
@@ -458,94 +464,208 @@ substitution procedure is defined by:
   \Char.S & \eqdef & \Char \\
   \Void.S & \eqdef & \Void \\
   \TProd{\tau_1}{\tau_2}.S & \eqdef & \TProd{\tau_1.S}{\tau_2.S} \\
-  \TList{\tau}.S & \eqdef & \TList{\tau.S} \br
-  \Parens{ \TFun{\set{\sigma_i}}{\tau} }.S & \eqdef & \TFun{\set{\sigma_i.S}}{\tau.S}
+  \TList{\tau}.S & \eqdef & \TList{\tau.S} \\
+  (\tau_1\ ...\ \tau_n \to \sigma).S & \eqdef & \tau_1.S\ ...\ \tau_n.S \to \sigma.S
+  % \Parens{ \TFun{\set{\sigma_i}}{\tau} }.S & \eqdef & \TFun{\set{\sigma_i.S}}{\tau.S}
 \end{array}
 \]
 
-For the free (unification) variables in a type $\tau$, we write $\FV(\tau)$, where
-$\FV(-)$ is defined by:
+We further write $S_1 \circ S_2$ for the substitution given by composing $S_1$
+after $S_2$, where the composition is defined by:
+\[ S_1 \circ S_2 =
+    S_1 \circ \{ \alpha_1 \mapsto \tau_1, \dots, \alpha_n \mapsto \tau_n \} \eqdef
+    \{ \alpha_1 \mapsto \tau_1.S_1, \dots, \alpha_n \mapsto \tau_n.S_1 \} \cup S_1 \]
+%
+That is, applying the composed substitution $S_1 \circ S_2$ is equivalent to
+applying $S_2$ followed by $S_1$.
+\[ \tau.(S_1 \circ S_2) = \tau.S_2.S_1 \]
 
+During the unification procedure, we need to determine the set of (free)
+placeholder type variables in a given type $\tau$.
+We denote this set of free variables with $\FV(\tau)$, where the function
+$\FV$ is defined by:
+%
 \[
 \begin{array}{rcl}
   \FV(\alpha) & \eqdef & \{ \alpha \} \\
-  \FV(\Int) & \eqdef & \emptyset \\
-  \FV(\Bool) & \eqdef & \emptyset \\
-  \FV(\Char) & \eqdef & \emptyset \\
-  \FV(\Void) & \eqdef & \emptyset \\
+  \FV(\tau) & \eqdef & \emptyset, \text{ if } \tau \in \{\Int,\Bool,\Char,\Void\} \\
+  % \FV(\Bool) & \eqdef & \emptyset \\
+  % \FV(\Char) & \eqdef & \emptyset \\
+  % \FV(\Void) & \eqdef & \emptyset \\
   \FV( \TProd{\tau_1}{\tau_2} ) & \eqdef & \FV(\tau_1) \cup \FV(\tau_2) \\
   \FV( \TList{\tau} ) & \eqdef & \FV(\tau) \\
-  \FV( \TFun{\set{\sigma_i}}{\tau} ) & \eqdef & \bigcup_i(\FV(\sigma_i)) \cup \FV(\tau)
+  \FV( \tau_1\ ...\ \tau_n \to \sigma ) & \eqdef &
+    \FV(\tau_1) \cup \dots \cup \FV(\tau_n) \cup \FV(\sigma)
 \end{array}
 \]
 
-The operation $\unify$ takes two types and attempts to unify them, resulting in
-a substitution $S$.
-
+With the notion of substitutions and the function $\FV$ in place, we define
+the unification procedure. The function $\unify$ takes two types and attempts to
+unify them, resulting either in a failure $\textsf{Fail}$, or some substitution
+$S$. We denote the empty substitution by $\emptyset$.
+%
 \[
 \begin{array}{rcl}
-  \unify(\Int,\Int) & \eqdef & \emptyset \\
-  \unify(\Bool,\Bool) & \eqdef & \emptyset \\
-  \unify(\Char,\Char) & \eqdef & \emptyset \\
-  \unify(\Void,\Void) & \eqdef & \emptyset \\
+  \unify(\tau,\tau) & \eqdef & \emptyset, \text{ if } \tau \in \{\Int,\Bool,\Char,\Void\} \\
+  % \unify(\Int,\Int) & \eqdef & \emptyset \\
+  % \unify(\Bool,\Bool) & \eqdef & \emptyset \\
+  % \unify(\Char,\Char) & \eqdef & \emptyset \\
+  % \unify(\Void,\Void) & \eqdef & \emptyset \\
   \unify(\alpha,\alpha) & \eqdef & \emptyset \\
   \unify(\alpha,\tau) & \eqdef &
     \{ \alpha \mapsto \tau \},\ \text{if}\ \alpha \notin \FV(\tau) \\
   \unify(\tau,\alpha) & \eqdef & \unify(\alpha,\tau) \\
-  \unify(\TList{\tau},\TList{\sigma}) & \eqdef & \unify(\tau,\sigma)
-  % \unify(\TProd{\tau_1}{\tau_2}, \TProd{\sigma_1}{\sigma_2}) & \eqdef &
+  \unify(\TList{\tau},\TList{\sigma}) & \eqdef & \unify(\tau,\sigma) \\
+  \unify(\TProd{\tau_1}{\tau_2}, \TProd{\sigma_1}{\sigma_2}) & \eqdef &
+    \unify( \tau_2.S, \sigma_2.S ) \circ S,
+    \text{ where } S = \unify(\tau_1,\sigma_1)
 \end{array}
 \]
+
+In the third case, the side condition $\alpha \notin \FV(\tau)$ is the so-called
+\emph{occurs check}, stating that we cannot unify $\alpha$ with a larger type
+that (freely) features $\alpha$ as a subterm.
+For instance, we cannot solve the constraint $\alpha \sim \TProd{\alpha}{\Int}$,
+since this constraint can only be solved by an infinite type\footnote{%
+We return to the topic of infinite types and how our extension adds support for
+them in \cref{sec:ext-syntax-features}}.
+
+We lift $\unify$ to (possibly empty) sequences of types, which we denote using
+the overlined notation of \citet{Igarashi2001} as $\set{\tau_i}$. The
+unification of sequences of types is defined recursively by:
+\[ \unify(\tau\ \set{\tau_i},\ \sigma\ \set{\sigma_i}) \eqdef
+    \unify(\set{\tau_i.S},\ \set{\sigma_i.S}) \circ S,
+    \text{ where } S = \unify(\tau,\sigma) \]
+If both sequences are empty, the result is the empty substitution $\emptyset$.
+
+The above allows us to define unification for function types as follows:
+\[ \unify(\set{\tau_i} \to \tau,\ \set{\sigma_i} \to \sigma) \eqdef
+    \unify(\tau.S,\sigma.S) \circ S, \text{ where } S = \unify(\set{\tau_i}, \set{\sigma_i}) \]
 
 For all other combinations of types $\tau$ and $\sigma$ not covered by the
 equations above, the types cannot be unified and the result of
 $\unify(\tau,\sigma)$ is `\textsf{Fail}'.
 
-
-To illustrate, let us consider a simple example: say we are typing the
-expression \spl{(1,2).fst}. The field selector \spl{.fst} is represented by a
+\paragraph{Example}
+To illustrate, let us consider how we determine the type of the
+expression \spl{(1,True).fst}. The field selector \spl{.fst} is represented by a
 function call, meaning we can think of the expression as something
-closer to \spl{fstfun((1,2))}. The type of \spl{fstfun} is polymorphic, and
-given by $\forall \alpha \beta.\ (\alpha,\beta) \to \alpha$, expressing that
-from a tuple with entries of type $\alpha$ and $\beta$ (respectively),
-\spl{fstfun} returns the first entry with type $\alpha$.
-During typing, we generate unification variables $\alpha_1$, $\alpha_2$ and
-$\beta$, where $(\alpha_1,\alpha_2)$ is the input type of \spl{fstfun}, $\beta$
-is the output type and thus the type of \spl{(1,true).fst}, and we also know
-that $\alpha_1 = \beta$, since we are selecting the first component.
-Next, we look at the pair constructor, whose type is given as the \emph{product}
-of the two inner types, that is, the types of \spl{1} and \spl{true}.
-These, in turn, are trivial to typecheck, and do not yield any constraints or
-substitutions. Given that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
+closer to \spl{fstfun((1,True))}. The type of \spl{fstfun} is polymorphic, and
+given by the type scheme $\forall \alpha \beta.\ \code{(}\alpha,\beta\code{)}
+\to \alpha$, expressing that \spl{fstfun} returns the first/left entry with type
+$\alpha$.
+
+During typing, we instantiate the type variables $\alpha$ and $\beta$ in the
+type scheme $\forall \alpha \beta.\ \code{(}\alpha,\beta\code{)} \to \alpha$
+with placeholder unification variables, for which we write $u_1$ and $u_2$.
+We then have \spl{($u_1$,$u_2$)} as the placeholder for the input type
+\spl{fstfun}, while $u_2$ is also the placeholder for the output, and thus also
+the placeholder for the type of the expression \spl{(1,True).fst}.
+
+For the pair former \spl{($-$,$-$)}, the type is given by the two inner types,
+i.e. the types of \spl{1} and \spl{True}, which are trivial to determine, and do
+not yield any constraints or substitutions.
+Having found that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
 to the constraints from earlier:
-We now know that \spl{($\alpha_1$,$\alpha_2$)} $=$ \spl{(Int,Bool)}, so by
-$\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
-$\beta$ $=$ \spl{Int}.
+We now have the constraint \spl{($u_1$,$u_2$)} $\sim$ \spl{(Int,Bool)}, where
+applying unification with
+$\unify($\spl{($u_1$,$u_2$)},\spl{(Int,Bool)}$)$ succeeds, and returns the
+substitution $\{ u_1 \mapsto \text{\spl{Int}}, u_2 \mapsto \text{\spl{Bool}} \}$.
+Applying the substitution to the placeholder type $u_1$ for \spl{(1,True).fst},
+we find that the type of the expression is \spl{Int}.
 
 
 
-\section{Typing Algorithm}
 
-We now present our type inference algorithm. By misuse of notation, we describe
+\subsection{Code Infrastructure}
+
+We represent substitutions as finite maps from \haskell{UVar} to types
+\haskell{UType}:
+\begin{minted}{haskell}
+  newtype Subst = Subst (M.Map UVar UType)
+\end{minted}
+
+Composition of substitutions is defined via an instance of Haskell's
+\haskell{Monoid} typeclass, where the binary operation is defined as composition
+$S_1 \circ S_2$, and the unit element is the empty substitution $\emptyset$:
+%
+\begin{minted}{haskell}
+instance Semigroup Subst where
+  Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1
+
+instance Monoid Subst where
+  mempty = Subst M.empty
+\end{minted}
+
+When applying substitutions or determining the free variables, we want to work
+interchangeably with \haskell{UType} and \haskell{UScheme}. We achieve this by
+defining the following typeclass, of which we declare instances for both
+\haskell{UType} and \haskell{UScheme}:
+\begin{minted}{haskell}
+  class Types a where
+    subst :: Subst -> a -> a
+    freeUVars :: a -> S.Set UVar
+\end{minted}
+%
+The functions are implemented according to the definitions in
+\cref{sec:unification-substitution}.
+
+Our typing monad is defined as follows:
+\begin{minted}{haskell}
+  data CGenState = CGenState{
+    globalEnv :: GlobalEnv,
+    localEnv :: LocalEnv,
+    varState :: UVar
+  }
+  type CGen = StateT CGenState (Except T.Text)
+\end{minted}
+
+The first two entries represent the global and local environment, as discussed
+in \cref{sec:scoping}. For the sake of simplicity, we track the local
+environment in the state monad and simply reset it once we have finished
+processing a function declaration.
+Whenever we obtain new information from unifying types, we apply the resulting
+substitution to the local and global environment, replacing any placeholder
+variables for which we have found the concrete instantiation.
+
+The third entry lets us generate fresh variable names: since \haskell{UVar} is
+just an alias for \haskell{Int}, we can obtain a fresh unification variable by
+reading and incrementing the (strictly increasing) value of \code{varState}.
+
+Since we carried over the location data from the parse AST to the various nodes
+of the typing AST, we can provide the user with localised type errors using the
+\haskell{Except} monad in the \haskell{CGen} monad stack:
+\begin{minted}{haskell}
+  throwLocError :: Loc -> T.Text -> CGen a
+  throwLocError loc msg = throwError $ T.pack (locPretty loc) <> ":\n" <> msg
+\end{minted}
+%
+The helper function \code{locPretty} prints the file path, followed by the line
+and column range of the node where the error was encountered.
+
+
+\subsection{Typing Procedure}
+
+We now present our typing procedure. By misuse of notation, we describe
 the cases of the algorithm in deduction rules, where the judgement
 $\Gamma \vdash_W e : \tau, S$ states that in context $\Gamma$, the expression $e$
 is typed with $\tau$ under generation of the substitution $S$.
 When considering a list of expressions, such as the arguments to a function, we
-use the overlined notation $\set{e_i}$ for $e_1,\dots,e_n$. Similarly, we
-extend this notation to types, substitutions and the typing judgement, as seen
-in e.g. \ruleref{W-FunCall}, where the judgement
+again use the overlined notation $\set{e_i}$ for a (possibly empty) sequence
+$e_1,\dots,e_n$. We also extend this notation to types, substitutions and the
+typing judgement, as seen in e.g. \ruleref{W-FunCall}, where the judgement
 \[ \set{ \Gamma \vdash_W e_i : \tau_i,\ S_i } \]
 states that in context $\Gamma$, the $i$-th expression $e_i$ has type $\tau_i$,
-generating the substitution $S_i$. We then write $\set{S_i}$ to mean the
-composition of all $S_i$ in order, that is, $S_n \circ \dots \circ S_1$.
+generating the substitution $S_i$.
+We further write $\set{S_i}$ to mean the composition of all $S_i$ in order, that
+is, $S_n \circ \dots \circ S_1$.
+%
 The judgement $\fresh(\alpha)$ states that the unification variable $\alpha$ is
-freshly generated. We write $\inst(\forall\ \set{\alpha}.\ \tau)$ for the
-typing scheme $\forall\ \set{\alpha}.\ \tau$ where all $\set{\alpha}$ are
-substituted with fresh unification variables.
-Finally, $\unify(\sigma,\tau)$ denotes the substitution generated by performing
-the unification procedure on types $\sigma$ and $\tau$.
+freshly generated.
+We write $\inst(\forall\ \set{\alpha}.\ \tau)$ for the type $\tau$ in which
+all $\set{\alpha}$ have been substituted with fresh unification variables.
 
-\begin{figure}[h]
+\begin{figure}[b]
   \begin{mathpar}
 
     \inferrule[W-Var]
@@ -571,9 +691,9 @@ the unification procedure on types $\sigma$ and $\tau$.
       {\Gamma \vdash_W \code{($e_1$,$e_2$)} : \code{($\tau_1$,$\tau_2$)},\ S_2 \circ S_1}
 
     \inferH{W-FunCall}%
-      {\set{\sigma_i} \to \sigma = \mathit{inst}(\Gamma(f)) \\
+      {\mathit{inst}(\Gamma(f)) = \set{\sigma_i} \to \sigma \\
         \set{ \Gamma \vdash_W e_i : \tau_i,\ S_i} \\
-        S = \mathit{unify}(\set{\sigma_i, \tau_i})}
+        S = \unify(\set{\sigma_i, \tau_i})}
       {\Gamma \vdash_W \code{$f$($\set{e_i}$)} : \tau.S,\ S \circ \set{S_i}}
   \end{mathpar}
 
@@ -581,12 +701,216 @@ the unification procedure on types $\sigma$ and $\tau$.
   \label{fig:typing-rules-expr}
 \end{figure}
 
-\todobox{Figure out how to present type inference procedure on statements and
-declarations, and add the corresponding rules.}
+\paragraph{Expressions}
+In \cref{fig:typing-rules-expr}, we describe the cases of the typing procedure
+for expressions.
+The most important case is \ruleref{W-FunCall}, which subsumes the application
+of built-in and user-defined functions as well as field selectors, thanks to our
+uniform treatment of the aforementioned constructs (as discussed in \cref{sec:desugaring}).
+We look up the function $f$ in the environment $\Gamma$, which (if $f$ has been
+declared) yields a type scheme of the form $\forall\ \set{\alpha_j}.\ \tau$.
+Next, we instantiate the typing scheme with fresh placeholder variables, i.e.
+we substitute each $\alpha_j$ with some fresh $u_j$ in $\tau$, resulting in the
+function type $\set{\sigma_i} \to \sigma$.
 
-\todobox{Define unification procedure, and how the substitution is generated,
-including lifting the unification to two lists of types, like when unifying
-function arguments.}
+Note that the length of the sequence $\set{\sigma_i}$ must match that of
+$\set{e_i}$ (as indicated by the use of $i$ for both).
+We type all the arguments $e_i$, yielding the types $\tau_i$ and the
+substitutions $S_i$. We then unify the input types $\set{\sigma_i}$ of the
+function with the argument types $\set{\tau_i}$, resulting in the substitution
+$S$. Finally, the type of the function call $f\code{($\set{e_i}$)}$ is given by
+$\tau.S$, and we return the substitution $S \circ \set{S_i}$.
+
+In the rule above, we write $\Gamma(f)$ for looking up the type of $f$, but in
+practice, we only look up $f$ in the context if it is a user-defined function,
+and otherwise we simply return a hard-coded type scheme:
+\begin{minted}{haskell}
+  getFunType :: FunName -> Loc -> CGen UScheme
+  getFunType (Name name) loc = do
+      mFunType <- envLookupFun name
+      case mFunType of
+        Nothing -> throwLocError loc $ "No declaration for function `" <> name <> "`"
+        Just funType -> pure funType
+  getFunType Not _ = pure $ UScheme S.empty (Fun [Bool] Bool)
+  getFunType Neg _ = pure $ UScheme S.empty (Fun [Int] Int)
+  ...
+\end{minted}
+%
+The type schemes for the operators \spl{Not}, \spl{Neg}, etc are of course all
+monomorphic, hence the set of type variables in the type scheme is empty.
+More specifically, the types specified above correspond to
+\[\begin{array}{rcl}
+  \code{Neg} & : & \forall\ .\ \text{\spl{Bool -> Bool}} \\
+  \code{Not} & : & \forall\ .\ \text{\spl{Int -> Int}}
+\end{array}\]
+%
+The types for the built-in functions and field selectors are also hard-coded,
+for instance:
+\[\begin{array}{rcl}
+  \code{Cons}    & : & \forall\ \alpha .\ \text{\spl{$\alpha$ [$\alpha$] -> [$\alpha$]}} \\
+  \code{IsEmpty} & : & \forall\ \alpha .\ \text{\spl{[$\alpha$] -> Bool}} \\
+  \code{HeadFun} & : & \forall\ \alpha .\ \text{\spl{[$\alpha$] -> $\ \alpha$}} \\
+  \code{FstFun}  & : & \forall\ \alpha, \beta .\ \text{\spl{($\alpha$,$\beta$) -> $\ \alpha$}}
+\end{array}\]
+
+\paragraph{Statements}
+Statements are handled in largely the same way as expressions, except that they
+do not have a type, so we use the rule format $\Gamma \vdash_W s, S$.
+The while-case can be described as follows:
+%
+\begin{mathpar}
+  \inferH{W-While}%
+    { \Gamma \vdash_W e : \tau.\ S \\
+      \set{ \Gamma \vdash s_i.\ S_i } \\
+      S' = \unify(\tau,\Bool) }
+    { \Gamma \vdash_W \code{while}\ e\ \code{\{}\ \set{s_i}\ \code{\}},\
+      \set{S_i} \circ S' \circ S }
+\end{mathpar}
+%
+We discuss the remaining cases informally:
+If-else-statements are just a slight variation on \ruleref{W-While} above, and
+function calls are handled exactly the same as in \ruleref{W-FunCall}.
+For return statements, we look up the return type of the surrounding function
+declaration, which is stored in the local environment, and then either unify it
+with the type of $e$ for \spl{return $\ e$;}, or with $\Void$ for \spl{return;}.
+
+Variable assignments are arguably the most interesting case. We start by typing
+the expression $e$ on the left, and then we iterate through the sequence of
+field selectors from left to right, adjusting the type of the expression in each
+step. For instance, in the assignment \spl{x.fst.hd = 1;}, we start with the type
+\spl{Int} of \spl{1}, and based on the rightmost selector \spl{.hd}, we adjust
+the type to \spl{[Int]}. For \spl{.fst}, we then adjust the type to
+\spl{([Int],$u$)}, where $u$ is some fresh placeholder variable.
+
+
+\paragraph{Declarations}
+So far, we have seen how the types of variables and functions are looked up in
+the environment, but we also need to insert these types into the environment,
+which happens when we process variable and function declarations.
+
+Variable declarations are rather straightforward: we determine the type of the
+left-hand side expression, which we unify with the type of the variable (if a
+type is specified).
+We then update either the local or global environment to map the variable name
+to its type.
+
+For function declarations, we generate fresh placeholder variables for the
+argument types and return type, which we associate to the parameter names and
+the \haskell{RetType} variant in the local environment.
+We also use an entry for the function itself in the local environment, such that
+we can correctly handle recursive function calls.
+Next, we process the variable declarations and statements of the function body.
+
+Aside from handling the constraints that arise from the body of the function, we
+also want to check our inferred function type against the type annotation
+provided by the user.
+Much like instantiating typing schemes with $\mathit{inst}$ in
+\ruleref{W-FunCall}, we must instantiate the type variables in the annotated
+type with fresh placeholder variables:
+\begin{minted}[linenos]{haskell}
+  instantiateUserType :: UType -> CGen UType
+  instantiateUserType ty = do
+    let tVars = freeTVars ty
+    s <- sequence $ M.fromSet (const freshVar) tVars
+    pure $ substTVars s ty
+\end{minted}
+%
+On line 3, we determine the set of free type variables in the annotated type.
+Note that in our inferred types, the type variables are \haskell{UVar}s,
+represented by integers, while in the user type annotations, they are
+\haskell{TVar}s, represented by \haskell{Text}.
+On line 4, we generate a substitution mapping each of the type variables to a
+fresh placeholder variable. We then apply the substitution and return the result
+(line 5).
+
+Finally, we combine all the substitutions arising from the function body and
+unification with the user-specified type and apply the result to the function
+type we generated at the beginning. We then associate the resulting type scheme
+to the function name in the global environment.
+
+\paragraph{Mutual declarations}
+Function declarations that are mutually defined (i.e. mutually recursive) are
+already grouped in a \haskell{MutualDecls} node thanks to the SCC analysis
+discussed in \cref{sec:scc-analysis}.
+When dealing with mutually recursive functions, we must take care to not
+generalise too eagerly.
+In particular, we first generate placeholder type schemes for all functions in
+the SCC, which we insert into the environment (we will update the types later).
+We then process all function declarations in order, resulting in a combined
+substitution $S$. We go back over the function declarations, applying the $S$ to
+each of them.
+Only then do we generalise all the type schemes and insert them into the
+environment again, updating the original placeholder type schemes.
+
+To give an example, consider the following two mutually recursive functions:
+
+\begin{minipage}{.5\textwidth}
+  \centering
+\begin{lstlisting}[language=SPL]
+  lenEven(l) :: [a] -> Bool {
+    if (isEmpty(l)) {
+      return True;
+    } else {
+      return !lenOdd(l.tl);
+    }
+  }
+\end{lstlisting}
+\end{minipage}%
+\begin{minipage}{.5\textwidth}
+  \centering
+\begin{lstlisting}[language=SPL]
+  lenOdd(l) :: [a] -> Bool {
+    if (isEmpty(l)) {
+      return False;
+    } else {
+      return !lenEven(l.tl);
+    }
+  }
+\end{lstlisting}
+\end{minipage}\vspace{2mm}
+
+In the recursive case, the functions call each other with the tail of the list
+\spl{l}, hence the type parameters of the two functions need to match.
+While typing \spl{lenEven}, we find that its input type must be instantiated to
+that of \spl{lenOdd}, but the type of \spl{lenOdd} is at that point still a
+placeholder type.
+While processing \spl{lenOdd}, we substitute the placeholder input type with
+some list type \spl{[$\alpha$]}, which then no longer matches the input type we
+determined for \spl{lenEven}. We thus need to go back and perform the same
+substitution in the type of \spl{lenOdd}, after which the input types match
+again.
+
+
+\section{Elaboration}
+
+During the typing procedure, we update the local and global environment whenever
+we find new information, applying the substitutions that arise from the program.
+We do not, however, update the type annotation fields in the AST nodes as we go,
+meaning that these still contain the placeholder variables, rather than the
+final types we inferred for them.
+
+The type fields thus need to updated throughout the AST using the full
+substitution that was returned by the typing procedure; we refer to this step as
+\emph{elaboration}.
+In essence, we just recurse through the AST, applying the substitution to type
+labels wherever they appear in the nodes.
+For literal expressions, we include sanity checks for the case that they have
+some unexpected type, which would suggest an implementation error:
+\begin{minted}{haskell}
+  annotateExpr :: Subst -> T.Expr UType -> T.Expr UType
+  annotateExpr s (T.Ident loc name ty) = T.Ident loc name (subst s ty)
+  annotateExpr _ e@(T.Int loc n Int) = e
+  annotateExpr _ (T.Int _ _ ty) = error $ "Integer has type " ++ show ty
+  ...
+  annotateExpr s (T.FunCallE loc funName args ty) =
+    T.FunCallE loc funName (annotateExpr s <$> args) (subst s ty)
+  annotateExpr s (T.EmptyList loc ty) =
+    T.EmptyList loc (subst s ty)
+  annotateExpr s (T.Tuple loc e1 e2 ty) =
+    T.Tuple loc (annotateExpr s e1) (annotateExpr s e2) (subst s ty)
+\end{minted}
+
+
 
 
 \begin{todoenv}
