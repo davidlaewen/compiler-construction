@@ -200,8 +200,8 @@ can consume spaces, tabs, line breaks, line comments and block comments
 according to delimiters specified by the client.
 By defining the delimiters \code{//} as well as \code{/*} and \code{*/}, we can
 instruct Megaparsec to strip all line and block comments from the input.
-Megaparsec even features a built-in option for correctly
-handling nested block comments.
+There is even a built-in option that we can use to ensure correct handling of
+nested block comments.
 
 \paragraph{Error recovery}
 The lexer supports error recovery, which is quite simple to achieve.
@@ -244,10 +244,9 @@ briefly discussing the data declarations.
 
 \begin{figure}
 \begin{minted}[breaklines]{haskell}
-data Program = Program [VarDecl] [FunMutDecl]
+data Program = Program [VarDecl] [FunDecl]
 data VarDecl = VarDecl Loc (Maybe Type) T.Text Expr
 data FunDecl = FunDecl Loc T.Text [T.Text] (Maybe Type) [VarDecl] [Stmt]
-data FunMutDecl = MutualDecls Loc [FunDecl] | SingleDecl FunDecl
 
 data Stmt = If Loc Expr [Stmt] [Stmt]
           | While Loc Expr [Stmt]
@@ -560,9 +559,10 @@ start and end position in a 3-tuple:
 \end{minted}
 Most of our parser helpers include positions in their output; we process these
 in the higher-level parsers to determine the \haskell{Loc} entries in the AST.
+
 The second function, \code{betweenP}, accepts two \haskell{TokenParser}
-instances which parse an opening and closing delimiter, where the third parser
-\code{p} parses some content between the delimiters.
+instances that parse an opening and closing delimiter, and a third parser
+\code{p} that is run between the delimiters.
 We can then parse an expression of the form \code{($e$)} as follows, where $e$
 is parsed by the argument of type \haskell{TokenParser a}:
 \begin{minted}{haskell}
@@ -570,12 +570,12 @@ is parsed by the argument of type \haskell{TokenParser a}:
   parensP = betweenP (symbolP SymParenLeft) (symbolP SymParenRight)
 \end{minted}
 
-More generally, our parser functions form a hierarchy, starting with predicates
-for the various token types, then helper functions such as \code{parensP},
-and then parser functions for the various components and variants of statements,
-expressions, and so on, (as discussed in \cref{sec:parsing-programs}), which are
-combined to parsers for variable declarations and function declarations at the
-top level.
+Generally speaking, our parser functions form a hierarchy, starting with
+predicates for the various token types, then helper functions such as
+\code{parensP}, and then parser functions for the various components and
+variants of statements, expressions, and so on, (as discussed in
+\cref{sec:parsing-programs}), which are combined to parsers for variable
+declarations and function declarations at the top level.
 
 
 \subsection{Error Handling} \label{sec:parser-error-handling}
@@ -583,7 +583,7 @@ top level.
 Our parsing stage supports reporting of multiple parse errors, and can recover
 from many forms of errors, in particular when a syntactic component is missing
 altogether, or by using the delimiters of statements to skip ahead and continue
-parsing to possibly accumulate and report further errors.
+parsing in an attempt to find and report further errors.
 
 
 \paragraph{Reporting multiple errors}

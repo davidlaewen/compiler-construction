@@ -1,30 +1,58 @@
-\chapter{Semantic Analyses \& Typing} \label{chp:semantic-analyses}
+\chapter{Semantic Analyses and Typing} \label{chp:semantic-analyses}
 
-\todobox{Overview and signposting paragraph}
+When we have successfully obtained a parse AST instance from the previous lexing
+and parsing stages, we proceed with semantic analyses, most notably type
+inference and type checking of programs.
+In this stage, we statically analyse the input program, where SPL's
+Hindley-Milner-style type system allows us to catch a large class of errors
+at compile time. In particular, we can identify type mismatches, e.g. where
+an operator is applied to the wrong argument type, or a field selector is used
+with an unsupported type.
+
+Our semantic analyses comprise the following three steps:
+\begin{itemize}
+  \item In a first step, we \emph{desugar} the parse AST (as given in
+        \cref{fig:parse-ast}) to a new AST representation, which we call the
+        typing AST; the new AST and desugaring step are described in
+        \cref{sec:desugaring}.
+  \item Next, we construct the \emph{call graph} of the input program, on which
+        we perform a so-called strongly connected components analysis to
+        determine how we must group and order the function declarations.
+        Further details are given in \cref{sec:scc-analysis}.
+  \item Finally, we perform typing inference and type checking on the input
+        program. We use the term `typing' to mean both inference and checking,
+        as our implementation combines both in one stage.
+\end{itemize}
+
 
 \section{Typing AST and Desugaring} \label{sec:desugaring}
 
-If the source program was successfully parsed to the parse AST representation of
+Starting with the program given in the parse AST representation of
 \cref{fig:parse-ast}, we proceed by translating the parsed program to a new AST
-representation used in the typing stage.
-\cref{fig:type-ast} shows this new \emph{typing AST}.
-As you can see, the definition has shrunk somewhat when compared to the AST of
-the parsing stage. This is mostly due to the fact that all field selectors and
-operators on expressions have been converted to regular function calls (case
-\haskell{FunCallE}), although field selectors in variable assignments remain
-unchanged.\todo{Mention how we keep them distinct}
-In addition, all the garbage nodes available in the parse AST are no longer
-present in the typing AST: since the garbage nodes indicate errors in the
-parsing stage, we should not proceed to the typing stage in their presence.
-The desugaring stage includes sanity checks that throw an error if such nodes
-are found in the parsed program.
+representation used in the typing stage. \cref{fig:type-ast} shows the data type
+declaration for this new \emph{typing AST}.
+
+\paragraph{Functions, operators, and field selectors}
+As you can see, the definition for expressions has shrunk somewhat when compared
+to the AST of the parsing stage. This is mostly due to the fact that all field
+selectors and operators on expressions have been converted to regular function
+calls (case \haskell{FunCallE}). Note that we represent function names not
+directly as strings/text, but using \haskell{FunName}, which preserves the
+distinction between user-defined functions, built-in functions, operators, and
+field selectors.
+The main reason for grouping all function-like constructs in the
+\haskell{FunCallE} node is that we can then treat them more uniformly during the
+typing stage.
+Also note that field selectors in variable assignments remain unchanged; these
+are represented by \haskell{VarLookup}.
+
 
 \begin{figure}
 \begin{minted}[breaklines]{haskell}
 data Program varAnn funAnn = Program [VarDecl varAnn] [FunMutDecl varAnn funAnn]
 data VarDecl a = VarDecl Loc (Maybe UType) T.Text (Expr a) a
-data FunDecl a b = FunDecl Loc T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
 data FunMutDecl a b = MutualDecls Loc [FunDecl a b] | SingleDecl (FunDecl a b)
+data FunDecl a b = FunDecl Loc T.Text [T.Text] (Maybe UType) [VarDecl a] [Stmt a] b
 
 data Stmt a = If Loc (Expr a) [Stmt a] [Stmt a]
             | While Loc (Expr a) [Stmt a]
@@ -40,9 +68,8 @@ data FunName = Name T.Text
              | Add | Sub | Mul | Div | Mod
              | Eq | Neq | Lt | Gt | Lte | Gte
              | And | Or
-             | Cons | IsEmpty
+             | Cons | IsEmpty | Print
              | HeadFun | TailFun | FstFun | SndFun
-             | Print
 
 data Expr a = Ident Loc T.Text a
             | Int Loc Int a
@@ -58,12 +85,33 @@ type TVar = T.Text
 data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType | Fun [UType] UType
            | UVar UVar | TVar TVar
+
+data UScheme = UScheme (S.Set UVar) UType
 \end{minted}
 
-\caption{Abstract syntax tree for typing stage}
+\caption{Abstract syntax tree representation for typing stage}
 \label{fig:type-ast}
 \end{figure}
 
+
+\paragraph{`Garbage' nodes}
+In addition, all the garbage nodes available in the parse AST are no longer
+present in the typing AST: since the garbage nodes indicate errors in the
+parsing stage, we should never proceed to the typing stage in their presence.
+Doing so would constitute a compiler bug, hence the desugaring stage includes
+sanity checks that throw an error if such nodes are found in the parsed program.
+
+\paragraph{Mutual declarations}
+At the top level of the program, the function declarations are now represented
+by a list of \haskell{FunMutDecl}, which has two alternatives: either a single
+function declaration \haskell{FunDecl} (as in the parsing stage), or a group of
+\emph{mutually defined} functions, given instead by a list of \haskell{FunDecl}.
+Such groupings of function declarations are needed for handling the strongly
+connected components; we defer the details to \cref{sec:scc-analysis}.
+For now, we simply convert each \haskell{FunDecl} instance of the parse AST to
+a \haskell{SingleDecl} instance in the typing AST.
+
+\paragraph{Type annotation fields}
 Another key difference is that we extend many of the nodes with type
 parameters \code{a} and \code{b}. The fields correspond to the types we
 infer for the respective nodes during the typing stage.
@@ -71,40 +119,24 @@ Initially, we have no type information available (aside from the optional type
 annotations in the source program), and represent this lack of information
 with the \haskell{()} type, e.g. \haskell{Expr ()}. During the typing stage, we
 iterate through the typing AST, replacing these dummy fields of type \haskell{()}
-with our inferred type information, represented by \haskell{UType}.
+with our inferred type information. The type annotations are given by
+\haskell{UScheme} for functions, or \haskell{UType} in all other cases.
+
 For instance, when checking an expression $e$, we start with an instance of
 \haskell{Expr ()}, and return an instance of \haskell{Expr UType}.
-The definition of \haskell{UType} is also given in \cref{fig:type-ast}, and
-corresponds to the grammar of SPL types, with the addition of \emph{unification
-variables} \haskell{UVar}.\todo{Point out \haskell{MutualDecls} node}
-Unification variables are represented simply by integers, and are generated as
-placeholders for unknown types during type checking. While iterating through the
-AST, we annotate the nodes with these unification variables, and simultaneously
-generate a set of constraints between them, expressing how the (currently still
-unknown) types must relate to each other.\todo{Fix this description}
+As specified in \cref{fig:type-ast}, the cases for \haskell{UType} match those
+in the grammar of SPL types (\cref{chp:grammar}), with the addition of
+\emph{unification variables} \haskell{UVar}. These are represented by integers,
+and are generated and used as placeholders for unknown types during typing.
+A \haskell{UScheme} is just a \haskell{UType}, along with the set of free
+unification variables that appear in the type; this corresponds to a polymorphic
+type scheme of the form $\forall\ \set{\alpha}.\ \tau$.
+Initially, we  annotate each AST node with a unification variable. These are
+subsequently replaced once we determine how the placeholders must be
+instantiated.
 
-\todobox{Which nodes feature type information, and which just `thread through' the
-type parameters?}
-
-To illustrate, let us consider a simple example: say we are typing the
-expression \spl{(1,2).fst}. The field selector \spl{.fst} will be desugared
-to a regular function, meaning we can think of the expression as something
-closer to \spl{fstfun((1,2))}. The type of \spl{fstfun} is polymorphic, and
-given by $\forall \alpha \beta.\ (\alpha,\beta) \to \alpha$, expressing that
-from a tuple with entries of type $\alpha$ and $\beta$ (respectively),
-\spl{fstfun} returns the first entry with type $\alpha$.
-During typing, we generate unification variables $\alpha_1$, $\alpha_2$ and
-$\beta$, where $(\alpha_1,\alpha_2)$ is the input type of \spl{fstfun}, $\beta$
-is the output type and thus the type of \spl{(1,true).fst}, and we also know
-that $\alpha_1 = \beta$, since we are selecting the first component.
-Next, we look at the pair constructor, whose type is given as the \emph{product}
-of the two inner types, that is, the types of \spl{1} and \spl{true}.
-These, in turn, are trivial to typecheck, and do not yield any constraints or
-substitutions. Given that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
-to the constraints from earlier:
-We now know that \spl{($\alpha_1$,$\alpha_2$)} $=$ \spl{(Int,Bool)}, so by
-$\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
-$\beta$ $=$ \spl{Int}.
+% \todobox{Which nodes feature type information, and which just `thread through' the
+% type parameters?}
 
 % \begin{figure}
 % \begin{minted}[breaklines]{haskell}
@@ -121,7 +153,7 @@ $\beta$ $=$ \spl{Int}.
 % \end{figure}
 
 
-\section{SCC Analysis}
+\section{SCC Analysis} \label{sec:scc-analysis}
 
 In a function declaration---represented by \haskell{FunDecl a b} in the
 AST representation of \cref{fig:type-ast}---the body may freely contain function
@@ -305,7 +337,8 @@ the monadic functions onto the lists.
 The only other noteworthy case is when we encounter a function call:
 \begin{minted}{haskell}
   exprToGraph declVtx (FunCallE _ funName args _) = do
-    case funName of -- Insert edge for function call
+    case funName of
+    -- Insert edge for function call
       Name name -> insertEdge declVtx name
       _ -> pure () -- Unless it's a built-in function
     mapM_ (exprToGraph declVtx) args
@@ -467,6 +500,28 @@ a substitution $S$.
 For all other combinations of types $\tau$ and $\sigma$ not covered by the
 equations above, the types cannot be unified and the result of
 $\unify(\tau,\sigma)$ is `\textsf{Fail}'.
+
+
+To illustrate, let us consider a simple example: say we are typing the
+expression \spl{(1,2).fst}. The field selector \spl{.fst} is represented by a
+function call, meaning we can think of the expression as something
+closer to \spl{fstfun((1,2))}. The type of \spl{fstfun} is polymorphic, and
+given by $\forall \alpha \beta.\ (\alpha,\beta) \to \alpha$, expressing that
+from a tuple with entries of type $\alpha$ and $\beta$ (respectively),
+\spl{fstfun} returns the first entry with type $\alpha$.
+During typing, we generate unification variables $\alpha_1$, $\alpha_2$ and
+$\beta$, where $(\alpha_1,\alpha_2)$ is the input type of \spl{fstfun}, $\beta$
+is the output type and thus the type of \spl{(1,true).fst}, and we also know
+that $\alpha_1 = \beta$, since we are selecting the first component.
+Next, we look at the pair constructor, whose type is given as the \emph{product}
+of the two inner types, that is, the types of \spl{1} and \spl{true}.
+These, in turn, are trivial to typecheck, and do not yield any constraints or
+substitutions. Given that \spl{(1,true)} has type \spl{(Int,Bool)}, we return
+to the constraints from earlier:
+We now know that \spl{($\alpha_1$,$\alpha_2$)} $=$ \spl{(Int,Bool)}, so by
+$\alpha_1 = \beta$ we conclude that \spl{(1,true).fst} has type
+$\beta$ $=$ \spl{Int}.
+
 
 
 \section{Typing Algorithm}
