@@ -143,14 +143,14 @@ example:
       ++ loopProgram ++ [BranchAlways topLabel] ++ [Label endLabel]
 \end{minted}
 
-Here, \haskell{concatMapM} is used to generate instructions for
+Here, \code{concatMapM} is used to generate instructions for
 all the statements in the loop body, while simultaneously sequencing the monadic
 effects performed while translating each of the statements to a list of
 instructions. Thanks to the \haskell{do}-notation, we can simply assign the
-monadic result to \haskell{loopProgram}, which we insert into the list of
+monadic result to \code{loopProgram}, which we insert into the list of
 instructions that we return in the last four lines.
 
-The third and fourth line also show our \haskell{freshLabel} helper function in
+The third and fourth line also show our \code{freshLabel} helper function in
 action, which we call with the strings \haskell{"while"} and \haskell{"endwhile"}
 to obtain unique labels we can use for the branch/jump instructions at the
 top and bottom of the \spl{while} loop.
@@ -164,7 +164,7 @@ register names and instructions available in SSM. An SSM program is simply a
 list of instructions: \haskell{type Program = [Instr]}.
 By defining \haskell{Show} instances for the registers and instructions, we can
 easily print/output a \verb|.ssm| file from an instance of type
-\haskell{[Instr]} with \haskell{unlines $ show <$> p}.
+\haskell{[Instr]} with \code{unlines \$ show <\$> p}.
 
 An excerpt of the data type for instructions and the corresponding \haskell{Show}
 instance is given below.
@@ -185,9 +185,9 @@ instance is given below.
 We indent all instructions except for labels by two spaces, which helps with
 navigating the resulting SSM code.
 The code generation stage simply dumps the pretty-printed SSM code into the
-console. To run the SSM code, we can then simply pipe the console output into a
-file, on which we then run the SSM interpreter with the \texttt{--cli} option.
-We can achieve all the above with a simple bash script:\todo{Is this worth
+console. To run the SSM code, we can then pipe the console output into a
+file, on which we then run the SSM interpreter.
+We can achieve the above with a simple bash script:\todo{Is this worth
 discussing?}
 %
 \begin{minted}{bash}

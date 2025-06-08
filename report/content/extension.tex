@@ -70,8 +70,8 @@ the field types, i.e. a product type. We can make this explicit by writing
 Here, $\mathbf{1}$ denotes the unit type, and each component of the sum type
 correspond to one of constructors (in the same order as the declaration).
 The occurrences of $\alpha$ refer to the recursive type itself, that is, we can
-repeatedly unfold such a recursive type $\mu\alpha.\tau$ by the substitution
-$\tau[\alpha \mapsto \mu\alpha.\tau]$.
+repeatedly unfold such a recursive type $\mu\alpha.\tau$ by substituting
+$\alpha$ with $\mu\alpha.\tau$ in $\tau$.
 
 The above serves to illustrate how the custom data/record types actually
 increase the expressiveness of SPL: they allow us to declare such infinite,
@@ -79,11 +79,11 @@ self-referential data types. Infinite types are not available in SPL otherwise,
 except for the special case of the list type \spl{[$\tau$]}, which we can view
 as being defined by
 $\code{[$\tau$]} \eqdef (\tau \times \code{[$\tau$]}) + \mathbf{1}$
-(head and tail, or the empty list).
+(i.e. head and tail, or the empty list).
 
-For instance, SPL cannot express the type of \emph{rose trees}, as mentioned
-in \cref{sec:intro-lang-choice}. For a rose tree of integers, a node is
-given by an integer label, along with a list/sequence of subtrees, which are
+For instance, SPL cannot express the type of \emph{rose trees}, which we briefly
+touched on in \cref{sec:intro-lang-choice}. For a rose tree of integers, a node
+is given by an integer label, along with a list/sequence of subtrees, which are
 again nodes as just described.
 
 We might try to emulate this in SPL as follows:
@@ -95,7 +95,7 @@ We might try to emulate this in SPL as follows:
 \end{lstlisting}
 %
 However, the above code does not typecheck: it requires unifying some type
-$\alpha$ with \spl{(Int,[$\alpha$])}, which violates the occurs check.
+variable $\alpha$ with \spl{(Int,[$\alpha$])}, which violates the occurs check.
 
 With our extension, we can express integer rose trees using a custom data declaration:
 \begin{lstlisting}[language=SPL]
@@ -380,7 +380,7 @@ The above operations result in the heap layout shown in \cref{fig:heap-layout-ex
 After storing to the heap, the address at the stack pointer points to the
 final entry, which is the label. Data type instances are thus always represented
 on the stack by the location of their label, which lets us load and check the
-label without needing an offset on the heap.
+label without needing to offset the address first.
 
 
 \begin{figure}[t]
