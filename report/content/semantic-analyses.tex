@@ -371,7 +371,17 @@ the unchanged list of variable declarations to construct the updated
 
 \section{Typing Stage} \label{sec:typing-stage}
 
-\todobox{Signposting paragraph}
+After the desugaring stage and the SCC analysis, our compiler comes to the
+typing stage, which does most of the work of the semantic analysis.
+In the following, we will briefly talk about scoping in \cref{sec:scoping},
+then give a formal account of typing constraints, unification and
+substitutions in \cref{sec:unification-substitution}, and then discuss the
+machinery used by our implementation of the typing procedure in
+\cref{sec:typing-infrastructure}.
+From there, we will cover the typing procedure itself in
+\cref{sec:typing-procedure}, and finally the annotation of the program AST with
+the type information in \cref{sec:elaboration}.
+
 
 
 \subsection{Scoping} \label{sec:scoping}
@@ -577,7 +587,7 @@ we find that the type of the expression is \spl{Int}.
 
 
 
-\subsection{Code Infrastructure}
+\subsection{Code Infrastructure} \label{sec:typing-infrastructure}
 
 We represent substitutions as finite maps from \haskell{UVar} to types
 \haskell{UType}:
@@ -644,7 +654,7 @@ The helper function \code{locPretty} prints the file path, followed by the line
 and column range of the node where the error was encountered.
 
 
-\subsection{Typing Procedure}
+\subsection{Typing Procedure} \label{sec:typing-procedure}
 
 We now present our typing procedure. By misuse of notation, we describe
 the cases of the algorithm in deduction rules, where the judgement
@@ -842,32 +852,35 @@ each of them.
 Only then do we generalise all the type schemes and insert them into the
 environment again, updating the original placeholder type schemes.
 
-To give an example, consider the following two mutually recursive functions:
+To give an example, consider the following two mutually recursive functions that
+determine whether the length of a list is even (resp. odd):
 
-\begin{minipage}{.5\textwidth}
+\begin{center}
+\begin{minipage}{.4\textwidth}
   \centering
 \begin{lstlisting}[language=SPL]
   lenEven(l) :: [a] -> Bool {
     if (isEmpty(l)) {
       return True;
     } else {
-      return !lenOdd(l.tl);
+      return lenOdd(l.tl);
     }
   }
 \end{lstlisting}
-\end{minipage}%
-\begin{minipage}{.5\textwidth}
+\end{minipage}\hspace{8mm}%
+\begin{minipage}{.4\textwidth}
   \centering
 \begin{lstlisting}[language=SPL]
   lenOdd(l) :: [a] -> Bool {
     if (isEmpty(l)) {
       return False;
     } else {
-      return !lenEven(l.tl);
+      return lenEven(l.tl);
     }
   }
 \end{lstlisting}
-\end{minipage}\vspace{2mm}
+\end{minipage}
+\end{center}\vspace{2mm}
 
 In the recursive case, the functions call each other with the tail of the list
 \spl{l}, hence the type parameters of the two functions need to match.
@@ -881,7 +894,7 @@ substitution in the type of \spl{lenOdd}, after which the input types match
 again.
 
 
-\section{Elaboration}
+\subsection{Elaboration} \label{sec:elaboration}
 
 During the typing procedure, we update the local and global environment whenever
 we find new information, applying the substitutions that arise from the program.
@@ -910,15 +923,8 @@ some unexpected type, which would suggest an implementation error:
     T.Tuple loc (annotateExpr s e1) (annotateExpr s e2) (subst s ty)
 \end{minted}
 
-
-
-
-\begin{todoenv}
-  \begin{itemize}
-    \item New Abstract Syntax Tree? Decorate existing Abstract Syntax Tree?
-    \item Error messages?
-    \item Polymorphism? Inference? Overloading?
-    \item Problems?
-    \item\ldots
-  \end{itemize}
-\end{todoenv}
+Updating all the type labels allows us to pretty-print the AST with all the type
+annotations, which is helpful for debugging purposes.
+More importantly though, we require the type annotations to resolve the
+overloading of the built-in printing and comparison functions during code
+generation, as covered in the following chapter.

@@ -469,8 +469,8 @@ used in assignments to perform destructive updates, for example:
   a.ladd.lit = 40;
 \end{lstlisting}
 %
-We extend the approach described in \cref{chp:codegen}\todo{Update reference},
-where we traverse the field selectors from left to right.
+We extend the approach we use in the code generation stage, where we traverse
+the field selectors from left to right.
 At each step, we load from the address at the top of the stack, and then
 possibly apply an offset to the result.
 With the addition of the custom field selectors, the code for loading the next

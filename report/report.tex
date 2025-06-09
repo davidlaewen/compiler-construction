@@ -9,7 +9,7 @@
 	David~L\"awen\\
 	\small\texttt{s1105105}
 }
-\date{\today}
+\date{June 8, 2025}
 \title{SPL Compiler}
 
 \setcounter{tocdepth}{1}
@@ -37,18 +37,7 @@
 
 \input{content/extension.tex}
 
-\chapter{Conclusion} \label{chp:conclusion}
-What does work, what does not, etc
-
-\section{Reflection} \label{chp:reflection}
-\begin{itemize}
-	\item What do you think of the project?
-	\item How did it work out?
-	\item How did you divide the work?
-	\item Pitfalls?
-	\item \ldots
-\end{itemize}
-
+\input{content/conclusion.tex}
 
 % BIBLIOGRAPHY
 \addcontentsline{toc}{chapter}{Bibliography}
@@ -56,12 +45,11 @@ What does work, what does not, etc
 
 \appendix
 \chapter{Grammar} \label{chp:grammar}
-Change the grammar to the one you actually used
+
+We used the following grammar:
 
 \begin{verbatim}
-SPL       = Decl+
-Decl      = VarDecl
-          | FunDecl
+SPL       = VarDecl* FunDecl+
 VarDecl   = ('var' | Type) id  '=' Exp ';'
 FunDecl   = id '(' [ FArgs ] ')' [ '::' FunType ] '{' VarDecl* Stmt+ '}'
 RetType   = Type
@@ -102,5 +90,60 @@ Op1       = '!'  | '-'
 int       = [ '-' ] digit+
 id        = alpha ( '_' | alphaNum)*
 \end{verbatim}
+
+
+\chapter{Extended Grammar}
+
+With our extension, which we discuss in \cref{chp:extension}, the updated grammar becomes:
+
+\begin{verbatim}
+SPL       = DataDecl* VarDecl* FunDecl+
+DataDecl  = 'data' '{' [ CtorDecls ] '}'
+CtorDecls = name '(' [ CtorArgs ] ')' [ ',' CtorDecls ]
+CtorArgs  = id ':' Type [ ',' CtorArgs ]
+VarDecl   = ('var' | Type) id  '=' Exp ';'
+FunDecl   = id '(' [ FArgs ] ')' [ '::' FunType ] '{' VarDecl* Stmt+ '}'
+RetType   = Type
+          | 'Void'
+FunType   = [ FTypes ] '->' RetType
+FTypes    = Type [ FTypes ]
+Type      = BasicType
+          | '(' Type ',' Type ')'
+          | '[' Type ']'
+          | id
+          | name
+BasicType = 'Int'
+          | 'Bool'
+          | 'Char'
+FArgs     = [ FArgs ',' ] id
+Stmt      = 'if' '(' Exp ')' '{' Stmt* '}' [ 'else' '{' Stmt* '}' ]
+          | 'while' '(' Exp ')' '{' Stmt* '}'
+          | id Field '=' Exp ';'
+          | FunCall ';'
+          | 'return' [ Exp ] ';'
+Exp       = id Field
+          | Exp Op2 Exp
+          | Op1 Exp
+          | int
+          | char
+          | 'False' | 'True'
+          | '(' Exp ')'
+          | FunCall
+          | CtorCall
+          | '[]'
+          | '(' Exp ',' Exp ')'
+Field     = [ Field ( '.' 'hd' | '.' 'tl' | '.' 'fst' | '.' 'snd' | '.' id ) ]
+FunCall   = id '(' [ ActArgs ] ')'
+CtorCall  = name '(' [ ActArgs ] ')'
+ActArgs   = Exp [ ',' ActArgs ]
+Op2       = '+'  | '-' | '*' | '/'  | '%'
+          | '==' | '<' | '>' | '<=' | '>=' | '!='
+          | '&&' | '||'
+          | ':'
+Op1       = '!'  | '-'
+int       = [ '-' ] digit+
+id        = alpha ( '_' | alphaNum)*
+\end{verbatim}
+
 
 \end{document}

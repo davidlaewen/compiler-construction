@@ -1,0 +1,82 @@
+\chapter{Conclusion} \label{chp:conclusion}
+
+Overall, I enjoyed working on the compiler implementation, and found it an
+interesting and fun challenge.
+I also really like the format of the Compiler Construction course, as there is
+a lot of freedom, and the project is very open-ended, with endless possibilities
+for improvements and extensions, and interesting combinations thereof.
+A hands-on project of such a scale is also fairly unusual in the context of a
+university degree, and provides an opportunity to learn and improve skills that
+are not required as much by other courses, in particular with regard to
+practical programming and code design.
+At the same time, implementing the compiler also forces the student to become
+well-acquainted with the theoretical concepts involved, as a vague understanding
+alone is not sufficient to actually create a working compiler.
+
+
+\section{Using Haskell}
+I feel that using Haskell for the implementation was a good choice. In Haskell,
+the implementation quite naturally follows the intuition of the recursive
+algorithms operating on the AST, and the use of monadic parser functions and
+combinators also closely matches the on-paper grammar, after some rewriting to
+deal with the occurrences of left recursion.
+
+When working with Haskell, I find that a fair amount of time is spent on
+figuring out and setting up the right `infrastructure', e.g. the monad stacks,
+typeclass instances, and helper functions.
+Once those are in place, the work of actually implementing the desired
+functionality is often surprisingly fast and straightforward.
+
+In particular, the type system (and LSP implementation) catch many mistakes
+early on, and the types often play an important role by dictating---or at
+least heavily informing---the correct definition.
+Again, this goes back to carefully figuring out the right abstraction at the
+beginning, and then `reaping the rewards' later while implementing the
+functionality, or while refactoring the existing code.
+
+Regarding the latter point, I found that making the changes for the extension in
+each stage of the compiler went quite smoothly thanks to the modularisation of
+the code, and the chosen abstractions.
+For instance, adding new keywords to the lexer was as simple as adding two
+lines, one in the definition of the \haskell{Keyword} data type, and one in the
+corresponding \haskell{Show} instance.
+
+
+\section{Results}
+
+While I can certainly think of many possible improvements to the compiler, the
+implementation offers custom parse errors and recovery from quite
+a number of error scenarios, analysis of strongly connected components, type inference
+and type checking with full parametric polymorphism, and custom data types,
+which increase the expressiveness of the language by providing a way to add
+arbitrary infinite/self-referential types.
+
+Some obvious `low-hanging fruit' includes support for polymorphism in the custom
+data types, and a nicer switch/case syntax for multi-way case distinctions on
+the variants of a user-defined type.
+I may still add polymorphism for the user-defined types, as most of the
+necessary machinery is already in place. In the code generation, hardly any
+changes would be needed, and the typing stage already handles the polymorphic
+construction and destruction of lists and tuples, so doing the same for the
+user-defined types should be quite straightforward.
+Extending the custom data types with type parameters would make them a lot more
+useful, e.g. for defining a polymorphic `Either' or `Maybe' type.
+
+
+\section{Division of Work}
+I originally started the Compiler Construction course with a project partner,
+but we ended up dropping the course due to time constraints and falling too far
+behind with our implementation and report.
+Since I enjoyed the course and liked working on the compiler, I was keen to
+finish up the missing parts and still conclude the course.
+
+Pretty much all of the report is written by me, as we did not get very far with
+writing at the time, and I also needed to rewrite most of the text that we did have.
+
+We worked together (roughly 50-50) on implementing a first version of the lexer
+and parser, as well as a working version of (monomorphic) type
+inference, and we started working on the code generation. I added support for
+custom parse errors, parser recovery, proper support for polymorphic type
+inference, type checking, the SCC analysis, as well as the vast majority of the
+code generation, and the entirety of the extension, along with various smaller
+fixes and improvements.

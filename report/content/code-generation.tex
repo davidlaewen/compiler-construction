@@ -21,25 +21,28 @@ mismatched types.
 
 In the following, we briefly discuss our chosen evaluation strategy in
 \cref{sec:codegen-eval-order}, after which we cover our general setup for
-generating SSM code in
-\cref{sec:codegen-monad,sec:codegen-instructions,sec:codegen-vars-args},
+generating SSM code in \cref{sec:codegen-monad},
 which concern the monad, data structures, and helper functions that we use, how
 we represent the SSM instruction set in Haskell, and how we deal with scoping
-and storing/loading for function arguments as well as local and global variables,
-and the initialisation of global variables on the heap
-(\cref{sec:codegen-initialisation}).
+and storing/loading for function arguments as well as local and global variables.
+We briefly discuss the initialisation of global variables on the heap in
+\cref{sec:codegen-initialisation}.
 
 In \cref{sec:codegen-multi-reg-vals}, we weigh the benefits and drawbacks of possible
 representations for multi-register (or composite) data, and motivate our corresponding
 design choices. This directly leads us to the topic of polymorphism, which we
-cover in \cref{sec:polymorphism-boxing}, concluding with a discussion on the
-semantics of parameter passing in \cref{sec:codegen-param-passing}.
+cover in \cref{sec:polymorphism-boxing}, which we conclude with a discussion on
+the semantics of parameter passing.
 
 
 
 \section{Evaluation Order} \label{sec:codegen-eval-order}
 
-We take the evaluation strategy of SPL to be \emph{eager}, or call-by-value,
+We take the evaluation strategy of SPL to be \emph{eager}\kern1pt\footnote{In the context
+of e.g. the lambda calculus, eager evaluation is often referred to as \emph{call-by-value}, and
+lazy evaluation as \emph{call-by-name}, though call-by-value is also used to
+specify that parameters are passed in value representation, rather than as references. To avoid
+confusion, we use pass-by-value and pass-by-reference for the latter distinction.}
 meaning that function arguments are evaluated prior to performing function
 application. For instance, in the function call \spl{f(1+1)}, we first evaluate
 the expression \spl{1+1} to \spl{2} before performing any computation in the
@@ -54,13 +57,13 @@ a fixed amount of space (for the base types \spl{Int}, \spl{Bool}, and
 \spl{Char} at least---we will talk about lists in detail in
 \cref{sec:codegen-multi-reg-vals}), while a \emph{lazy} evaluation strategy
 would require us to store unevaluated expressions, which may be arbitrarily
-large. The memory usage under call-by-value is thus significantly smaller, and
+large. The memory usage for lazy evaluation is thus significantly smaller, and
 we avoid complicated memory management involving the storing and loading of
 arbitrary expressions.
 
 
 
-\section{Code Generation Monad} \label{sec:codegen-monad}
+\section{Code Generation Infrastructure} \label{sec:codegen-monad}
 
 Our code generation stage makes use of the state monad, where the state consists
 of a label counter of type \haskell{Int}, along with two maps from
@@ -157,7 +160,7 @@ top and bottom of the \spl{while} loop.
 
 
 
-\section{Instructions} \label{sec:codegen-instructions}
+\subsection{Instructions} \label{sec:codegen-instructions}
 
 We defined algebraic data types \haskell{Register} and \haskell{Instr} for the
 register names and instructions available in SSM. An SSM program is simply a
@@ -182,24 +185,25 @@ instance is given below.
     ...
 \end{minted}
 
-We indent all instructions except for labels by two spaces, which helps with
-navigating the resulting SSM code.
-The code generation stage simply dumps the pretty-printed SSM code into the
-console. To run the SSM code, we can then pipe the console output into a
-file, on which we then run the SSM interpreter.
-We can achieve the above with a simple bash script:\todo{Is this worth
-discussing?}
-%
-\begin{minted}{bash}
-  #!/bin/bash
-  file=$1; # Take file path as command line arg
-  stack build
-  stack run -- codegen $file > output.ssm;
-  java -jar ./../ssm/ssm.jar --file output.ssm --cli
-\end{minted}
+We indent all instructions except for labels by two spaces, which makes the
+resulting SSM code slightly easier to navigate.
+% The code generation stage simply dumps the pretty-printed SSM code into the
+% console.
+% To run the SSM code, we can then pipe the console output into a
+% file, on which we then run the SSM interpreter.
+% We can achieve the above with a simple bash script:\todo{Is this worth
+% discussing?}
+% %
+% \begin{minted}{bash}
+%   #!/bin/bash
+%   file=$1; # Take file path as command line arg
+%   stack build
+%   stack run -- codegen $file > output.ssm;
+%   java -jar ./../ssm/ssm.jar --file output.ssm --cli
+% \end{minted}
 
 
-\section{Variables and Arguments} \label{sec:codegen-vars-args}
+\subsection{Variables and Arguments} \label{sec:codegen-vars-args}
 
 As mentioned in \cref{sec:codegen-monad}, we track two maps in our
 \haskell{CodeGen} monad state, which contain heap and stack locations,
@@ -239,7 +243,7 @@ typing stage, or that we have bugs in our code generation stage.
 
 
 
-\section{Initialisation} \label{sec:codegen-initialisation}
+\section{Program Initialisation} \label{sec:codegen-initialisation}
 
 Since the global variables can be accessed from anywhere in the program, we
 choose to allocate them on the heap rather than the stack. Since we can compute
@@ -247,23 +251,21 @@ the size of the variable data statically, we can find them by adding an offset
 to the heap location of the first global variable.
 At the start of our compiled program, we include instructions for computing the
 values of the global variables and storing them to the heap.
-
-However, the global variables may themselves allocate data on the heap, e.g. if
-we define a global variable as a list:
+However, doing so may allocate data on the heap, e.g. if we generate a list:
 \begin{lstlisting}[language=spl]
   [Int] l = 1:2:3:[];
 \end{lstlisting}
 %
-As a result, the location of the first global variable is not, in general, the
-first address on the heap, and can in fact not be determined statically, since
-the global variables may include arbitrary expressions which affect how many
-heap registers are allocated.
+% As a result, the location of the first global variable is not, in general, the
+% first address on the heap, and can in fact not be determined statically, since
+% the global variables may include arbitrary expressions which affect how many
+% heap registers are allocated.
 Our solution is to first compute the values of \emph{all} global variables on
-the stack, and subsequently storing the heap pointer to the first scratch
-register \texttt{R5}, which we use simply for holding this `HeapLow' address.
-We then store all global variables with a single \texttt{stmh} instruction,
-ensuring that the data is allocated at the offsets from `HeapLow' that we
-computed statically.
+the stack, which may result in heap register allocation. We subsequently store
+the heap pointer to the first scratch register \texttt{R5}, which we use simply
+for holding this `HeapLow' address. We then store all global variables with a
+single \texttt{stmh} instruction, ensuring that the data is allocated at the
+offsets from `HeapLow' that we computed.
 
 After the instructions for storing the global variables, we include a jump to
 the \texttt{main} label, denoting the entry point of the actual program,
@@ -293,22 +295,21 @@ followed by the result of compiling all function declarations, and finally the
 % compute the addresses of the global variables to load from and store to.
 
 
-\section{Multi-Register Values} \label{sec:codegen-multi-reg-vals}
+\section{Composite Data Types} \label{sec:codegen-multi-reg-vals}
 
 While values of the base types $\Int$, $\Bool$ and $\Char$ can all be
-stored in a single register, value instances of lists
-require---in general---multiple registers.
-We also support tuples, which also require at least two registers:
-values of type \code{\TProd{$\tau_1$}{$\tau_2$}} can be stored in two registers
+stored in a single stack entry, value instances of lists
+require---in general---multiple entries, or addresses.
+We also support tuples, which also require at least two entries:
+values of type \code{\TProd{$\tau_1$}{$\tau_2$}} can be stored in two entries
 when both $\tau_1$ and $\tau_2$ are base types.
-The left and right component may again be multi-register values though, and
-the programmer can nest tuples to an arbitrary depth, with types such as
-$\TProd{\TProd{\Int}{\Bool}}{\TProd{\Int}{\Char}}$. In this case, we would
-require four registers, within which we must compute the offsets when
-translating e.g. the selectors \code{.fst} and \code{.snd}.
+The left and right component may again be composite values though, and
+the programmer can nest tuples to an arbitrary depth, e.g. the type
+$\TProd{\TProd{\Int}{\Bool}}{\TProd{\Int}{\Char}}$ would require four stack
+entries.
 
 Perhaps more importantly, values of a list type \code{[$\tau$]} may require
-arbitrarily many registers, even when $\tau$ is a base type such as $\Int$.
+arbitrarily many memory cells, even when $\tau$ is a base type such as $\Int$.
 We store lists in a \emph{linked} representation on the heap, that is, as a
 number of list segments which reference each other's location in memory.
 More specifically, the $i$-th element of a list is stored in two components: the
@@ -318,8 +319,39 @@ To terminate such a chain of references, we reserve the register value
 \code{0xF0F0F0F0} as a `null pointer', similar to e.g. \code{null} in C or Java.
 We use this null pointer in the final segment of a list to express that the
 second component does not refer to the next segment, but instead terminates the
-list. In this way, the null pointer is the SSM counterpart to SPL's `nil', or
-\spl{[]}.
+list. In this way, the null pointer is the SSM counterpart to SPL's \spl{[]}.
+
+Consider, for example, the following variable declaration:
+\begin{lstlisting}[language=SPL]
+  var l = 1:2:3:[];
+\end{lstlisting}
+%
+Here, the value stored for \spl{l} is an address, pointing to the first
+segment of the list on the heap. The allocation of the list results in the heap
+layout shown in \cref{fig:list-heap-layout}.
+
+\begin{figure}[b]
+  \centering
+  \begin{tabular}{|>{\ttfamily}l| >{\ttfamily}l| l|}
+    \hline
+    \textbf{\textrm{Address}} & \textbf{\textrm{Value}} & \textbf{Field} \\
+    \hline
+    0x0007D0 & 0x000003 & \spl{.hd} \\
+    0x0007D1 & 0xF0F0F0 & \spl{.tl} \\
+    \hline
+    0X0007D2 & 0X000002 & \spl{.hd} \\
+    0X0007D3 & 0X0007D1 & \spl{.tl} \\
+    \hline
+    0X0007D4 & 0X000001 & \spl{.hd} \\
+    0X0007D5 & 0X0007D3 & \spl{.tl} \\
+    \hline
+  \end{tabular}
+  %
+  \caption{Heap layout (excerpt) after allocating the list \spl{1:2:3:[]}}
+  \label{fig:list-heap-layout}
+\end{figure}
+
+
 
 \subsection{List Representation Trade-Offs}
 At this point, it may seem odd that we use such a linked representation of
@@ -334,14 +366,14 @@ nested tuples, decomposable into a \emph{head} (the first element of the list)
 and a \emph{tail}, the remainder of the list following the head. This is
 reflected in the way SPL allows construction of lists, that is, via the
 \emph{cons} constructor `\spl{:}' with type
-$\forall \alpha.\ \alpha \to \TList{\alpha} \to \TList{\alpha}$, as well as the
+$\forall \alpha.\ \alpha\ \TList{\alpha} \to \TList{\alpha}$, as well as the
 destructors (selectors) on lists, namely \spl{.hd} and \spl{.tl}, which take a
 non-nil list instance and return the head and tail, respectively.
 
 Such a recursive representation of lists stands in contrast to the \emph{arrays}
 that are a staple of imperative languages such as C or Java. These correspond
-to a block of registers with fixed size, where the registers can be
-accessed by index in $\bigO(1)$ time.
+to a block of memory cells with fixed size, where the entries can be
+accessed by their index in $\bigO(1)$ time.
 Importantly, the size of an array is fixed at instantiation and thus known
 a-priori, while a recursive SPL list can grow and shrink at runtime. To express
 such a semantics in SPL while storing the list elements in register blocks would
@@ -453,12 +485,11 @@ arguments is a self-referential, infinite list.
 
 
 
-\section{Polymorphism and Boxing} \label{sec:polymorphism-boxing}
+\section{Polymorphism and Parameter Passing} \label{sec:polymorphism-boxing}
 
 As pointed out in the previous section, our choice of representation for lists
 and tuples in SSM is also informed by the code generation for polymorphic
-functions, and their interaction with the data on which they operate.
-
+functions.
 To a simple example (perhaps the simplest), let us consider the polymorphic
 identity function:
 \begin{lstlisting}[language=spl]
@@ -469,7 +500,7 @@ identity function:
 %
 Throughout a given source program, this function may be called at a whole number
 of different types, e.g. \spl{id(42)}, \spl{id(42:[])}, or \spl{id((40,2))}. For
-translating such a function to SSM, we have two general approaches we can choose
+translating such a function to SSM, we have two general approaches we can pick
 between:
 \begin{enumerate}[label={(\arabic*)}]
   \item \textbf{Monomorphisation.} We could generate a monomorphic instance of
@@ -495,58 +526,55 @@ between:
         consider the argument type in any way.
 \end{enumerate}
 
-One downside of (2) is that boxing tuples and lists results in a slight
-performance decrease whenever we actually construct or destruct tuple and list
-instances. In particular, instances of these types are always pointers to the
-heap, so we must always first load from the heap when accessing the data.
+Of these two, we choose approach (2), that is, we use a \emph{pass-by-value}
+semantics only for the base types, and use \emph{pass-by-reference} for all
+composite types.
 
-A larger disadvantage of storing all tuples and lists on the heap is an increase
-in memory usage. For instance, we might call a function which constructs and
-returns a nested tuple value from which we select just one of the entries and
-discard the rest.
-In such a scenario, the entire tuple remains stored on the heap, and freeing the
-occupied registers would require us to implement some form of memory management,
-that is, moving around entries on the heap such that we can decrement the heap
-pointer and free up registers whose data is no longer needed.
+\paragraph{Further considerations}
+One downside is that this results in a slight performance decrease whenever we
+construct, access or update instances of tuples and lists. In particular,
+instances of these types are always pointers to the heap, so we must first load
+from the heap when accessing the data.
+Another disadvantage is an increase in memory usage. For example, if we call
+a function which internally constructs a tuple, the tuple instance will remain
+stored on the heap, even after we lose access to the pointer.
+Freeing the occupied registers would require us to implement some form of memory
+management, that is, moving around entries on the heap such that we can
+decrement the heap pointer and free up registers whose data is no longer needed.
 
 On the other hand, an issue with the monomorphisation approach of (1) is that it
 may lead to a combinatorial explosion of specialised function instances.
-Take, for example, the following function, which converts left-deep tuples into
-right-deep tuples:
-\begin{lstlisting}[language=spl]
-  renest(t) :: ((a,b),c) -> (a,(b,c)) {
-    var t1 = t.fst;
-    return (t1.fst, (t1.snd, t.snd));
-  }
-\end{lstlisting}
+% Take, for example, the following function, which converts left-deep tuples into
+% right-deep tuples:
+% \begin{lstlisting}[language=spl]
+%   renest(t) :: ((a,b),c) -> (a,(b,c)) {
+%     var t1 = t.fst;
+%     return (t1.fst, (t1.snd, t.snd));
+%   }
+% \end{lstlisting}
 %
-The programmer may define such a polymorphic function and use it with numerous
-unique combinations of types for the type variables \spl{a}, \spl{b} and
-\spl{c}. If each type variable is instantiated with e.g. three different types,
-we may already need up to 27 monomorphic function instances to cover all calls
-to the \spl{renest} function.
-We could of course mitigate this combinatorial increase somewhat by e.g.
-treating at least all single-register base types uniformly, though even then
-there would still be cases where we get many specialised instances, albeit for
-slightly more contrived examples.
+A programmer may a function with multiple polymorphic arguments and use it with
+numerous combinations of types, which could lead to a large amount of distinct
+combinations for which we must generate monomorphic instances.
+We could mitigate this combinatorial increase somewhat by e.g. treating at least
+all single-register base types uniformly, though even then there would still be
+cases where we get many specialised instances, albeit for slightly more
+contrived examples.
 
-
-\section{Parameter Passing} \label{sec:codegen-param-passing}
+\paragraph{Parameter passing semantics}
 Beyond the considerations regarding the representation for values of various
 data types covered so far, we must also pay attention to how our choices may
 (inadvertently) affect the semantics resulting from our code generation.
-In particular, the choice between the monomorphisation or boxing approach
-covered in \cref{sec:polymorphism-boxing} naturally leads to two different
-behaviours when passing tuples as function parameters, as we will illustrate
-with the following example.
+In particular, the boxing and monomorphisation approach for dealing with
+polymorphism naturally lead to two different behaviours when passing tuples as
+function parameters, as we will illustrate with the following example.
 
-\subsection{Example: Tuple Parameter}
-If we chose the monomorphisation approach for tuples and allocated all tuples on
-the stack, then loading a tuple from e.g. a local or global variable would
-result in a full copy, i.e. the entries (fields) are copied to
-the top of the stack.
+\paragraph{Tuple parameter example}
+If we keep all tuple data on the stack and use pass-by-value, then calling a
+function with a tuple would pass that function a full copy of the data, i.e. all
+entries are copied to the top of the stack before branching.
 
-Let us consider the following function, which allocates a tuple in a local
+Let us consider the following function, which stores a tuple in a local
 variable, which it then passes to the function \spl{g}.
 %
 \begin{lstlisting}[language=spl]
@@ -562,27 +590,23 @@ variable, which it then passes to the function \spl{g}.
   }
 \end{lstlisting}
 %
-In the first approach, loading a tuple results in both fields being placed on
-the stack, such that \spl{g} is called with the \emph{data} from the tuple entries.
-Modifications to the tuple performed in \spl{g} are thus not reflected in
-\spl{f}. In the example above, \spl{g} increments the first entry of its
+Using pass-by-value, \spl{g} is called with the \emph{data} from the tuple
+entries. Modifications to the tuple performed in \spl{g} are thus not reflected
+in \spl{f}. In the example above, \spl{g} increments the first entry of its
 argument, but \spl{g} is operating on a copy of the tuple while in the scope of
-\spl{f}, the variable \spl{t} refers to the original tuple data.
-As such, the function call \spl{g(t)} in \spl{f} cannot affect the output of
-\spl{f}. This behaviour is commonly referred to as \emph{pass-by-value}, since
-the \emph{value} of \spl{t} (in this case, the $\Int$ and $\Bool$ field) is
-passed to the function.
+\spl{f}, the variable \spl{t} refers to the original tuple data. As such, the
+function call \spl{g(t)} in \spl{f} cannot affect the output of \spl{f}.
 
-Pass-by-value stands in contrast to a \emph{pass-by-reference} semantics, where
-\spl{g} instead receives a reference to \spl{t}, that is, the location of the
-original data, rather than a copy.
-We obtain such a semantics with the boxing approach, since the local variable
-\spl{t} then stores the heap location of the tuple data. In the call \spl{g(t)},
-the \emph{location} of \spl{t} is passed to \spl{g}, rather than the data itself,
-and the incrementation performed in \spl{g} will thus also be reflected in the
-scope of \spl{f}, since the original data on the heap is modified.
-For example, the following \spl{main} function would print \spl{43} with
-pass-by-reference, while for pass-by-value semantics it would print \spl{42}.
+By choosing the `boxing' approach, we instead obtain a pass-by-reference
+semantics for tuples, where \spl{g} instead receives a reference to \spl{t},
+that is, the location of the original data, rather than a copy.
+The local variable \spl{t} then stores the heap location of the tuple data. In
+the call \spl{g(t)}, the \emph{location} of \spl{t} is passed to \spl{g}, rather
+than the data itself, and the incrementation performed in \spl{g} will thus also
+be reflected in the scope of \spl{f}, since the original data on the heap is
+modified. For example, the following \spl{main} function would print \spl{43}
+with pass-by-reference, while for pass-by-value semantics it would print
+\spl{42}.
 %
 \begin{lstlisting}[language=spl]
   main() {
@@ -590,9 +614,10 @@ pass-by-reference, while for pass-by-value semantics it would print \spl{42}.
   }
 \end{lstlisting}
 
-While the two approaches described in \cref{sec:polymorphism-boxing} lend
-themselves better to either a pass-by-value or pass-by-reference behaviour, it's
-important to note that these two design choices are not directly related.
+While the boxing approach described in \cref{sec:polymorphism-boxing} lends
+itself better to a pass-by-reference semantics, and monomorphisation lends
+itself better to pass-by-value, it is important to note that these two design
+choices are not directly related.
 In principle, we could also combine polymorphism through boxing with
 pass-by-value behaviour for tuples, or vice versa with monomorphisation and
 pass-by-reference.
@@ -604,7 +629,7 @@ This is especially relevant for lists, as a single list instance may contain
 many elements, and thus require a large amount of heap memory.
 
 
-\subsection{Lists}
+\paragraph{List parameter passing}
 Since we represent lists using linked segments on the heap, we think it is more
 natural for lists to be (implicitly) passed as reference parameters, that is, a
 heap location referring to the head segment of the list.
@@ -613,20 +638,54 @@ function can modify the original list instance, as well as its sublists.
 
 
 
+\section{Overloaded Functions}
+
+When generating code for the overloaded comparison operators and the \spl{print}
+function, we use the type annotations generated by the typing stage, in
+particular the annotations which are added by the elaboration step, described
+in \cref{sec:elaboration}.
+
+The types allow us to disambiguate between calls to the overloaded functions
+at different types, so that we can pick the appropriate implementation.
+For the comparison operators, we actually just generate the corresponding
+instruction, e.g. \code{eq} or \code{ne}.
+Since all types is represented in a single entry on the stack, this yields
+correct comparison of integers and characters, and gives a way of checking
+object equality, or reference equality, for composite data types.
+
+The \spl{print} function is only correctly implemented for the base types, where
+we use the \code{trap} instruction for printing integers and characters.
+For Booleans, we include a printing subroutine, and generate an instruction for
+branching to the subroutine for an application of \spl{print} with a Boolean
+argument.
+For composite data types, we just print the value as an integer, that is, the
+heap address where the data is stored. This might not be the behaviour that the
+programmer expects, but we felt that it might be useful for debugging purposes.
+
+In order to support object equivalence for \code{==} and full printing of
+composite data types with \spl{print}, we would need to use a form of
+\emph{dictionary passing.}
+Implementing overloading via dictionary passing would also require support for
+passing functions as parameters: if we want to print an instance of e.g. type
+\spl{[$\tau$]}, we would need to call the print instance for lists, which in turn
+would expect as its input the printing function for its elements of type $\tau$.
+
+While allowing functions as arguments/inputs would be fairly straightforward,
+supporting functions as outputs (i.e. partial function application, or currying)
+would be more challenging, and we thus consider full printing and object
+equivalence for composite types to be out of scope.
 
 
 
-
-
-\begin{todoenv}
-  \begin{itemize}
-    \item Compilation scheme?
-    \item How is data represented? Lists, tuples
-    \item Semantics style, call-by-reference, call-by-value?
-    \item How did you solve overloaded functions?
-    \item Polymorphism?
-    \item Printing?
-    \item Problems?
-    \item\ldots
-  \end{itemize}
-\end{todoenv}
+% \begin{todoenv}
+%   \begin{itemize}
+%     \item Compilation scheme?
+%     \item How is data represented? Lists, tuples
+%     \item Semantics style, call-by-reference, call-by-value?
+%     \item How did you solve overloaded functions?
+%     \item Polymorphism?
+%     \item Printing?
+%     \item Problems?
+%     \item\ldots
+%   \end{itemize}
+% \end{todoenv}
