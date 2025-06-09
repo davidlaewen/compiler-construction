@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, OverloadedRecordDot #-}
+{-# LANGUAGE FlexibleInstances, OverloadedRecordDot, LambdaCase #-}
 
 module Parser.Parser (parser) where
 
@@ -8,10 +8,10 @@ import Syntax.ParseAST
 import Text.Megaparsec as MP
 import Parser.Tokens (Token(..), Keyword(..), Symbol(..))
 import qualified Data.Set as S
-import Control.Monad (void)
 import qualified Data.Text as T
 import Utils.Loc (Loc(..), HasLoc(..), defaultPos)
 import Utils.Utils (fst3)
+import Data.Maybe (fromMaybe)
 
 ----------------------
 -- Declarations
@@ -28,18 +28,20 @@ varDeclP = do
   pure $ VarDecl (Loc startPos endPos) mty name expr
   where
     varOrTypeP :: TokenParser (Maybe Type, SourcePos)
-    varOrTypeP = do
-      mVar <- optional $ keywordP KwVar
-      case mVar of
-        Just ((),start,_) -> pure (Nothing,start)
-        Nothing -> monoTypeP >>= \ty -> pure (Just ty, getStart ty)
+    varOrTypeP = (keywordP KwVar >>= \(_,start,_) -> pure (Nothing, start)) <|>
+                 (monoTypeP >>= \ty -> pure (Just ty, getStart ty))
+      -- mVar <- optional $ keywordP KwVar
+      -- case mVar of
+      --   Just ((),start,_) -> pure (Nothing,start)
+      --   Nothing -> monoTypeP >>= \ty -> pure (Just ty, getStart ty)
 
 dataDeclP :: TokenParser DataDecl
 dataDeclP = do
   (_,startPos,_) <- keywordP KwData
   (name,_,_) <- nameP
+  (tyParams,_,_) <- anglesP ((fst3 <$> idP) `sepBy` symbolP SymComma) <|> pure (withDummyPos [])
   (constrs,_,endPos) <- bracesP $ dataConstrP `sepBy` symbolP SymComma
-  pure $ DataDecl (Loc startPos endPos) name constrs
+  pure $ DataDecl (Loc startPos endPos) name tyParams constrs
 
 dataConstrP :: TokenParser DataConstr
 dataConstrP = do
@@ -51,15 +53,14 @@ dataConstrP = do
     constrArgP = do
       (selector,_,_) <- idP
       _ <- symbolP SymColon
-      ty <- monoTypeP -- We currently only support monomorphic constructors
+      ty <- polyTypeP -- We currently only support monomorphic constructors
       pure (selector,ty)
 
 funDeclP :: TokenParser FunDecl
 funDeclP = do
   funIdOffset <- getOffset
   (name,startPos,_) <- idP
-  (params,_,_) <- parensP ((idP `sepBy` symbolP SymComma) >>=
-    \t -> pure (fst3 <$> t))
+  (params,_,_) <- parensP ((fst3 <$> idP) `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   ((decls,stmts),_,endPos) <- bracesP $ do
     decls <- many varDeclP -- (try isVarDeclLookahead >> varDeclP)
@@ -71,12 +72,6 @@ funDeclP = do
     handleNoStatements :: Int -> [Stmt] -> TokenParser ()
     handleNoStatements offset [] = registerErrorOffset () FunctionMissingStatements offset
     handleNoStatements _ _ = pure ()
-
-    isVarDeclLookahead :: TokenParser ()
-    isVarDeclLookahead = lookAhead $
-      void (keywordP KwVar) <|>
-      void (symbolP SymParenLeft) <|> void (symbolP SymBracketLeft) <|>
-      void (monoTypeP >> idP)
 
 
 ----------------------
@@ -105,15 +100,23 @@ listTypeP innerP = do
   (_,_,end) <- symbolP SymBracketRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBracketRight)
   pure $ List (Loc start end) ty
 
-dataTypeP :: TokenParser Type
-dataTypeP = nameP >>= \(name,start,end) ->
-  pure $ DataT (Loc start end) name
+dataTypeP :: TokenParser Type -> TokenParser Type
+dataTypeP innerP = do
+  (name,start,end) <- nameP
+  (anglesP (innerP `sepBy` symbolP SymComma) >>= \(tyArgs,_,end') ->
+      pure $ DataT (Loc start end') name tyArgs)
+    <|> pure (DataT (Loc start end) name [])
+  -- optional (anglesP $ innerP `sepBy` symbolP SymComma) >>= \case
+  --   Nothing -> pure $ DataT (Loc start end) name []
+  --   Just (tyArgs,_,end') -> pure $ DataT (Loc start end') name tyArgs
+
 
 monoTypeP :: TokenParser Type
-monoTypeP = baseTypeP <|> dataTypeP <|> prodTypeP monoTypeP <|> listTypeP monoTypeP
+monoTypeP = baseTypeP <|> dataTypeP monoTypeP <|> prodTypeP monoTypeP <|> listTypeP monoTypeP
 
 polyTypeP :: TokenParser Type
-polyTypeP = baseTypeP <|> tyVarP <|> dataTypeP <|> prodTypeP polyTypeP <|> listTypeP polyTypeP
+polyTypeP = baseTypeP <|> tyVarP <|> dataTypeP polyTypeP <|>
+            prodTypeP polyTypeP <|> listTypeP polyTypeP
   where
     tyVarP = idP >>= \(ident,start,end) ->
       pure $ TyVar (Loc start end) ident
@@ -328,12 +331,13 @@ ifP = do
   -- _ <- symbolP SymBraceLeft <|> registerError (withDummyPos ()) IfNoOpenBrace
   (thenStmts,_,end) <- bracesP $ many (withRecovery parseToNextStmt stmtP)
   -- (_,_,end) <- symbolP SymBraceRight <|> registerError (withDummyPos ()) (NoClosingDelimiter SymBraceRight)
-  mElseStmts <- optional $ do
+  (elseStmts,endPos) <- fromMaybe ([],end) <$> optional (do
     _ <- keywordP KwElse
-    bracesP $ many (withRecovery parseToNextStmt stmtP)
-  let (elseStmts,endPos) = case mElseStmts of
-        Nothing -> ([],end)
-        Just (stmts,_,end') -> (stmts,end')
+    (stmts,_,end') <- bracesP $ many (withRecovery parseToNextStmt stmtP)
+    pure (stmts,end'))
+  -- let (elseStmts,endPos) = case mElseStmts of
+  --       Nothing -> ([],end)
+  --       Just (stmts,_,end') -> (stmts,end')
   pure $ If (Loc startPos endPos) cond thenStmts elseStmts
 
 whileP :: TokenParser Stmt
@@ -384,7 +388,7 @@ programP :: TokenParser Program
 programP = do
   -- All varDecls must appear before all funDecls
   dataDecls <- many dataDeclP
-  varDecls <- many varDeclP -- many (try isVarDeclLookAhead >> varDeclP)
+  varDecls <- many varDeclP
   funDecls <- many funDeclP
   handleNoFunDecls funDecls
   Program dataDecls varDecls funDecls <$ eof
@@ -392,12 +396,6 @@ programP = do
     handleNoFunDecls :: [FunDecl] -> TokenParser ()
     handleNoFunDecls [] = registerError () ProgramNoFunDecls
     handleNoFunDecls _ = pure ()
-    -- | Disallow generic variables on top level
-    isVarDeclLookAhead :: TokenParser ()
-    isVarDeclLookAhead = lookAhead $ void baseTypeP <|>
-      void (satisfy $ isSymbol SymParenLeft) <|>
-      void (satisfy $ isSymbol SymBracketLeft) <|>
-      void (satisfy $ isKeyword KwVar)
 
 
 parser :: FilePath -> TokenStream -> Either (ParseErrorBundle TokenStream ParserError) Program
@@ -439,7 +437,6 @@ registerError x e = getOffset >>= registerErrorOffset x e
 withDummyPos :: a -> WithPos a
 withDummyPos x = (x,defaultPos,defaultPos)
 
--- FIXME: Refactor these to make them less clunky
 symbolP :: Symbol -> TokenParser (WithPos ())
 symbolP s = token test S.empty
   where
@@ -463,12 +460,6 @@ nameP = token test S.empty
   where
     test (Positioned start end _ _ (NameToken name)) = Just (name,start,end)
     test _ = Nothing
-
-isKeyword :: Keyword -> Positioned Parser.Tokens.Token -> Bool
-isKeyword kw (Positioned _ _ _ _ t) = t == Keyword kw
-
-isSymbol :: Symbol -> Positioned Parser.Tokens.Token -> Bool
-isSymbol sym (Positioned _ _ _ _ t) = t == Symbol sym
 
 intP :: TokenParser Expr
 intP = token test S.empty
@@ -510,3 +501,8 @@ parensP = betweenP (symbolP SymParenLeft) (symbolP SymParenRight)
 --   in the argument.
 bracesP :: TokenParser a -> TokenParser (WithPos a)
 bracesP = betweenP (symbolP SymBraceLeft) (symbolP SymBraceRight)
+
+-- | Parses object of form `< a >`, where a is parsed by the parser provided
+--   in the argument.
+anglesP :: TokenParser a -> TokenParser (WithPos a)
+anglesP = betweenP (symbolP SymLessThan) (symbolP SymGreaterThan)

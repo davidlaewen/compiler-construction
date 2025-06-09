@@ -46,7 +46,7 @@ computeOffsets (x:xs) acc = acc : computeOffsets xs (x + acc)
 codegen :: Program UType UScheme -> Codegen SSMProgram
 codegen (Program dataDecls varDecls funDecls) = do
   predicatesProgram <- concatMapM codegenDataDecl dataDecls
-  let varSizes = map (\(VarDecl _ _ _ _ ty) -> uTypeSize ty) varDecls
+  let varSizes = map (const 1) varDecls
   -- TODO: All entries are single-register, simplify this
   let varOffsets = computeOffsets varSizes 0
   varDeclsProgram <- concatMapM codegenGlobalVarDecl (zip varOffsets varDecls)
@@ -59,7 +59,7 @@ codegen (Program dataDecls varDecls funDecls) = do
       BranchSubr "main" : Halt : predicatesProgram ++ funDeclsProgram ++ [Halt]
 
 codegenDataDecl :: DataDecl -> Codegen SSMProgram
-codegenDataDecl (DataDecl _ _ ctors) = do
+codegenDataDecl (DataDecl _ _ _ ctors) = do
   -- Enumerate all constructors, starting at 0
   let ctorLabels = zip ctors [(0::Int)..]
   -- Map each ctor name to its label and field count
@@ -164,11 +164,11 @@ codegenStmt (Assign _ varLookup _ expr) = do
           pure (program ++ [LoadAddress 0], ident)
         Fst -> -- Load tuple address, move to first component
           pure (program ++ [LoadAddress 0, AddOffset $ -1], ident)
-        Snd -> -- Load tuple address, alread at second component
+        Snd -> -- Load tuple address, already at second component
           pure (program ++ [LoadAddress 0], ident)
         (SelField name) -> do
-          offset <- lookupSelector name
-          let loadProgram = LoadAddress 0 : [AddOffset offset | offset /= 0]
+          offset <- lookupSelector name -- Offset is always non-zero
+          let loadProgram = LoadAddress 0 : [AddOffset offset]
           pure (program ++ loadProgram, ident)
 
 codegenStmt (FunCall _ funName args) = do

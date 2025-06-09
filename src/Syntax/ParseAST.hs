@@ -24,7 +24,7 @@ import Parser.Tokens (Symbol(..))
 data Program = Program [DataDecl] [VarDecl] [FunDecl]
   deriving Show
 
-data DataDecl = DataDecl Loc T.Text [DataConstr]
+data DataDecl = DataDecl Loc T.Text [T.Text] [DataConstr]
   deriving Show
 
 data DataConstr = DataConstr Loc T.Text [(T.Text, Type)]
@@ -51,7 +51,7 @@ data Type = IntT Loc
           | List Loc Type
           | Void Loc
           | Fun Loc [Type] Type
-          | DataT Loc T.Text
+          | DataT Loc T.Text [Type]
           | TyVar Loc T.Text
           | GarbageType
   deriving (Show, Eq)
@@ -134,7 +134,7 @@ instance HasLoc Type where
   getLoc (List loc _) = loc
   getLoc (Void loc) = loc
   getLoc (Fun loc _ _) = loc
-  getLoc (DataT loc _) = loc
+  getLoc (DataT loc _ _) = loc
   getLoc (TyVar loc _) = loc
   getLoc GarbageType = defaultLoc
 

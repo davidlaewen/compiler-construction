@@ -130,7 +130,8 @@ freshVar = do
   modify (\s -> s{ varState = i+1 })
   pure i
 
--- | Replace type variables in user types with fresh unification variables
+-- | Replaces user type variables with unification variables according to the
+-- map provided in the first argument
 substTVars :: M.Map TVar UVar -> UType -> UType
 substTVars s (TVar t) =
   case M.lookup t s of
@@ -143,9 +144,10 @@ substTVars _ Void = Void
 substTVars s (Prod t1 t2) = Prod (substTVars s t1) (substTVars s t2)
 substTVars s (List t) = List (substTVars s t)
 substTVars s (Fun ts t) = Fun (substTVars s <$> ts) (substTVars s t)
-substTVars _ d@(Data _) = d
+substTVars s (Data name ts) = Data name (substTVars s <$> ts)
 substTVars _ u@(UVar _) = u
 
+-- | Finds the set of (free) user type variables in the given type
 freeTVars :: UType -> S.Set TVar
 freeTVars Int = S.empty
 freeTVars Bool = S.empty
@@ -154,7 +156,7 @@ freeTVars Void = S.empty
 freeTVars (Prod t1 t2) = freeTVars t1 `S.union` freeTVars t2
 freeTVars (List t) = freeTVars t
 freeTVars (Fun ts t) = foldMap freeTVars ts `S.union` freeTVars t
-freeTVars (Data _) = S.empty
+freeTVars (Data _ tys) = foldMap freeTVars tys
 freeTVars (UVar _) = S.empty
 freeTVars (TVar t) = S.singleton t
 
@@ -171,7 +173,7 @@ instance Types UType where
   subst s (Prod t1 t2) = Prod (subst s t1) (subst s t2)
   subst s (List t) = List (subst s t)
   subst s (Fun ts t) = Fun (subst s <$> ts) (subst s t)
-  subst _ d@(Data _) = d
+  subst s (Data name ts) = Data name (subst s <$> ts)
   subst _ tv@(TVar _) = tv
 
   freeUVars :: UType -> S.Set UVar
@@ -182,7 +184,7 @@ instance Types UType where
   freeUVars (Prod t1 t2) = freeUVars t1 `S.union` freeUVars t2
   freeUVars (List t) = freeUVars t
   freeUVars (Fun ts t) = foldMap freeUVars ts `S.union` freeUVars t
-  freeUVars (Data _) = S.empty
+  freeUVars (Data _ ts) = foldMap freeUVars ts
   freeUVars (UVar i) = S.singleton i
   freeUVars (TVar _) = S.empty
 

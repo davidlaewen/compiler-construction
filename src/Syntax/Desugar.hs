@@ -20,8 +20,8 @@ instance Desugar P.Program (T.Program () ()) where
 
 instance Desugar P.DataDecl T.DataDecl where
   desugar :: P.DataDecl -> T.DataDecl
-  desugar (P.DataDecl loc name constrs) =
-    T.DataDecl loc name (desugar <$> constrs)
+  desugar (P.DataDecl loc name tyParams constrs) =
+    T.DataDecl loc name tyParams (desugar <$> constrs)
 
 instance Desugar P.DataConstr T.Ctor where
   desugar :: P.DataConstr -> T.Ctor
@@ -125,6 +125,6 @@ instance Desugar P.Type U.UType where
   desugar (P.List _ t) = U.List (desugar t)
   desugar (P.Void _) = U.Void
   desugar (P.Fun _ ts t) = U.Fun (desugar <$> ts) (desugar t)
-  desugar (P.DataT _ name) = U.Data name
+  desugar (P.DataT _ name tys) = U.Data name (desugar <$> tys)
   desugar (P.TyVar _ name) = U.TVar name
   desugar P.GarbageType = error "Attempted to desugar garbage Type node!"

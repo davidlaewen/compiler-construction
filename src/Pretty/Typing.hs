@@ -18,10 +18,14 @@ printProgram (Program dataDecls varDecls funDecls) = do
   putChar '\n'
 
 prettyPrintDataDecl :: Indentation -> DataDecl -> IO ()
-prettyPrintDataDecl i (DataDecl _ name constrs) = do
+prettyPrintDataDecl i (DataDecl _ name tyParams constrs) = do
   printIndentation i
-  putShow KwData
-  spaces (T.putStr name)
+  putShow KwData >> putChar ' '
+  T.putStr name
+  case tyParams of
+    [] -> pure () -- Only print type params if list is non-empty
+    (_:_) -> angles $ sepBy "," T.putStr tyParams
+  putChar ' '
   printBlock i $ sepBy ",\n" (prettyPrintConstr (i + tabWidth)) constrs
   where
     prettyPrintConstr :: Indentation -> Ctor -> IO ()
@@ -129,7 +133,10 @@ printUType (Ty.Fun argTys retTy) = do
   unless (null argTys) $ putChar ' '
   putShow SymRightArrow >> putChar ' '
   printUType retTy
-printUType (Ty.Data t) = T.putStr t
+printUType (Ty.Data t []) = T.putStr t
+printUType (Ty.Data t tys@(_:_)) = do
+  T.putStr t -- Only print type params if list is non-empty
+  angles $ sepBy "," printUType tys
 printUType (Ty.UVar i) = putChar 'u' >> putShow i
 printUType (Ty.TVar t) = T.putStr t
 

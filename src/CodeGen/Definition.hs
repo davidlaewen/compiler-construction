@@ -10,13 +10,10 @@ module CodeGen.Definition (
   freshLabel, modifyOffsets, modifyHeapLocs,
   insertCtorData, lookupCtorData,
   insertSelector, lookupSelector,
-  concatMapM,
-  uTypeSize
+  concatMapM
 ) where
 
 import CodeGen.Instructions (Instr(..))
-import TypeInference.Types (UType)
-import qualified TypeInference.Types as TI (UType(..))
 
 import Control.Monad.State (State, evalState, modify, gets)
 import qualified Data.Map as M
@@ -92,15 +89,3 @@ concatMapM f (x : xs) = do
   y <- f x
   ys <- concatMapM f xs
   pure $ y ++ ys
-
-uTypeSize :: UType -> Int
-uTypeSize TI.Int = 1
-uTypeSize TI.Bool = 1
-uTypeSize TI.Char = 1
-uTypeSize (TI.Prod _ _) = 1
-uTypeSize (TI.List _) = 1
-uTypeSize (TI.UVar _) = 1
-uTypeSize (TI.Data _) = 1
-uTypeSize (TI.Fun _ _) = error "Called uTypeSize on function type"
-uTypeSize TI.Void = error "Called uTypeSize on type `Void`"
-uTypeSize (TI.TVar t) = error $ "Called uTypeSize on illegal type: " <> show t

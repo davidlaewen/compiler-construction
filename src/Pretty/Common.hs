@@ -1,7 +1,7 @@
 module Pretty.Common (
   Indentation, tabWidth, printIndentation,
   putShow,
-  sepBy, between, parens, braces, brackets, spaces,
+  sepBy, between, parens, braces, brackets, angles, spaces,
   printBlock
 ) where
 
@@ -33,6 +33,8 @@ braces :: IO () -> IO ()
 braces = between (show SymBraceLeft) (show SymBraceRight)
 brackets :: IO () -> IO ()
 brackets = between (show SymBracketLeft) (show SymBracketRight)
+angles :: IO () -> IO ()
+angles = between (show SymLessThan) (show SymGreaterThan)
 spaces :: IO () -> IO ()
 spaces = between " " " "
 

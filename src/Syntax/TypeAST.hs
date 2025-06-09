@@ -20,7 +20,7 @@ import Utils.Loc (Loc, HasLoc(..))
 data Program varAnnot funAnnot = Program [DataDecl] [VarDecl varAnnot] [FunMutDecl varAnnot funAnnot]
   deriving Show
 
-data DataDecl = DataDecl Loc T.Text [Ctor]
+data DataDecl = DataDecl Loc T.Text [T.Text] [Ctor]
   deriving Show
 
 data Ctor = Ctor Loc T.Text [(T.Text,UType)]

@@ -11,16 +11,21 @@ import Pretty.Common
 prettyPrintProgram :: Indentation -> Program -> IO ()
 prettyPrintProgram _ (Program dataDecls varDecls funDecls) = do
   sepBy "\n\n" (prettyPrintDataDecl 0) dataDecls >> putStrLn "\n"
-  sepBy "\n" (prettyPrintVarDecl 0) varDecls
+  sepBy "\n" (prettyPrintVarDecl 0) varDecls >> putStrLn ""
   unless (null varDecls || null funDecls) $ putStrLn ""
   sepBy "\n\n" (prettyPrintFunDecl 0) funDecls
   putStrLn ""
 
 prettyPrintDataDecl :: Indentation -> DataDecl -> IO ()
-prettyPrintDataDecl i (DataDecl _ name constrs) = do
+prettyPrintDataDecl i (DataDecl _ name tyParams constrs) = do
   printIndentation i
-  putShow KwData
-  spaces (T.putStr name)
+  putShow KwData >> putChar ' '
+  T.putStr name
+  case tyParams of
+    [] -> pure ()
+    (_:_) -> between (show SymLessThan) (show SymGreaterThan) $
+      sepBy "," T.putStr tyParams
+  putChar ' '
   printBlock i $ sepBy ",\n" (prettyPrintConstr (i + tabWidth)) constrs
   where
     prettyPrintConstr :: Indentation -> DataConstr -> IO ()
@@ -55,7 +60,9 @@ prettyPrintType (Fun _ argTypes retType) = do
   sepBy " " prettyPrintType argTypes
   spaces (putShow SymRightArrow)
   prettyPrintType retType
-prettyPrintType (DataT _ name) = T.putStr name
+prettyPrintType (DataT _ name tys) = do
+  T.putStr name
+  between (show SymLessThan) (show SymGreaterThan) $ sepBy "," prettyPrintType tys
 prettyPrintType GarbageType = putShow GarbageType
 
 prettyPrintExpr :: Expr -> IO ()

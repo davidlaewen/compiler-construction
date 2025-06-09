@@ -31,18 +31,25 @@ checkList f (x:xs) = do
   pure (x':xs', ss <> s)
 
 checkDataDecl :: DataDecl -> CGen ()
-checkDataDecl (DataDecl _ name ctors) = do
-  mapM_ (checkDataCtor name) ctors
+checkDataDecl (DataDecl _ name tyParams ctors) = do
+  let uvars    = take (length tyParams) [(0::Int)..]
+      uvarSet  = S.fromList uvars
+      tvarMap  = M.fromList (zip tyParams uvars)
+      dataType = Data name (UVar <$> uvars)
+  mapM_ (checkDataCtor dataType uvarSet tvarMap) ctors
 
-checkDataCtor :: Text.Text -> Ctor -> CGen ()
-checkDataCtor declName (Ctor _ cName args) = do
-  -- TODO: Quantify over type variables here to support polymorphism
-  envInsertCtor cName $ UScheme S.empty (Fun (snd <$> args) (Data declName))
+checkDataCtor :: UType -> S.Set UVar -> M.Map TVar UVar -> Ctor -> CGen ()
+checkDataCtor dataType uvarSet tvarMap (Ctor _ cName args) = do
+  -- All type schemes include the data type listing all type arguments, hence we
+  -- always quantify over `uvarSet`
+  let argTys = substTVars tvarMap . snd <$> args
+  envInsertCtor cName $ UScheme uvarSet (Fun argTys dataType)
   -- Insert constructor predicate function of the form `is<CName>` with scheme
   -- `∀ . <DataType> -> Bool`
-  envGlobalInsertFun ("is" <> cName) $ UScheme S.empty (Fun [Data declName] Bool)
+  envGlobalInsertFun ("is" <> cName) $ UScheme uvarSet (Fun [dataType] Bool)
   forM_ args (\(selName,ty) -> -- Insert selector schemes
-    envInsertSelector selName $ UScheme S.empty (Fun [Data declName] ty))
+    let outTy = substTVars tvarMap ty in
+    envInsertSelector selName $ UScheme uvarSet (Fun [dataType] outTy))
 
 checkVarDecls :: EnvLevel -> [VarDecl ()] -> CGen ([VarDecl UType], Subst)
 checkVarDecls envLevel = checkList $ checkVarDecl envLevel
@@ -112,17 +119,16 @@ checkFunDecl (FunDecl loc name params mTy varDecls stmts _) = do
   (stmts',stmtsSubst) <- checkStmts stmts
   clearLocalEnv
   -- Check user-specified type against inferred type
+  let s = stmtsSubst <> varDeclsSubst
+  let funTy' = subst s funTy
   tySubst <- case mTy of
     Nothing -> pure mempty
     Just userTy -> do -- Substitute uvars for tvars in annotated type
       userTy' <- instantiateUserType userTy
-      unify funTy userTy' loc
-  applySubst tySubst
-  let s = stmtsSubst <> varDeclsSubst <> tySubst
-  let ty = subst s $ Fun uVarsParams uVarRet
-  let funScheme = UScheme S.empty ty
+      unify funTy' userTy' loc
+  let funScheme = UScheme S.empty (subst tySubst funTy')
   envGlobalInsertFun name funScheme
-  pure (FunDecl loc name params mTy varDecls' stmts' funScheme, s)
+  pure (FunDecl loc name params mTy varDecls' stmts' funScheme, tySubst <> s)
 
 instantiateUserType :: UType -> CGen UType
 instantiateUserType ty = do
@@ -178,7 +184,7 @@ checkStmt (Assign loc varLookup _ expr) = do
         (SelField name) -> do
           (inTy,outTy) <- envLookupSelector name >>= \case
             Nothing -> throwLocError loc' $ "Could not find selector `" <> name <> "`"
-            Just (UScheme _ (Fun [dataTy@(Data _)] outputTy)) -> pure (dataTy,outputTy)
+            Just (UScheme _ (Fun [dataTy@(Data _ _)] outTy)) -> pure (dataTy,outTy)
             Just _ -> error $ "Selector `" <> T.unpack name <> "` does not map out of data type!"
           s <- unify exprType outTy loc'
           (varTy,s') <- go varLkp inTy
@@ -238,20 +244,23 @@ checkFunCall funName args loc = do
   case funType of
     Fun paramTypes retType -> do
       (args', argsTypes, argsSubst) <- checkExprs args
-      s <- unifyLists paramTypes argsTypes
-      applySubst s
-      pure (args', subst s retType, s <> argsSubst)
+      if length paramTypes /= length argsTypes then throwLocError loc $
+        "Incorrect number of arguments in call to " <> pack (show funName)
+      else do
+        s <- unifyLists paramTypes argsTypes loc
+        applySubst s
+        pure (args', subst s retType, s <> argsSubst)
     _ -> error $ -- Invalid global env entry, internal error
       "Function " <> show funName <> " does not have function type"
-  where
-    unifyLists :: [UType] -> [UType] -> CGen Subst
-    unifyLists [] [] = pure mempty
-    unifyLists (ty1:tys1) (ty2:tys2) = do
-      s <- unify ty1 ty2 loc
-      ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
-      pure $ ss <> s
-    unifyLists _ _ =
-      throwLocError loc $ "Incorrect number of arguments in call to " <> pack (show funName)
+  -- where
+  --   unifyLists :: [UType] -> [UType] -> CGen Subst
+  --   unifyLists [] [] = pure mempty
+  --   unifyLists (ty1:tys1) (ty2:tys2) = do
+  --     s <- unify ty1 ty2 loc
+  --     ss <- unifyLists (subst s <$> tys1) (subst s <$> tys2)
+  --     pure $ ss <> s
+  --   unifyLists _ _ =
+  --     throwLocError loc $ "Incorrect number of arguments in call to " <> pack (show funName)
 
 instantiateScheme :: UScheme -> CGen UType
 instantiateScheme (UScheme tVars ty) = do

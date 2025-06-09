@@ -5,6 +5,7 @@ module TypeInference.Types (
 import qualified Data.Text as T
 import qualified Data.Set as S
 import Parser.Tokens (Keyword(..))
+import Data.List (intercalate)
 
 type UVar = Int
 type TVar = T.Text
@@ -12,7 +13,7 @@ type TVar = T.Text
 data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType
            | Fun [UType] UType
-           | Data T.Text
+           | Data T.Text [UType]
            | UVar UVar
            | TVar TVar
   deriving Eq
@@ -27,7 +28,8 @@ instance Show UType where
   show (List ty) = "[" <> show ty <> "]"
   show (Fun argTys retTy) = unwords (show <$> argTys) <>
     (if null argTys then "-> " else " -> ") <> show retTy
-  show (Data t) = T.unpack t
+  show (Data t tys) = T.unpack t <>
+    (if null tys then "" else "<" <> intercalate "," (show <$> tys) <> ">")
   show (UVar i) = "u" <> show i
   show (TVar t) = T.unpack t
 
