@@ -32,8 +32,8 @@ checkList f (x:xs) = do
 
 checkDataDecl :: DataDecl -> CGen ()
 checkDataDecl (DataDecl _ name tyParams ctors) = do
-  let uvars    = take (length tyParams) [(0::Int)..]
-      uvarSet  = S.fromList uvars
+  uvars <- forM tyParams (const freshVar)
+  let uvarSet  = S.fromList uvars
       tvarMap  = M.fromList (zip tyParams uvars)
       dataType = Data name (UVar <$> uvars)
   mapM_ (checkDataCtor dataType uvarSet tvarMap) ctors

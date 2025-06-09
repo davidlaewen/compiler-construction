@@ -35,14 +35,14 @@ unify (Prod s1 s2) (Prod t1 t2) loc = do
   let t2' = subst subst1 t2
   subst2 <- unify s2' t2' loc
   pure $ subst2 <> subst1
-unify ty1@(Fun ts1 rt1) ty2@(Fun ts2 rt2) loc = unifyFunTypes (ts1,rt1) (ts2,rt2) mempty loc
-  -- if length ts1 /= length ts2 then throwLocError loc $
-  --     "The number of input types in `" <> T.pack (show ty1) <>
-  --     "` and `" <> T.pack (show ty2) <> "` do not match!"
-  -- else do
-  --   s <- unifyLists ts1 ts2 loc
-  --   s' <- unify (subst s rt1) (subst s rt2) loc
-  --   pure $ s' <> s
+unify ty1@(Fun ts1 rt1) ty2@(Fun ts2 rt2) loc =
+  if length ts1 /= length ts2 then throwLocError loc $
+      "The number of input types in `" <> T.pack (show ty1) <>
+      "` and `" <> T.pack (show ty2) <> "` do not match!"
+  else do
+    s <- unifyLists ts1 ts2 loc
+    s' <- unify (subst s rt1) (subst s rt2) loc
+    pure $ s' <> s
 unify ty1@(Data t1 tys1) ty2@(Data t2 tys2) loc | t1 == t2 =
   if length tys1 /= length tys2 then throwLocError loc $
     "The number of type arguments in `" <> T.pack (show ty1) <>
