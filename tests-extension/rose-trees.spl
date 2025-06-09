@@ -1,10 +1,10 @@
 // Integer rose trees
-// Type of nodes: μ α. Int × [α]
+// Type of nodes: μα. Int × [α]
 // We can use a custom data/record type to construct the above infinite
 // recursive type given above.
 
-data RoseTreeInt {
-  Node(label : Int, forest : [RoseTreeInt])
+data RoseTreeInt<a> {
+  Node(label : a, forest : [RoseTreeInt<a>])
 }
 
 var exTree123 = Node(1, Node(2,[]) : Node(3,[]) : []);
@@ -19,7 +19,7 @@ var exTree2468 = Node(2, Node(4, Node(6,[]):[]) : Node(8,[]):[] );
    /
   6       */
 
-sumLabelsList(l) :: [RoseTreeInt] -> Int {
+sumLabelsList(l) :: [RoseTreeInt<Int>] -> Int {
   if (isEmpty(l)) {
     return 0;
   } else {
@@ -27,7 +27,7 @@ sumLabelsList(l) :: [RoseTreeInt] -> Int {
   }
 }
 
-sumLabels(t) :: RoseTreeInt -> Int {
+sumLabels(t) :: RoseTreeInt<Int> -> Int {
   return t.label + sumLabelsList(t.forest);
 }
 

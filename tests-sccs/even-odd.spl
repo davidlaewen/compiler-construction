@@ -1,4 +1,21 @@
 // Even and odd predicates defined by mutual recursion
+/** In the SCC formed by the `lenEven` and `lenOdd` function, the correct type
+    of `lenEven` is only known once `lenOdd` has been typed.
+    Initially, `lenOdd` style has a placeholder type scheme, where input type
+    of `lenEven` is constrained against the placeholder input type of `lenOdd`.
+    While typing `lenOdd`, that placeholder type changes, and no longer matches
+    the input type we determined for `lenEven`.
+    Hence, we need to go back and apply the full substitution again to get the
+    correct input type for `lenEven`, where the type parameter matches that of
+    `lenOdd`.
+
+    NB: The type schemes quantify over all their type variable, but really the
+    shared type variables of the mutually recursive functions should be
+    quantified over the entire SCC.
+    Since the unification variables we generate are always unique, we can
+    actually consider the to be quantified over not just the SCC, but the entire
+    program, but the types are not presented to the user in that way.
+*/
 
 var l1 = (1,False):(2,True):(3,False):[];
 var l2 = 1:2:3:4:5:6:[];

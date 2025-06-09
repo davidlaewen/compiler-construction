@@ -1,0 +1,24 @@
+// Example for heap representation
+
+data AExp {
+  Add(ladd : AExp, radd : AExp),
+  Mul(lmul : AExp, rmul : AExp),
+  Neg(neg : AExp),
+  Lit(lit : Int),
+  VarX(), VarY()
+}
+
+var a = Add(Lit(42), VarX());
+
+foo() {
+  var a = Add(Lit(20),Lit(2));
+  a.ladd.lit = 40;
+  return a;
+}
+
+main() {
+  if (isAdd(a)) {
+    print('T');
+  }
+  return;
+}

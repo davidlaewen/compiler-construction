@@ -1,0 +1,30 @@
+// Even-odd mutual recursion
+
+isEven(n) :: Int -> Bool {
+  if (n == 0) {
+    return True;
+  } else {
+    return isOdd(n-1);
+  }
+}
+
+isOdd(n) :: Int -> Bool {
+  if (n == 0) {
+    return False;
+  } else {
+    return isEven(n-1);
+  }
+}
+
+printBool(b) {
+  if (b) {
+    print('T');
+  } else {
+    print('F');
+  }
+}
+
+main() {
+  printBool(isEven(20));
+  return;
+}

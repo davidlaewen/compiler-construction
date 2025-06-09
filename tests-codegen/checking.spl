@@ -1,0 +1,7 @@
+test(x,y) :: [a] b -> [b] {
+  return x.fst;
+}
+
+main() {
+  return;
+}

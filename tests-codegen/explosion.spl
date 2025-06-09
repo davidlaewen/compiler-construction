@@ -1,0 +1,13 @@
+f(x) {
+  return (x,x);
+}
+
+g(x) {
+  return f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(x)))))))))))))))))));
+}
+
+
+main() {
+  var a = g(42);
+  return;
+}
