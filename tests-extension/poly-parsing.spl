@@ -8,7 +8,7 @@ data Colour<c> {
   Red(), Green(), Blue()
 }
 
-var x = test(1);
+var x = None();
 var mTrue = Some(True);
 
 test(x) :: a -> a {
@@ -31,15 +31,10 @@ const_x() {
 
 main() {
   var y = const_x();
-  print(fromMaybe(0,None()));
-  print(' ');
-  print(fromMaybe(0,Some(42)));
+  printLn(fromMaybe(0,None()));
+  printLn(fromMaybe(0,Some(42)));
 
-  if (x >= y) {
-    print('T');
-  } else {
-    print('F');
-  }
+  printLn(x == y);
 
   return;
 }

@@ -1,7 +1,25 @@
+// Test substitution and user type checking
+
 test(x,y) :: [a] b -> [b] {
-  return x.fst;
+  return x;
+}
+
+foo(x,y) {
+  if (x) {
+    return y;
+  } else {
+    y = y + 1;
+    return y;
+  }
+}
+
+bar(x) {
+  x = x + 1;
+  x = -x;
+  return x;
 }
 
 main() {
+  print(foo(False,41));
   return;
 }

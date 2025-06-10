@@ -1,0 +1,15 @@
+data Either<a,b,c,d,e,f> {
+  Left(left : a), Right(right : b)
+}
+
+var x = Left(1);
+var y = Right(True);
+
+main() {
+  printLn(x);
+  printLn(y);
+  y = Left(1);
+  y = Right(2);
+  printLn(x == y);
+  return;
+}

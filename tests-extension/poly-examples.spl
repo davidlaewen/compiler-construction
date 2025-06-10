@@ -46,6 +46,14 @@ exists(t) :: Tree<Bool> -> Bool {
   }
 }
 
+forall(t) :: Tree<Bool> -> Bool {
+  if (isLeaf(t)) {
+    return False;
+  } else {
+    return t.label && forall(t.ltree) && forall(t.rtree);
+  }
+}
+
 sumTree(t) :: Tree<Int> -> Int {
   if (isLeaf(t)) {
     return 0;
@@ -57,6 +65,7 @@ sumTree(t) :: Tree<Int> -> Int {
 main() {
   printLn(depth(extree));
   printLn(exists(extree));
+  printLn(forall(extree));
   printLn(sumTree(ex1234));
   return;
 }
