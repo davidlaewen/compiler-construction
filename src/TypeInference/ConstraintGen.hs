@@ -32,8 +32,8 @@ checkList f (x:xs) = do
 
 checkDataDecl :: DataDecl -> CGen ()
 checkDataDecl (DataDecl _ name tyParams ctors) = do
-  uvars <- forM tyParams (const freshVar)
-  let uvarSet  = S.fromList uvars
+  let uvars    = take (length tyParams) [(0::Int)..]
+      uvarSet  = S.fromList uvars
       tvarMap  = M.fromList (zip tyParams uvars)
       dataType = Data name (UVar <$> uvars)
   mapM_ (checkDataCtor dataType uvarSet tvarMap) ctors
@@ -69,21 +69,25 @@ checkFunMutDecl :: FunMutDecl () () -> CGen (FunMutDecl UType UScheme, Subst)
 checkFunMutDecl (SingleDecl funDecl) =
   checkFunDecl funDecl >>= \(fd, s) -> do
     fd' <- generaliseFunScheme fd
+    clearSCCEnv
     pure (SingleDecl fd',s)
 
 checkFunMutDecl (MutualDecls loc funDecls) = do
   -- Generate schemes with placeholder uvars for all functions in block
   forM_ funDecls $ \(FunDecl _ name params _ _ _ _) -> do
     (paramUVars,retUVar) <- genFunDeclTypes name params
-    envGlobalInsertFun name $ UScheme S.empty $ Fun paramUVars retUVar
+    envSCCInsertFun name $ Fun paramUVars retUVar -- envGlobalInsertFun name $ UScheme S.empty $ Fun paramUVars retUVar
   -- Check fun decls in order without generalising
   (fds,ss) <- checkList checkFunDecl funDecls
   -- Substitute and generalise all function schemes
   let fds' = map (annotateFunDecl ss) fds
   -- let fds' = map (subst ss) fds
   fds'' <- forM fds' generaliseFunScheme
+  clearSCCEnv
   pure (MutualDecls loc fds'', ss)
 
+-- | Generalise the type scheme of the function and insert the updated type
+-- scheme into the environment (overwriting the non-generalised type scheme).
 generaliseFunScheme :: FunDecl UType UScheme -> CGen (FunDecl UType UScheme)
 generaliseFunScheme (FunDecl loc name params mTy varDecls stmts (UScheme _ funTy)) = do
   -- Generalise over free uvars
@@ -113,7 +117,7 @@ checkFunDecl (FunDecl loc name params mTy varDecls stmts _) = do
   forM_ (zip params uVarsParams) $
     uncurry (envInsertVar LocalLevel)
   envInsertRetType uVarRet
-  envLocalInsertFun name funTy
+  envSCCInsertFun name funTy -- envLocalInsertFun name funTy
   -- Check var decls and statements
   (varDecls',varDeclsSubst) <- checkVarDecls LocalLevel varDecls
   (stmts',stmtsSubst) <- checkStmts stmts
@@ -127,7 +131,7 @@ checkFunDecl (FunDecl loc name params mTy varDecls stmts _) = do
       userTy' <- instantiateUserType userTy
       unify funTy' userTy' loc
   let funScheme = UScheme S.empty (subst tySubst funTy')
-  envGlobalInsertFun name funScheme
+  envSCCInsertFun name (subst tySubst funTy') -- envGlobalInsertFun name funScheme
   pure (FunDecl loc name params mTy varDecls' stmts' funScheme, tySubst <> s)
 
 instantiateUserType :: UType -> CGen UType

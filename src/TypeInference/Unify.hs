@@ -62,14 +62,5 @@ unifyLists (ty1:tys1) (ty2:tys2) loc = do
   pure $ ss <> s
 unifyLists _ _ _ = error "Tried to unify lists of differing length!"
 
-unifyFunTypes :: ([UType], UType) -> ([UType], UType) -> Subst -> Loc -> CGen Subst
-unifyFunTypes ([],r1) ([],r2) acc loc = do
-  s <- unify (subst acc r1) (subst acc r2) loc
-  pure $ s <> acc
-unifyFunTypes (t1:ts1,r1) (t2:ts2,r2) acc loc = do
-  s <- unify (subst acc t1) (subst acc t2) loc
-  unifyFunTypes (ts1,r1) (ts2,r2) (s <> acc) loc
-unifyFunTypes _ _ _ loc = throwLocError loc "Function argument count mismatch!"
-
 occursIn :: UVar -> UType -> Bool
 occursIn v t = v `elem` freeUVars t

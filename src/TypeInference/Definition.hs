@@ -12,10 +12,10 @@ module TypeInference.Definition (
   runCGen,
   freshVar, substTVars, freeTVars,
   envInsertVar, envInsertRetType,
-  envLocalInsertFun, envGlobalInsertFun,
-  envInsertCtor, envLookupCtor,
-  envLookupSelector, envInsertSelector,
-  clearLocalEnv,
+  envSCCInsertFun, envGlobalInsertFun,
+  envInsertCtor,envInsertSelector,
+  envLookupCtor, envLookupSelector,
+  clearLocalEnv, clearSCCEnv,
   envLookupVar, envLookupFun,
   envLookupRetType,
 ) where
@@ -45,13 +45,19 @@ data GlobalId = GlobalTermVar T.Text | GlobalFunName T.Text
 data EnvLevel = GlobalLevel | LocalLevel
 
 type GlobalEnv = M.Map GlobalId UScheme
+type SCCEnv = M.Map T.Text UType
 type LocalEnv = M.Map LocalId UType
 
 type VarState = UVar
 
 newtype Subst = Subst (M.Map UVar UType)
 
-data CGenState = CGenState{ globalEnv :: GlobalEnv, localEnv :: LocalEnv, varState :: VarState }
+data CGenState = CGenState{
+  globalEnv :: GlobalEnv,
+  sccEnv   :: SCCEnv,
+  localEnv :: LocalEnv,
+  varState :: VarState
+}
 
 type CGen = StateT CGenState (Except T.Text)
 
@@ -61,20 +67,30 @@ throwLocError loc msg = throwError $ T.pack (locPretty loc) <> ":\n" <> msg
 applySubst :: Subst -> CGen ()
 applySubst s = do
   modifyLocalEnv $ M.map (subst s)
-  modifyGlobalEnv $ M.map (subst s)
+  modifySCCEnv $ M.map (subst s)
+  -- modifyGlobalEnv $ M.map (subst s)
+
+
+-- Internal helper functions
 
 modifyGlobalEnv :: (GlobalEnv -> GlobalEnv) -> CGen ()
 modifyGlobalEnv f = modify (\s -> s{ globalEnv = f s.globalEnv })
 
+modifySCCEnv :: (SCCEnv -> SCCEnv) -> CGen ()
+modifySCCEnv f = modify (\s -> s{ sccEnv = f s.sccEnv })
+
 modifyLocalEnv :: (LocalEnv -> LocalEnv) -> CGen ()
 modifyLocalEnv f = modify (\s -> s{ localEnv = f s.localEnv })
+
+
+-- Interface functions
 
 envInsertVar :: EnvLevel -> T.Text -> UType -> CGen ()
 envInsertVar GlobalLevel ident ty = modifyGlobalEnv (M.insert (GlobalTermVar ident) (UScheme S.empty ty))
 envInsertVar LocalLevel ident ty = modifyLocalEnv (M.insert (LocalTermVar ident) ty)
 
-envLocalInsertFun :: T.Text -> UType -> CGen ()
-envLocalInsertFun ident ty = modifyLocalEnv (M.insert (LocalFunName ident) ty)
+envSCCInsertFun :: T.Text -> UType -> CGen ()
+envSCCInsertFun ident funTy = modifySCCEnv (M.insert ident funTy)
 
 envGlobalInsertFun :: T.Text -> UScheme -> CGen ()
 envGlobalInsertFun ident scheme = modifyGlobalEnv (M.insert (GlobalFunName ident) scheme)
@@ -88,6 +104,9 @@ envInsertSelector name scheme = modifyGlobalEnv (M.insert (GlobalSelector name) 
 envInsertRetType :: UType -> CGen ()
 envInsertRetType ty = modifyLocalEnv (M.insert RetType ty)
 
+clearSCCEnv :: CGen ()
+clearSCCEnv = modifySCCEnv (const M.empty)
+
 clearLocalEnv :: CGen ()
 clearLocalEnv = modifyLocalEnv (const M.empty)
 
@@ -98,17 +117,15 @@ envLookupVar name =
     Nothing ->
       gets (M.lookup (GlobalTermVar name) . globalEnv) >>= \case
         Just (UScheme binders ty) ->
-          if S.null binders
-          then pure (Just ty)
+          if S.null binders then pure (Just ty)
           else error "Found a variable with binders!!!"
         Nothing -> pure Nothing
 
 envLookupFun :: T.Text -> CGen (Maybe UScheme)
 envLookupFun ident =
-  gets (M.lookup (LocalFunName ident) . localEnv) >>= \case
+  gets (M.lookup ident . sccEnv) >>= \case
     Just ty -> pure (Just (UScheme S.empty ty))
-    Nothing ->
-      gets (M.lookup (GlobalFunName ident) . globalEnv)
+    Nothing -> gets (M.lookup (GlobalFunName ident) . globalEnv)
 
 envLookupCtor :: T.Text -> CGen (Maybe UScheme)
 envLookupCtor name = gets (M.lookup (GlobalCtor name) . globalEnv)
@@ -122,7 +139,7 @@ envLookupRetType = gets (M.lookup RetType . localEnv)
 
 runCGen :: CGen a -> Either T.Text a
 runCGen x = fst <$> runExcept (runStateT
-  x CGenState{ globalEnv = M.empty, localEnv = M.empty, varState = 0 })
+  x CGenState{ globalEnv = M.empty, sccEnv = M.empty, localEnv = M.empty, varState = 0 })
 
 freshVar :: CGen UVar
 freshVar = do
@@ -193,7 +210,8 @@ instance Types UScheme where
   -- subst (Subst s) (UScheme binders ty) = UScheme binders (subst (Subst $ M.withoutKeys s binders) ty)
   -- Substituting under the ∀ is fine, since all unification variables are unique.
   -- However, we need to update the bound variables to match the new body of the ∀-type.
-  subst s (UScheme binders ty) = UScheme binders (subst s ty)
+  subst (Subst s) (UScheme binders ty) =
+    UScheme binders (subst (Subst $ M.withoutKeys s binders) ty)
 
   freeUVars :: UScheme -> S.Set UVar
   freeUVars (UScheme binders ty) = freeUVars ty \\ binders
@@ -207,7 +225,9 @@ instance (Types b) => Types (FunDecl a b) where
   freeUVars (FunDecl _ _ _ _ _ _ uScheme) = freeUVars uScheme
 
 instance Semigroup Subst where
+  (<>) :: Subst -> Subst -> Subst
   Subst s1 <> Subst s2 = Subst $ M.map (subst (Subst s1)) s2 `M.union` s1
 
 instance Monoid Subst where
+  mempty :: Subst
   mempty = Subst M.empty
