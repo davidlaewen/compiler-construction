@@ -16,22 +16,13 @@ lenOdd(l) :: [a] -> Bool {
   }
 }
 
-printBool(b) :: Bool -> Void {
-  if (b) {
-    print('T');
-  } else {
-    print('F');
-  }
-  return;
-}
-
 main() {
   var l1 = (1,False):(2,True):(3,False):[];
   var l2 = 1:2:3:4:5:6:[];
 
   // Should print `FTTF`
-  printBool(lenEven(l1));
-  printBool(lenOdd(l1));
-  printBool(lenEven(l2));
-  printBool(lenOdd(l2));
+  printLn(lenEven(l1));
+  printLn(lenOdd(l1));
+  printLn(lenEven(l2));
+  printLn(lenOdd(l2));
 }

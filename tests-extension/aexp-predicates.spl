@@ -20,12 +20,15 @@ evaluate(a,x,y) :: AExp Int Int -> Int {
   if (isVarX(a)) { return x; } else { return y; }}}}}
 }
 
+predicateAfterVars(aexp) {
+  return isAdd(aexp);
+}
+
 main() {
   var res = 0;
   res = evaluate(fortytwo,0,0);
-  print(res);
-  print(' ');
+  printLn(res);
   res = evaluate(Neg(fortytwo),0,0);
-  print(res);
+  printLn(res);
   return;
 }
