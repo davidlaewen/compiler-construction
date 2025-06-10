@@ -58,7 +58,7 @@ data FunName = Name T.Text
              | And | Or
              | Cons | IsEmpty
              | HeadFun | TailFun | FstFun | SndFun
-             | Print
+             | Print | PrintLn
 
 data Expr a = Ident Loc T.Text a
             | Int Loc Int a
@@ -106,6 +106,7 @@ instance Show FunName where
   show FstFun = "_fst"
   show SndFun = "_snd"
   show Print = "_print"
+  show PrintLn = "_printLn"
 
 
 -------------------------------------

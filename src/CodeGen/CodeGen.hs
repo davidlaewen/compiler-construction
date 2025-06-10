@@ -56,7 +56,15 @@ codegen (Program dataDecls varDecls funDecls) = do
     [LoadReg HeapPointer, StoreReg HeapLowReg] ++
     -- Store all global vars to heap, adjust SP
     StoreHeapMulti (sum varSizes) : -- Adjust (-1) :
-      BranchSubr "main" : Halt : predicatesProgram ++ funDeclsProgram ++ [Halt]
+      BranchSubr "main" : Halt : printBoolProgram ++ predicatesProgram
+      ++ funDeclsProgram ++ [Halt]
+  where
+    printBoolProgram = Label "__pb" :
+      [LoadLocal 1, BranchFalse "__pb_else", LoadConst 0] ++
+      (LoadConst . fromEnum <$> reverse "True") ++
+      [TrapString, BranchAlways "__pb_endif", Label "__pb_else", LoadConst 0] ++
+      (LoadConst . fromEnum <$> reverse "False") ++
+      [TrapString, Label "__pb_endif", Ret]
 
 codegenDataDecl :: DataDecl -> Codegen SSMProgram
 codegenDataDecl (DataDecl _ _ _ ctors) = do
@@ -259,10 +267,13 @@ funName2Program FstFun _ = error "Called `fst` on non-tuple"
 funName2Program SndFun [TI.Prod _ _] = [loadWithOffset 0]
 funName2Program SndFun _ = error "Called `snd` on non-tuple"
 
-funName2Program Print [ty] = case ty of
-  TI.Int -> [TrapInt]
-  TI.Char -> [TrapChar]
-  -- TI.Bool -> [BranchSubr "printBool", Adjust (-1)]
-  _ -> error $ "Printing for type " <> show ty <> " not yet implemented!"
+funName2Program PrintLn tys = funName2Program Print tys ++ [LoadConst 10, TrapChar]
 
-funName2Program Print _ = error "Function `print` called with multiple args!"
+funName2Program Print [TI.Int] = [TrapInt]
+funName2Program Print [TI.Char] = [TrapChar]
+funName2Program Print [TI.Bool] = [BranchSubr "__pb", Adjust (-1)]
+funName2Program Print [_] = [TrapInt] --
+-- funName2Program Print [ty] = error $ "Printing for type " <> show ty <> " not yet implemented!"
+-- | These are internal errors, since they should be caught by the typing stage
+funName2Program Print [] = error "Function `print` called without arguments!"
+funName2Program Print (_:(_:_)) = error "Function `print` called with multiple args!"

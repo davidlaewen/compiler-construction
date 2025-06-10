@@ -29,7 +29,7 @@ data Instr = Label T.Text | Ret | Halt | Link Int | Unlink | Adjust Int
   | NotOp | AndOp | OrOp | XorOp
   | EqOp | NeOp | LtOp | LeOp | GtOp | GeOp
   | NegOp | AddOp | SubOp | MulOp | DivOp | ModOp
-  | TrapInt | TrapChar
+  | TrapInt | TrapChar | TrapString
 
 tab :: String
 tab = "  "
@@ -95,3 +95,4 @@ instance Show Instr where
 
   show TrapInt = tab <> "trap 0"
   show TrapChar = tab <> "trap 1"
+  show TrapString = tab <> "trap 2"

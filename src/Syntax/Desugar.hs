@@ -46,6 +46,7 @@ instance Desugar P.Stmt (T.Stmt ()) where
   desugar (P.While loc e stmts) = T.While loc (desugar e) (desugar <$> stmts)
   desugar (P.Assign loc varLookup e) = T.Assign loc (desugar varLookup) () (desugar e)
   desugar (P.FunCall loc "print" args) = T.FunCall loc T.Print (desugar <$> args)
+  desugar (P.FunCall loc "printLn" args) = T.FunCall loc T.PrintLn (desugar <$> args)
   desugar (P.FunCall loc "isEmpty" args) = T.FunCall loc T.IsEmpty (desugar <$> args)
   desugar (P.FunCall loc name args) = T.FunCall loc (T.Name name) (desugar <$> args)
   desugar (P.Return loc me) = T.Return loc (desugar <$> me)
