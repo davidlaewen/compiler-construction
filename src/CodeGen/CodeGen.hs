@@ -60,7 +60,7 @@ codegen (Program dataDecls varDecls funDecls) = do
       ++ funDeclsProgram ++ [Halt]
   where
     printBoolProgram = Label "__pb" :
-      [LoadLocal 1, BranchFalse "__pb_else", LoadConst 0] ++
+      [LoadStack (-1), BranchFalse "__pb_else", LoadConst 0] ++
       (LoadConst . fromEnum <$> reverse "True") ++
       [TrapString, BranchAlways "__pb_endif", Label "__pb_else", LoadConst 0] ++
       (LoadConst . fromEnum <$> reverse "False") ++
@@ -88,7 +88,7 @@ codegenCtor (ctor@(Ctor _ cName args), cLabel) = do
 codegenPredicate :: Ctor -> Int -> Codegen SSMProgram
 codegenPredicate (Ctor _ cName _) cLabel = do
   -- Arguments at positive offsets from MP, pointing to top
-  let predicateProgram = [LoadLocal 1, LoadHeap 0, LoadConst cLabel, EqOp]
+  let predicateProgram = [LoadStack (-1), LoadHeap 0, LoadConst cLabel, EqOp]
   pure $ Label ("is" <> cName) : predicateProgram ++ [StoreReg RetReg, Ret]
 
 codegenGlobalVarDecl :: (Int, VarDecl UType) -> Codegen SSMProgram
