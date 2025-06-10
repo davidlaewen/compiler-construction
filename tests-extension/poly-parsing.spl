@@ -8,7 +8,7 @@ data Colour<c> {
   Red(), Green(), Blue()
 }
 
-var x = Some(1);
+var x = test(1);
 var mTrue = Some(True);
 
 test(x) :: a -> a {
@@ -25,9 +25,21 @@ fromMaybe(d,m) :: a Maybe<a> -> a {
   }
 }
 
+const_x() {
+  return x;
+}
+
 main() {
+  var y = const_x();
   print(fromMaybe(0,None()));
   print(' ');
   print(fromMaybe(0,Some(42)));
+
+  if (x >= y) {
+    print('T');
+  } else {
+    print('F');
+  }
+
   return;
 }

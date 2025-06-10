@@ -1,0 +1,32 @@
+// Printing Booleans
+
+printBool(b) {
+  if (b) {
+    print('T');
+  } else {
+    print('F');
+  }
+  return;
+}
+
+/*
+Print null-terminated unicode string; load characters in reverse order:
+ldc 0
+ldc 101
+ldc 117
+ldc 114
+ldc 84
+trap 2
+*/
+
+
+main() {
+  printBool(True);
+  print(' ');
+  printBool(False);
+  print(' ');
+  print(True);
+  print(' ');
+  print(False);
+  return;
+}

@@ -1,0 +1,62 @@
+// Polymorphic ADT examples
+
+data Maybe<a> {
+  None(), Some(some : a)
+}
+
+data Either<a,b> {
+  Left(left : a), Right(right : b)
+}
+
+data List<a> {
+  Nil(), Cons(head : a, tail : List<a>)
+}
+
+data Tree<a> {
+  Leaf(), Node(label : a, ltree : Tree<a>, rtree : Tree<a>)
+}
+
+var extree =
+  Node(True,
+    Node(False, Leaf(),
+      Node(False, Leaf(), Leaf())),
+    Node(True, Leaf(), Leaf()));
+
+var ex1234 =
+  Node(1, Node(2, Leaf(), Leaf()),
+    Node(3, Leaf(), Node(4, Leaf(), Leaf())));
+
+max(n,m) {
+  if (n > m) { return n; } else { return m; }
+}
+
+depth(t) :: Tree<a> -> Int {
+  if (isLeaf(t)) {
+    return 0;
+  } else {
+    return 1 + max(depth(t.ltree), depth(t.rtree));
+  }
+}
+
+exists(t) :: Tree<Bool> -> Bool {
+  if (isLeaf(t)) {
+    return False;
+  } else {
+    return t.label || exists(t.ltree) || exists(t.rtree);
+  }
+}
+
+sumTree(t) :: Tree<Int> -> Int {
+  if (isLeaf(t)) {
+    return 0;
+  } else {
+    return t.label + sumTree(t.ltree) + sumTree(t.rtree);
+  }
+}
+
+main() {
+  printLn(depth(extree));
+  printLn(exists(extree));
+  printLn(sumTree(ex1234));
+  return;
+}
