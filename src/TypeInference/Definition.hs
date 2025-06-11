@@ -68,7 +68,6 @@ applySubst :: Subst -> CGen ()
 applySubst s = do
   modifyLocalEnv $ M.map (subst s)
   modifySCCEnv $ M.map (subst s)
-  -- modifyGlobalEnv $ M.map (subst s)
 
 
 -- Internal helper functions

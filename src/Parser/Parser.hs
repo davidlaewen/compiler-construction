@@ -16,8 +16,8 @@ import Data.Maybe (fromMaybe)
 ----------------------
 -- Declarations
 
-varDeclP :: TokenParser VarDecl
-varDeclP = do
+varDeclP :: TokenParser Type -> TokenParser VarDecl
+varDeclP typeP = do
   (mty,startPos) <- varOrTypeP
   (name,_,_) <- idP <|> registerError (withDummyPos (T.pack "")) VarDeclNoIdentifier
   _ <- symbolP SymEq <|> registerError (withDummyPos ()) VarDeclNoEquals
@@ -29,7 +29,7 @@ varDeclP = do
   where
     varOrTypeP :: TokenParser (Maybe Type, SourcePos)
     varOrTypeP = (keywordP KwVar >>= \(_,start,_) -> pure (Nothing, start)) <|>
-                 (monoTypeP >>= \ty -> pure (Just ty, getStart ty))
+                 (typeP >>= \ty -> pure (Just ty, getStart ty))
       -- mVar <- optional $ keywordP KwVar
       -- case mVar of
       --   Just ((),start,_) -> pure (Nothing,start)
@@ -63,7 +63,7 @@ funDeclP = do
   (params,_,_) <- parensP ((fst3 <$> idP) `sepBy` symbolP SymComma)
   retType <- optional (symbolP SymColonColon >> funTypeP)
   ((decls,stmts),_,endPos) <- bracesP $ do
-    decls <- many varDeclP -- (try isVarDeclLookahead >> varDeclP)
+    decls <- many $ varDeclP monoTypeP -- (try isVarDeclLookahead >> varDeclP)
     stmts <- many (withRecovery parseToNextStmt stmtP)
     pure (decls, stmts)
   handleNoStatements funIdOffset stmts
@@ -110,6 +110,8 @@ dataTypeP innerP = do
   --   Nothing -> pure $ DataT (Loc start end) name []
   --   Just (tyArgs,_,end') -> pure $ DataT (Loc start end') name tyArgs
 
+tyVarP :: TokenParser Type
+tyVarP = idP >>= \(ident,start,end) -> pure $ TyVar (Loc start end) ident
 
 monoTypeP :: TokenParser Type
 monoTypeP = baseTypeP <|> dataTypeP monoTypeP <|> prodTypeP monoTypeP <|> listTypeP monoTypeP
@@ -117,9 +119,11 @@ monoTypeP = baseTypeP <|> dataTypeP monoTypeP <|> prodTypeP monoTypeP <|> listTy
 polyTypeP :: TokenParser Type
 polyTypeP = baseTypeP <|> tyVarP <|> dataTypeP polyTypeP <|>
             prodTypeP polyTypeP <|> listTypeP polyTypeP
-  where
-    tyVarP = idP >>= \(ident,start,end) ->
-      pure $ TyVar (Loc start end) ident
+
+-- | Parses a polymorphic type, but disallows type paramaters at the outermost
+-- level, i.e. they can only appear inside a product, list or data type
+varTypeP :: TokenParser Type
+varTypeP = baseTypeP <|> dataTypeP polyTypeP <|> prodTypeP polyTypeP <|> listTypeP polyTypeP
 
 funTypeP :: TokenParser Type
 funTypeP = do
@@ -388,7 +392,7 @@ programP :: TokenParser Program
 programP = do
   -- All varDecls must appear before all funDecls
   dataDecls <- many dataDeclP
-  varDecls <- many varDeclP
+  varDecls <- many $ varDeclP monoTypeP
   funDecls <- many funDeclP
   handleNoFunDecls funDecls
   Program dataDecls varDecls funDecls <$ eof

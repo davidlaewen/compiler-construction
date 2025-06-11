@@ -1,7 +1,20 @@
 // Test substitution and user type checking
 
-test(x,y) :: [a] b -> [b] {
-  return x;
+test(x,y) :: b (a,b) -> [b] {
+  return x:y.fst:[];
+}
+
+test1(x,y) :: a b -> [a] {
+  return x:y:[];
+}
+
+first(t) :: ([fstTy],[sndTy]) -> [fstTy] {
+  return t.snd;
+}
+
+listfun(x) {
+  [a] tail = x.tl;
+  return tail;
 }
 
 foo(x,y) {

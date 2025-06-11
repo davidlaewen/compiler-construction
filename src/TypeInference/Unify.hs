@@ -4,6 +4,7 @@ module TypeInference.Unify (
   Subst,
   unify,
   unifyLists,
+  subsumes,
   UType(..),
   UScheme(..)
 ) where
@@ -11,6 +12,10 @@ import TypeInference.Definition
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Utils.Loc (Loc)
+
+-- | Performs occurs check
+occursIn :: UVar -> UType -> Bool
+occursIn v t = v `elem` freeUVars t
 
 -- | Perform unification of the given types, resulting in a substitution if the
 -- types can be unified, and throws an error otherwise
@@ -62,5 +67,55 @@ unifyLists (ty1:tys1) (ty2:tys2) loc = do
   pure $ ss <> s
 unifyLists _ _ _ = error "Tried to unify lists of differing length!"
 
-occursIn :: UVar -> UType -> Bool
-occursIn v t = v `elem` freeUVars t
+
+-- | Checks if first type subsumes the second type. This is essentially `unify`
+-- without the case for flipping the first and second argument.
+subsumes :: UType -> UType -> Loc -- ^ The origin of the constraint
+            -> CGen Subst
+subsumes Int Int _ = pure mempty
+subsumes Bool Bool _ = pure mempty
+subsumes Char Char _ = pure mempty
+subsumes Void Void _ = pure mempty
+subsumes (UVar i) (UVar j) _ | i == j = pure mempty
+subsumes uv@(UVar i) t loc =
+  if i `occursIn` t
+  then throwLocError loc $ "Type variable `" <> T.pack (show uv)
+  <> "` does not subsume type `" <> T.pack (show t) <> "`: Occurs check failed!"
+  else pure $ Subst $ M.singleton i t
+subsumes t uv@(UVar _) loc = throwLocError loc $ "The type `" <> T.pack (show t)
+  <> "` does not subsume the type variable `" <> T.pack (show uv) <> "`"
+subsumes (List t1) (List t2) loc = subsumes t1 t2 loc
+subsumes (Prod s1 s2) (Prod t1 t2) loc = do
+  subst1 <- subsumes s1 t1 loc
+  let s2' = subst subst1 s2
+  let t2' = subst subst1 t2
+  subst2 <- subsumes s2' t2' loc
+  pure $ subst2 <> subst1
+subsumes ty1@(Fun ts1 rt1) ty2@(Fun ts2 rt2) loc =
+  if length ts1 /= length ts2 then throwLocError loc $
+      "The number of input types in `" <> T.pack (show ty1) <>
+      "` and `" <> T.pack (show ty2) <> "` do not match!"
+  else do
+    s <- subsumesList ts1 ts2 loc
+    s' <- subst s rt1 `subsumes` subst s rt2 $ loc
+    pure $ s' <> s
+subsumes ty1@(Data t1 tys1) ty2@(Data t2 tys2) loc | t1 == t2 =
+  if length tys1 /= length tys2 then throwLocError loc $
+    "The number of type arguments in `" <> T.pack (show ty1) <>
+    "` and `" <> T.pack (show ty2) <> "` do not match!"
+  else unifyLists tys1 tys2 loc
+-- User type variables
+subsumes t1@(TVar _) _ _ = error $ "Tried to check subsumption for type variable " <> show t1
+subsumes _ t2@(TVar _) _ = error $ "Tried to check subsumption for type variable " <> show t2
+-- Catch-all case
+subsumes ty1 ty2 loc = throwLocError loc $
+  "Type `" <> T.pack (show ty1) <> "` does not subsume type `"
+  <> T.pack (show ty2) <> "`!"
+
+subsumesList :: [UType] -> [UType] -> Loc -> CGen Subst
+subsumesList [] [] _ = pure mempty
+subsumesList (ty1:tys1) (ty2:tys2) loc = do
+  s <- ty1 `subsumes` ty2 $ loc
+  ss <- subsumesList (subst s <$> tys1) (subst s <$> tys2) loc
+  pure $ ss <> s
+subsumesList _ _ _ = error "Tried to check subsumption for lists of differing length!"

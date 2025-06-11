@@ -8,7 +8,7 @@ import TypeInference.Unify
 import TypeInference.Annotate (annotateFunDecl)
 import Syntax.TypeAST hiding (Bool,Char,Int)
 import qualified Syntax.TypeAST as TA
-import Control.Monad.State
+import Control.Monad.State (forM_,forM)
 import Data.Text (pack)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -130,6 +130,9 @@ checkFunDecl (FunDecl loc name params mTy varDecls stmts _) = do
     Just userTy -> do -- Substitute uvars for tvars in annotated type
       userTy' <- instantiateUserType userTy
       unify funTy' userTy' loc
+      -- userSubst <- funTy' `subsumes` userTy' $ loc
+      -- _ <- userTy' `subsumes` funTy' $ loc
+      -- pure userSubst
   let funScheme = UScheme S.empty (subst tySubst funTy')
   envSCCInsertFun name (subst tySubst funTy') -- envGlobalInsertFun name funScheme
   pure (FunDecl loc name params mTy varDecls' stmts' funScheme, tySubst <> s)

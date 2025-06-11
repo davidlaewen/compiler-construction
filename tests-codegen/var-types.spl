@@ -1,0 +1,21 @@
+// Polymorphic local variables
+
+data Maybe<a> {
+  None(), Just(just : a)
+}
+
+diverge() :: -> a {
+  return diverge();
+}
+
+foo(x) :: a -> (a,b) {
+  var y = x:[];
+  var z = Just(diverge());
+
+  return (y.hd,z);
+}
+
+main() {
+  printLn(foo(1));
+  return;
+}
