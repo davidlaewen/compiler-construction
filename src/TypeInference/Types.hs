@@ -14,8 +14,8 @@ data UType = Int | Bool | Char | Void
            | Prod UType UType | List UType
            | Fun [UType] UType
            | Data T.Text [UType]
-           | UVar UVar
-           | TVar TVar
+           | UVar !UVar
+           | TVar !TVar
   deriving Eq
 
 -- TODO: Write a pretty printer

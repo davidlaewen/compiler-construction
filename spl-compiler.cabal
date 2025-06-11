@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -47,6 +47,7 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
+    , dlist
     , megaparsec
     , mtl
     , parser-combinators
@@ -64,6 +65,7 @@ executable spl-compiler-exe
   build-depends:
       base >=4.7 && <5
     , containers
+    , dlist
     , megaparsec
     , mtl
     , parser-combinators
@@ -83,6 +85,7 @@ test-suite spl-compiler-test
   build-depends:
       base >=4.7 && <5
     , containers
+    , dlist
     , megaparsec
     , mtl
     , parser-combinators

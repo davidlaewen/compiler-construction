@@ -56,7 +56,7 @@ data CGenState = CGenState{
   globalEnv :: GlobalEnv,
   sccEnv   :: SCCEnv,
   localEnv :: LocalEnv,
-  varState :: VarState
+  varState :: !VarState
 }
 
 type CGen = StateT CGenState (Except T.Text)

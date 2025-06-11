@@ -16,11 +16,12 @@ module CodeGen.Definition (
 import CodeGen.Instructions (Instr(..))
 
 import Control.Monad.State (State, evalState, modify, gets)
+import qualified Data.DList as D
 import qualified Data.Map as M
 import qualified Data.Text as T
 
 
-type SSMProgram = [Instr]
+type SSMProgram = D.DList Instr
 
 -- Mapping of identifiers to stack offsets or heap locations
 type LocationMap = M.Map T.Text Int
@@ -83,9 +84,7 @@ lookupSelector name = gets (M.lookup name . selectorMap) >>= \case
   Nothing -> error $ "Couldn't find selector `" <> T.unpack name <> "`!"
   Just offset -> pure offset
 
-concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM _ [] = pure []
-concatMapM f (x : xs) = do
-  y <- f x
-  ys <- concatMapM f xs
-  pure $ y ++ ys
+concatMapM :: Monad m => (a -> m (D.DList b)) -> [a] -> m (D.DList b)
+concatMapM f l = do
+  l' <- mapM f l
+  pure $ D.concat l'
