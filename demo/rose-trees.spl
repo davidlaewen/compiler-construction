@@ -1,0 +1,83 @@
+/** Polymorphic rose trees
+    Type of nodes: μα. α × [α]
+
+    We can use a custom record to construct the infinite recursive type.
+*/
+
+data RoseTree<a> {
+  Node(label : a, forest : [RoseTree<a>])
+}
+
+var exTree123 = Node(1, Node(2,[]) : Node(3,[]) : []);
+/*  1
+   / \
+  2   3 */
+
+var exTree2468 = Node(2, Node(4, Node(6,[]):[]) : Node(8,[]):[] );
+/*    2
+     / \
+    4   8
+   /
+  6         */
+
+main() {
+  // Should print 1, 2 and 3
+  printLn( depthTree( Node((True,42),[]) ) );
+  printLn( depthTree(exTree123) );
+  printLn( depthTree(exTree2468) );
+
+  // Should print 6 and 20
+  printIntList(treeToList(exTree123));
+  printLn(' ');
+  printIntList(treeToList(exTree2468));
+
+  return;
+}
+
+depthTree(t) :: RoseTree<a> -> Int {
+  return 1 + depthForest(t.forest);
+}
+
+depthForest(l) :: [RoseTree<a>] -> Int {
+  if (isEmpty(l)) {
+    return 0;
+  } else {
+    return max(depthTree(l.hd), depthForest(l.tl));
+  }
+}
+
+max(n,m) {
+  if (n > m) { return n; } else { return m; }
+}
+
+treeToList(t) :: RoseTree<a> -> [a] {
+  return t.label : forestToList(t.forest);
+}
+
+forestToList(l) :: [RoseTree<a>] -> [a] {
+  if (isEmpty(l)) {
+    return [];
+  } else {
+    return append( treeToList(l.hd), forestToList(l.tl) );
+  }
+}
+
+append(l1,l2) {
+  if (isEmpty(l1)) {
+    return l2;
+  } else {
+    return l1.hd : append(l1.tl, l2);
+  }
+}
+
+printIntList(l) :: [Int] -> Void {
+  if (isEmpty(l)) {
+    print('[');
+    print(']');
+  } else {
+    print(l.hd);
+    print(':');
+    printIntList(l.tl);
+  }
+  return;
+}
