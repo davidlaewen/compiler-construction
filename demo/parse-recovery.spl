@@ -1,0 +1,21 @@
+var a = [;
+
+main () {
+  var x = 2 * ();
+  var b = !;
+  a = ];
+
+  while (b) {
+    x = x + ;
+    x = x.;
+    b = f b;
+    g(x);
+  }
+
+  if {
+    return True ||;
+  } else {
+    return && ;
+  }
+
+}
