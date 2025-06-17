@@ -26,9 +26,9 @@ Tree<Bool> treeBool = Node(True, Node(False, Leaf(), Node(False, Leaf(), Leaf())
 /*      True
        /    \
     False   True
-    /   \   /  \
-      False
-       / \          */
+   /   \    /  \
+     False
+      / \          */
 
 Tree<Int> treeInt = Node(1, Node(2, Leaf(), Leaf()),
                       Node(3, Leaf(), Node(4, Leaf(), Leaf())));
@@ -118,7 +118,7 @@ max(n,m) {
   if (n > m) { return n; } else { return m; }
 }
 
-printList(l) {
+printList(l) :: List<Int> -> Void {
   if (isNil(l)) {
     print('[');
     print(']');
