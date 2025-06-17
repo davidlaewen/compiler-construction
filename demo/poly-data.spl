@@ -12,19 +12,47 @@ data List<a> {
   Nil(), Cons(head : a, tail : List<a>)
 }
 
+data Pair<a,b> {
+  MkPair(lpair : a, rpair : b)
+}
+
 data Tree<a> {
   Leaf(), Node(label : a, ltree : Tree<a>, rtree : Tree<a>)
 }
 
-var extree =
-  Node(True,
-    Node(False, Leaf(),
-      Node(False, Leaf(), Leaf())),
-    Node(True, Leaf(), Leaf()));
 
-var ex1234 =
-  Node(1, Node(2, Leaf(), Leaf()),
-    Node(3, Leaf(), Node(4, Leaf(), Leaf())));
+Tree<Bool> treeBool = Node(True, Node(False, Leaf(), Node(False, Leaf(), Leaf())),
+                          Node(True, Leaf(), Leaf()));
+/*      True
+       /    \
+    False   True
+    /   \   /  \
+      False
+       / \          */
+
+Tree<Int> treeInt = Node(1, Node(2, Leaf(), Leaf()),
+                      Node(3, Leaf(), Node(4, Leaf(), Leaf())));
+/*      1
+       / \
+      2   3
+     / \ / \
+            4   */
+
+
+main() {
+  printLn(fromMaybe(0,None())); // Should be `0`
+  printLn(fromMaybe(0,Some(42))); // Should be `42`
+
+  printLn(depth(treeBool)); // Should be `3`
+  printLn(exists(treeBool)); // Should be `True`
+  printLn(forall(treeBool)); // Should be `False`
+
+  printLn(depth(treeInt)); // Should be `3`
+  printLn(sumTree(treeInt)); // Should be `10`
+  printList(treeToList(treeInt)); // Should be `1:2:3:4:[]`
+
+  return;
+}
 
 
 
@@ -36,15 +64,19 @@ fromMaybe(default,m) :: a Maybe<a> -> a {
   }
 }
 
-max(n,m) {
-  if (n > m) { return n; } else { return m; }
-}
-
 depth(t) :: Tree<a> -> Int {
   if (isLeaf(t)) {
     return 0;
   } else {
     return 1 + max(depth(t.ltree), depth(t.rtree));
+  }
+}
+
+treeToList(t) :: Tree<a> -> List<a> {
+  if (isLeaf(t)) {
+    return Nil();
+  } else {
+    return Cons(t.label, append(treeToList(t.ltree), treeToList(t.rtree)));
   }
 }
 
@@ -72,10 +104,28 @@ sumTree(t) :: Tree<Int> -> Int {
   }
 }
 
-main() {
-  printLn(depth(extree));
-  printLn(exists(extree));
-  printLn(forall(extree));
-  printLn(sumTree(ex1234));
+// Helper functions
+
+append(l1,l2) :: List<a> List<a> -> List<a> {
+  if (isNil(l1)) {
+    return l2;
+  } else {
+    return Cons(l1.head, append(l1.tail, l2));
+  }
+}
+
+max(n,m) {
+  if (n > m) { return n; } else { return m; }
+}
+
+printList(l) {
+  if (isNil(l)) {
+    print('[');
+    print(']');
+  } else {
+    print(l.head);
+    print(':');
+    printList(l.tail);
+  }
   return;
 }
