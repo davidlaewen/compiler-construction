@@ -15,7 +15,7 @@ main() {
   aexp.rmul = Add(VarX(),VarX()); // `(1 + 1) * (x + x)`
   aexp.rmul.radd = Neg(Neg(VarY())); // `(1 + 1) * (x + -(-y))`
   aexp.rmul.radd.neg.neg = Lit(20); // `(1 + 1) * (x + -(-20))`
-  res = eval(aexp,1,0); // let x := 1 in `(1 + 1) * (x + -(-20))`
+  res = eval(aexp,1,0); // let x := 1, y := 0 in `(1 + 1) * (x + -(-20))`
 
   // Evaluation result should be 42
   printLn(res);
@@ -29,7 +29,7 @@ main() {
   two.radd.lmul.radd = VarY(); // `-200 + (-1 + y) * 101`
 
   // Should also evaluate to 42
-  printLn( eval(aexp,1,3) );
+  printLn( eval(aexp,1,3) ); // let x := 1, y := 3 in `(-200 + (-1 + y) * 101) * (x + -(-20))`
 
   return;
 }
