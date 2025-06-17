@@ -120,11 +120,6 @@ polyTypeP :: TokenParser Type
 polyTypeP = baseTypeP <|> tyVarP <|> dataTypeP polyTypeP <|>
             prodTypeP polyTypeP <|> listTypeP polyTypeP
 
--- | Parses a polymorphic type, but disallows type paramaters at the outermost
--- level, i.e. they can only appear inside a product, list or data type
-varTypeP :: TokenParser Type
-varTypeP = baseTypeP <|> dataTypeP polyTypeP <|> prodTypeP polyTypeP <|> listTypeP polyTypeP
-
 funTypeP :: TokenParser Type
 funTypeP = do
   argTys <- many polyTypeP
