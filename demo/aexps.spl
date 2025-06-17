@@ -8,16 +8,6 @@ data AExp {
 
 var aexp = Mul(VarX(), VarY()); // `x * y`
 
-// Evaluate arithmetic expression with valuation given by inputs `x` and `y`
-// Use nested if-then-else due to missing switch/case syntax
-evaluate(a,x,y) :: AExp Int Int -> Int {
-  if (isAdd(a)) { return evaluate(a.ladd,x,y) + evaluate(a.radd,x,y); } else {
-  if (isMul(a)) { return evaluate(a.lmul,x,y) * evaluate(a.rmul,x,y); } else {
-  if (isNeg(a)) { return -evaluate(a.neg,x,y); } else {
-  if (isLit(a)) { return a.lit; } else {
-  if (isVarX(a)) { return x; } else { return y; }}}}}
-}
-
 main() {
   var res = 0;
   var two = Add(Lit(1),Lit(1)); // `1 + 1`
@@ -28,12 +18,10 @@ main() {
   res = eval(aexp,1,0); // let x := 1 in `(1 + 1) * (x + -(-20))`
 
   // Evaluation result should be 42
-  print(res);
-  print(' ');
+  printLn(res);
 
   // Should evaluate to 2
-  print(eval(two,1,1));
-  print(' ');
+  printLn(eval(two,1,1));
 
   two.ladd = Neg(Lit(200));
   two.radd = Mul(Add(Lit(0),Lit(0)),Lit(101)); // `-200 + (0 + 0) * 101`
@@ -41,7 +29,17 @@ main() {
   two.radd.lmul.radd = VarY(); // `-200 + (-1 + y) * 101`
 
   // Should also evaluate to 42
-  print( eval(aexp,1,3) );
+  printLn( eval(aexp,1,3) );
 
   return;
+}
+
+// Evaluate arithmetic expression with valuation given by inputs `x` and `y`
+// Use nested if-then-else due to missing switch/case syntax
+eval(a,x,y) :: AExp Int Int -> Int {
+  if (isAdd(a)) { return eval(a.ladd,x,y) + eval(a.radd,x,y); } else {
+  if (isMul(a)) { return eval(a.lmul,x,y) * eval(a.rmul,x,y); } else {
+  if (isNeg(a)) { return -eval(a.neg,x,y); } else {
+  if (isLit(a)) { return a.lit; } else {
+  if (isVarX(a)) { return x; } else { return y; }}}}}
 }
